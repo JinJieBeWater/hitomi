@@ -1,0 +1,3 @@
+{
+  "extends": "@hitomi/config/tsconfig.base.json"
+}
