@@ -4,6 +4,9 @@ import "@hitomi/env/web";
 export default defineNuxtConfig({
   compatibilityDate: "latest",
   devtools: { enabled: true },
+  ui: {
+    fonts: false,
+  },
   experimental: {
     payloadExtraction: "client",
   },
