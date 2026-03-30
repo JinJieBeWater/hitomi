@@ -12,6 +12,7 @@
   "dependencies": {
     "@hitomi/api": "workspace:*",
     "@hitomi/auth": "workspace:*",
+    "@hitomi/db": "workspace:*",
     "@hitomi/env": "workspace:*",
     "@libsql/client": "catalog:",
     "@nuxt/ui": "^4.5.1",
@@ -25,13 +26,13 @@
     "dotenv": "catalog:",
     "libsql": "catalog:",
     "nuxt": "^4.4.2",
+    "tailwindcss": "^4.2.1",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@hitomi/config": "workspace:*",
     "@iconify-json/lucide": "^1.2.96",
     "@tanstack/vue-query-devtools": "^6.1.5",
-    "tailwindcss": "^4.2.1",
     "typescript": "catalog:"
   }
 }

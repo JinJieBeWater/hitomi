@@ -1,2 +1,117 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  @apply bg-neutral-100 dark:bg-neutral-950;
+}
+
+body {
+  font-family:
+    "Avenir Next",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei UI",
+    sans-serif;
+  background-image: radial-gradient(circle at top left, rgba(16, 185, 129, 0.05), transparent 26%);
+  background-attachment: fixed;
+  @apply bg-neutral-100 text-highlighted antialiased dark:bg-neutral-950;
+}
+
+#__nuxt {
+  min-height: 100vh;
+}
+
+::selection {
+  @apply bg-primary/20;
+}
+
+.workspace-page-stack {
+  @apply space-y-5 sm:space-y-6;
+}
+
+.workspace-surface,
+.workspace-filter-bar,
+.workspace-inline-banner,
+.workspace-metric-item,
+.workspace-mobile-card,
+.workspace-empty-state,
+.workspace-auth-card {
+  @apply border border-neutral-200/80 bg-white/92 backdrop-blur-sm dark:border-neutral-800/80 dark:bg-neutral-900/82;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.05);
+}
+
+.workspace-surface,
+.workspace-inline-banner,
+.workspace-auth-card {
+  @apply rounded-[22px];
+}
+
+.workspace-form-surface {
+  @apply h-full;
+}
+
+.workspace-surface-header {
+  @apply flex flex-col gap-3 border-b border-neutral-200/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-800/80;
+}
+
+.workspace-surface-body {
+  @apply px-5 py-5;
+}
+
+.workspace-surface-table {
+  @apply -mx-5 -my-5;
+}
+
+.workspace-surface-footer {
+  @apply border-t border-neutral-200/80 px-5 py-4 dark:border-neutral-800/80;
+}
+
+.workspace-filter-bar {
+  @apply rounded-[18px] px-4 py-4;
+}
+
+.workspace-inline-banner {
+  @apply px-4 py-4 sm:px-5;
+}
+
+.workspace-empty-state {
+  @apply min-h-56 space-y-4 p-8 text-center;
+}
+
+.workspace-metric-grid {
+  @apply grid gap-3 sm:grid-cols-2 xl:grid-cols-4;
+}
+
+.workspace-metric-item {
+  @apply flex items-center gap-4 rounded-[18px] px-4 py-4 transition-transform duration-200;
+}
+
+.workspace-metric-item:hover {
+  transform: translateY(-2px);
+}
+
+.workspace-metric-label {
+  @apply text-[11px] font-medium tracking-[0.16em] text-neutral-500 uppercase dark:text-neutral-400;
+}
+
+.workspace-metric-value {
+  @apply text-2xl font-semibold tracking-tight text-highlighted sm:text-[1.9rem];
+}
+
+.workspace-metric-meta {
+  @apply text-sm text-toned;
+}
+
+.workspace-mobile-card {
+  @apply rounded-[18px] p-4;
+}
+
+.workspace-auth-shell {
+  background-image: radial-gradient(circle at top, rgba(16, 185, 129, 0.08), transparent 32%);
+}

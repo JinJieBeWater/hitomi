@@ -1,15 +1,33 @@
 <script setup lang="ts">
+import { onMounted } from "vue";
+
+const props = withDefaults(
+  defineProps<{
+    collapsed?: boolean;
+  }>(),
+  {
+    collapsed: false,
+  },
+);
+
 const { $authClient } = useNuxtApp();
 const session = $authClient.useSession();
 const toast = useToast();
+const mounted = ref(false);
+const isSessionPending = computed(() => !mounted.value || session.value.isPending);
+const isSignedIn = computed(() => Boolean(session.value.data?.user));
 
-const handleSignOut = async () => {
+const skeletonClass = computed(() => {
+  return props.collapsed ? "size-10 rounded-2xl" : "h-11 w-full rounded-2xl";
+});
+
+async function handleSignOut(): Promise<void> {
   try {
     await $authClient.signOut({
       fetchOptions: {
         onSuccess: async () => {
           toast.add({ title: "Signed out successfully" });
-          await navigateTo("/", { replace: true, external: true });
+          await navigateTo("/", { replace: true });
         },
         onError: (error) => {
           toast.add({
@@ -25,20 +43,40 @@ const handleSignOut = async () => {
       description: error.message || "Please try again.",
     });
   }
-};
+}
+
+onMounted(() => {
+  mounted.value = true;
+});
 </script>
 
 <template>
-  <div>
-    <USkeleton v-if="session.isPending" class="h-9 w-24" />
+  <div class="w-full">
+    <USkeleton v-if="isSessionPending" :class="skeletonClass" />
 
-    <UButton v-else-if="!session.data" variant="outline" to="/login"> Sign In </UButton>
+    <UButton
+      v-else-if="!isSignedIn"
+      color="neutral"
+      variant="outline"
+      icon="i-lucide-log-in"
+      :square="props.collapsed"
+      :block="!props.collapsed"
+      class="rounded-2xl"
+      to="/login"
+    >
+      登录
+    </UButton>
 
     <UButton
       v-else
-      variant="solid"
+      color="neutral"
+      :variant="props.collapsed ? 'outline' : 'soft'"
       icon="i-lucide-log-out"
-      label="Sign out"
+      :square="props.collapsed"
+      :block="!props.collapsed"
+      :label="props.collapsed ? undefined : '退出登录'"
+      class="rounded-2xl"
+      data-testid="sign-out-button"
       @click="handleSignOut()"
     />
   </div>

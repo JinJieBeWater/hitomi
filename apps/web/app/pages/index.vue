@@ -1,69 +1,39 @@
 <script setup lang="ts">
-const { $orpc } = useNuxtApp();
-import { useQuery } from "@tanstack/vue-query";
+import { onMounted } from "vue";
 
-const TITLE_TEXT = `
- ██████╗ ███████╗████████╗████████╗███████╗██████╗
- ██╔══██╗██╔════╝╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
- ██████╔╝█████╗     ██║      ██║   █████╗  ██████╔╝
- ██╔══██╗██╔══╝     ██║      ██║   ██╔══╝  ██╔══██╗
- ██████╔╝███████╗   ██║      ██║   ███████╗██║  ██║
- ╚═════╝ ╚══════╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
+const { $authClient } = useNuxtApp();
 
- ████████╗    ███████╗████████╗ █████╗  ██████╗██╗  ██╗
- ╚══██╔══╝    ██╔════╝╚══██╔══╝██╔══██╗██╔════╝██║ ██╔╝
-    ██║       ███████╗   ██║   ███████║██║     █████╔╝
-    ██║       ╚════██║   ██║   ██╔══██║██║     ██╔═██╗
-    ██║       ███████║   ██║   ██║  ██║╚██████╗██║  ██╗
-    ╚═╝       ╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
- `;
+const session = $authClient.useSession();
+const mounted = ref(false);
+const isSessionPending = computed(() => !mounted.value || session.value.isPending);
+const isSignedIn = computed(() => Boolean(session.value.data));
 
-const healthCheck = useQuery($orpc.healthCheck.queryOptions());
+watchEffect(() => {
+  if (isSessionPending.value) {
+    return;
+  }
 
-onServerPrefetch(async () => {
-  try {
-    await healthCheck.suspense();
-  } catch {}
+  if (isSignedIn.value) {
+    navigateTo("/dashboard", { replace: true });
+  }
+});
+
+onMounted(() => {
+  mounted.value = true;
 });
 </script>
 
 <template>
-  <UContainer class="py-8">
-    <pre class="overflow-x-auto font-mono text-sm whitespace-pre-wrap">{{ TITLE_TEXT }}</pre>
+  <div class="grid min-h-[100svh] place-items-center px-4 py-10 sm:px-6">
+    <UPageCard title="考勤管理后台" icon="i-lucide-shield-check" class="workspace-auth-card w-full max-w-sm">
+      <div v-if="isSessionPending" class="flex min-h-32 items-center justify-center">
+        <UIcon name="i-lucide-loader-2" class="text-2xl text-primary animate-spin" />
+      </div>
 
-    <div class="grid gap-6 mt-6">
-      <UCard>
-        <template #header>
-          <div class="font-medium">API Status</div>
-        </template>
-
-        <div class="flex items-center gap-2">
-          <UIcon
-            :name="
-              healthCheck.isLoading.value
-                ? 'i-lucide-loader-2'
-                : healthCheck.isSuccess.value
-                  ? 'i-lucide-check-circle'
-                  : 'i-lucide-x-circle'
-            "
-            :class="[
-              healthCheck.isLoading.value ? 'animate-spin text-muted' : '',
-              healthCheck.isSuccess.value ? 'text-success' : '',
-              healthCheck.isError.value ? 'text-error' : '',
-            ]"
-          />
-          <span class="text-sm">
-            <template v-if="healthCheck.isLoading.value"> Checking... </template>
-            <template v-else-if="healthCheck.isSuccess.value">
-              Connected ({{ healthCheck.data.value }})
-            </template>
-            <template v-else-if="healthCheck.isError.value">
-              Error: {{ healthCheck.error.value?.message || "Failed to connect" }}
-            </template>
-            <template v-else> Idle </template>
-          </span>
-        </div>
-      </UCard>
-    </div>
-  </UContainer>
+      <div v-else class="space-y-3">
+        <UButton to="/login" block size="lg" icon="i-lucide-log-in">前往登录</UButton>
+        <UButton to="/dashboard" block variant="ghost" color="neutral">进入后台</UButton>
+      </div>
+    </UPageCard>
+  </div>
 </template>

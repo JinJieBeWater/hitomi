@@ -31,6 +31,9 @@
     "db:generate": "turbo -F @hitomi/db db:generate",
     "db:migrate": "turbo -F @hitomi/db db:migrate",
     "db:local": "turbo -F @hitomi/db db:local",
+    "smoke:admin": "bun run packages/api/scripts/smoke-admin.ts",
+    "smoke:admin-ui": "bun run packages/api/scripts/smoke-admin-ui.ts",
+    "smoke:device": "bun run packages/api/scripts/smoke-device.ts",
     "check": "oxlint && oxfmt --write"
   },
   "dependencies": {
@@ -44,6 +47,7 @@
     "lefthook": "^2.0.13",
     "oxfmt": "^0.26.0",
     "oxlint": "^1.41.0",
+    "playwright-core": "^1.58.2",
     "turbo": "^2.8.12",
     "typescript": "catalog:"
   },

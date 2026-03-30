@@ -4,8 +4,13 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./app": "./src/app.ts",
+    "./paths": "./src/paths.ts",
     "./server": "./src/server.ts",
     "./web": "./src/web.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
   },
   "dependencies": {
     "@t3-oss/env-core": "^0.13.1",

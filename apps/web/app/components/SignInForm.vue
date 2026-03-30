@@ -4,8 +4,6 @@ import * as z from "zod";
 
 const { $authClient } = useNuxtApp();
 
-const emit = defineEmits(["switchToSignUp"]);
-
 const toast = useToast();
 const loading = ref(false);
 
@@ -42,9 +40,9 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
         password: event.data.password,
       },
       {
-        onSuccess: () => {
+        onSuccess: async () => {
           toast.add({ title: "Sign in successful" });
-          navigateTo("/dashboard", { replace: true });
+          await navigateTo("/dashboard", { replace: true, external: true });
         },
         onError: (error) => {
           toast.add({ title: "Sign in failed", description: error.error.message });
@@ -63,21 +61,19 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center gap-4 p-4">
-    <UPageCard class="w-full max-w-md">
-      <UAuthForm
-        :schema="schema"
-        :fields="fields"
-        title="Welcome Back"
-        icon="i-lucide-log-in"
-        :submit="{ label: 'Sign In', loading }"
-        @submit="onSubmit"
-      >
-        <template #description>
-          Need an account?
-          <ULink class="text-primary font-medium" @click="$emit('switchToSignUp')"> Sign Up </ULink>
-        </template>
-      </UAuthForm>
-    </UPageCard>
-  </div>
+  <UPageCard class="workspace-auth-card w-full">
+    <UAuthForm
+      :schema="schema"
+      :fields="fields"
+      title="Welcome Back"
+      icon="i-lucide-log-in"
+      :submit="{ label: 'Sign In', loading }"
+      @submit="onSubmit"
+    >
+      <template #description>
+        Need an account?
+        <ULink class="text-primary font-medium" @click="$emit('switchToSignUp')"> Sign Up </ULink>
+      </template>
+    </UAuthForm>
+  </UPageCard>
 </template>

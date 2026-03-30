@@ -1,48 +1,97 @@
 <script setup lang="ts">
 import { useQuery } from "@tanstack/vue-query";
 
-const { $authClient, $orpc } = useNuxtApp();
-
 definePageMeta({
+  layout: "dashboard",
   middleware: ["auth"],
 });
 
-const session = $authClient.useSession();
+const { $orpc } = useNuxtApp();
 
-const privateData = useQuery({
-  ...$orpc.privateData.queryOptions(),
-  enabled: computed(() => !!session.value?.data?.user),
+const summary = useQuery($orpc.dashboard.summary.queryOptions());
+const summaryData = computed(() => summary.data.value);
+
+const metrics = computed(() => {
+  const data = summary.data.value;
+
+  return [
+    {
+      label: "员工总数",
+      value: data?.employeeCount ?? "--",
+      icon: "i-lucide-users",
+      color: "primary" as const,
+    },
+    {
+      label: "设备总数",
+      value: data?.deviceCount ?? "--",
+      icon: "i-lucide-monitor-smartphone",
+      color: "success" as const,
+    },
+    {
+      label: "今日上班打卡",
+      value: data?.todayClockInCount ?? "--",
+      icon: "i-lucide-sunrise",
+      color: "warning" as const,
+    },
+    {
+      label: "今日下班打卡",
+      value: data?.todayClockOutCount ?? "--",
+      icon: "i-lucide-sunset",
+      color: "neutral" as const,
+    },
+  ];
 });
+
+const shortcuts = [
+  { label: "员工管理", to: "/employees", icon: "i-lucide-users" },
+  { label: "设备管理", to: "/devices", icon: "i-lucide-monitor-smartphone" },
+  { label: "考勤配置", to: "/attendance-config", icon: "i-lucide-settings-2" },
+  { label: "录脸任务", to: "/face-profiles", icon: "i-lucide-scan-face" },
+  { label: "考勤记录", to: "/attendance-records", icon: "i-lucide-clipboard-check" },
+];
 </script>
 
 <template>
-  <UContainer class="py-8">
-    <UPageHeader
-      title="Dashboard"
-      :description="session?.data?.user ? `Welcome back, ${session.data.user.name}!` : 'Loading...'"
-    />
-
-    <div class="mt-6 space-y-4">
-      <UCard>
-        <template #header>
-          <div class="font-medium">Private Data</div>
+  <UDashboardPanel id="dashboard">
+    <template #header>
+      <PageHeader
+        title="概览"
+        :badges="summaryData?.todayLocalDate ? [{ label: summaryData.todayLocalDate, color: 'neutral' }] : []"
+      >
+        <template #actions>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="summary.refetch()">刷新</UButton>
         </template>
+      </PageHeader>
+    </template>
 
-        <USkeleton v-if="privateData.status.value === 'pending'" class="h-6 w-48" />
+    <template #body>
+      <div class="workspace-page-stack">
+        <MetricStrip :metrics="metrics" />
 
         <UAlert
-          v-else-if="privateData.status.value === 'error'"
+          v-if="summary.status.value === 'error'"
           color="error"
           icon="i-lucide-alert-circle"
-          title="Error loading data"
-          :description="privateData.error.value?.message || 'Failed to load private data'"
+          title="加载失败"
+          :description="summary.error.value?.message || '无法加载统计信息'"
         />
 
-        <div v-else-if="privateData.data.value" class="flex items-center gap-2">
-          <UIcon name="i-lucide-check-circle" class="text-success" />
-          <span>{{ privateData.data.value.message }}</span>
-        </div>
-      </UCard>
-    </div>
-  </UContainer>
+        <DataSurface title="快捷操作">
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <UButton
+              v-for="item in shortcuts"
+              :key="item.to"
+              :to="item.to"
+              color="neutral"
+              variant="outline"
+              class="h-12 justify-between rounded-2xl"
+              :icon="item.icon"
+            >
+              {{ item.label }}
+            </UButton>
+          </div>
+        </DataSurface>
+      </div>
+    </template>
+  </UDashboardPanel>
 </template>

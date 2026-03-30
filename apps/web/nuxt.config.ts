@@ -1,8 +1,9 @@
 import "@hitomi/env/web";
+import { resolveAppPort } from "@hitomi/env/app";
 
-// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: "latest",
+  modules: ["@nuxt/ui"],
   devtools: { enabled: true },
   ui: {
     fonts: false,
@@ -10,9 +11,13 @@ export default defineNuxtConfig({
   experimental: {
     payloadExtraction: "client",
   },
-  modules: ["@nuxt/ui"],
   css: ["~/assets/css/main.css"],
   devServer: {
-    port: 3001,
+    port: resolveAppPort(),
+  },
+  runtimeConfig: {
+    public: {
+      serverUrl: process.env.NUXT_PUBLIC_SERVER_URL || "",
+    },
   },
 });
