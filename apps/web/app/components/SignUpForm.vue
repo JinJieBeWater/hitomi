@@ -11,30 +11,30 @@ const fields: AuthFormField[] = [
   {
     name: "name",
     type: "text",
-    label: "Name",
-    placeholder: "Enter your name",
+    label: "姓名",
+    placeholder: "请输入姓名",
     required: true,
   },
   {
     name: "email",
     type: "email",
-    label: "Email",
-    placeholder: "Enter your email",
+    label: "邮箱",
+    placeholder: "请输入邮箱",
     required: true,
   },
   {
     name: "password",
     type: "password",
-    label: "Password",
-    placeholder: "Enter your password",
+    label: "密码",
+    placeholder: "请输入密码",
     required: true,
   },
 ];
 
 const schema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  name: z.string().min(2, "姓名至少需要 2 个字符"),
+  email: z.email("请输入有效的邮箱地址"),
+  password: z.string().min(8, "密码至少需要 8 位"),
 });
 
 type Schema = z.output<typeof schema>;
@@ -50,18 +50,18 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       },
       {
         onSuccess: async () => {
-          toast.add({ title: "Sign up successful" });
+          toast.add({ title: "注册成功" });
           await navigateTo("/dashboard", { replace: true, external: true });
         },
         onError: (error) => {
-          toast.add({ title: "Sign up failed", description: error.error.message });
+          toast.add({ title: "注册失败", description: error.error.message });
         },
       },
     );
   } catch (error: any) {
     toast.add({
-      title: "An unexpected error occurred",
-      description: error.message || "Please try again.",
+      title: "发生未预期错误",
+      description: error.message || "请稍后重试。",
     });
   } finally {
     loading.value = false;
@@ -74,14 +74,14 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     <UAuthForm
       :schema="schema"
       :fields="fields"
-      title="Create Account"
+      title="管理员注册"
       icon="i-lucide-user-plus"
-      :submit="{ label: 'Sign Up', loading }"
+      :submit="{ label: '注册', loading }"
       @submit="onSubmit"
     >
       <template #description>
-        Already have an account?
-        <ULink class="text-primary font-medium" @click="$emit('switchToSignIn')"> Sign In </ULink>
+        已有账号？
+        <ULink class="font-medium text-primary" @click="$emit('switchToSignIn')"> 去登录 </ULink>
       </template>
     </UAuthForm>
   </UPageCard>

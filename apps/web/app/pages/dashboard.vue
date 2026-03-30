@@ -46,7 +46,7 @@ const shortcuts = [
   { label: "员工管理", to: "/employees", icon: "i-lucide-users" },
   { label: "设备管理", to: "/devices", icon: "i-lucide-monitor-smartphone" },
   { label: "考勤配置", to: "/attendance-config", icon: "i-lucide-settings-2" },
-  { label: "录脸任务", to: "/face-profiles", icon: "i-lucide-scan-face" },
+  { label: "录脸记录", to: "/face-profiles", icon: "i-lucide-scan-face" },
   { label: "考勤记录", to: "/attendance-records", icon: "i-lucide-clipboard-check" },
 ];
 </script>

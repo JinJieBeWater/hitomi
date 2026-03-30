@@ -1,5 +1,4 @@
-import { db, faceProfile } from "@hitomi/db";
-import { eq } from "drizzle-orm";
+import { db, eq, faceProfile } from "@hitomi/db";
 import { defineEventHandler } from "h3";
 
 import {

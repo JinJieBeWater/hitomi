@@ -34,7 +34,7 @@ onMounted(() => {
         class="workspace-auth-card flex min-h-80 flex-col items-center justify-center gap-4 p-8"
       >
         <UIcon name="i-lucide-loader-2" class="animate-spin text-4xl text-primary" />
-        <span class="text-muted">Loading...</span>
+        <span class="text-muted">加载中...</span>
       </div>
 
       <div v-else-if="!isSignedIn">

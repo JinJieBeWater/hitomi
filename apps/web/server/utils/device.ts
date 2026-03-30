@@ -1,6 +1,5 @@
-import { attendanceConfig, attendanceRecord, db, device, employee, faceProfile } from "@hitomi/db";
+import { and, attendanceConfig, attendanceRecord, db, device, employee, eq, faceProfile } from "@hitomi/db";
 import { attendanceRecordTypes } from "@hitomi/db/schema/business";
-import { and, eq } from "drizzle-orm";
 import type { H3Event } from "h3";
 import { z } from "zod";
 

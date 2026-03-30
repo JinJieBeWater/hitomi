@@ -141,25 +141,27 @@ const attendanceTypeOptions = [
 ];
 
 const headerBadges = computed(() => {
-  const list = [{ label: `${total.value} 条记录`, color: "neutral" as const }];
+  const list: Array<{ label: string; color: "primary" | "success" | "warning" | "neutral" }> = [
+    { label: `${total.value} 条记录`, color: "neutral" },
+  ];
 
   if (localDate.value) {
-    list.push({ label: localDate.value, color: "primary" as const });
+    list.push({ label: localDate.value, color: "primary" });
   }
 
   if (type.value) {
     const label = attendanceTypeOptions.find((item) => item.value === type.value)?.label || type.value;
-    list.push({ label: `类型: ${label}`, color: "warning" as const });
+    list.push({ label: `类型: ${label}`, color: "warning" });
   }
 
   if (employeeId.value) {
     const label = employeeOptions.value.find((item) => item.value === employeeId.value)?.label || "员工";
-    list.push({ label: `员工: ${label}`, color: "primary" as const });
+    list.push({ label: `员工: ${label}`, color: "primary" });
   }
 
   if (deviceId.value) {
     const label = deviceOptions.value.find((item) => item.value === deviceId.value)?.label || "设备";
-    list.push({ label: `设备: ${label}`, color: "success" as const });
+    list.push({ label: `设备: ${label}`, color: "success" });
   }
 
   return list;

@@ -46,7 +46,7 @@ const items = computed(() => {
     :close="false"
     title="设备创建成功"
     description="请立即保存设备码和初始化密钥。初始化密钥只会显示这一次。"
-    :content="{ class: 'sm:max-w-xl' }"
+    :ui="{ content: 'sm:max-w-xl' }"
     @update:open="emit('update:open', $event)"
   >
     <template #body="{ close }">

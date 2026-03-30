@@ -20,7 +20,7 @@ const optionPageSize = 100;
 
 const page = ref(1);
 const keyword = ref("");
-const faceStatus = ref<"pending" | "success" | "failed" | "cancelled" | "none" | undefined>();
+const faceProfileState = ref<"pending" | "success" | "failed" | "cancelled" | "none" | undefined>();
 const editingId = ref<string | null>(null);
 const editorOpen = ref(false);
 const editorError = ref("");
@@ -53,20 +53,15 @@ const employeesQuery = useQuery(
         page: page.value,
         pageSize,
         keyword: keyword.value || undefined,
-        faceStatus: faceStatus.value,
+        faceProfileState: faceProfileState.value,
       },
     }),
   ),
 );
 
-const saveEmployee = useMutation(
-  computed(() =>
-    editingId.value
-      ? $orpc.employee.update.mutationOptions()
-      : $orpc.employee.create.mutationOptions(),
-  ),
-);
-const assignFaceTask = useMutation($orpc.faceProfile.createOrAssign.mutationOptions());
+const createEmployee = useMutation($orpc.employee.create.mutationOptions());
+const updateEmployee = useMutation($orpc.employee.update.mutationOptions());
+const assignFaceTask = useMutation($orpc.faceProfile.enqueue.mutationOptions());
 const cancelFaceTask = useMutation($orpc.faceProfile.cancel.mutationOptions());
 const removeEmployee = useMutation($orpc.employee.remove.mutationOptions());
 
@@ -91,7 +86,7 @@ const { total, resetPage } = usePagedListState({
   page,
   pageSize,
   getPageInfo: () => employeesQuery.data.value?.pageInfo,
-  resetOn: [keyword, faceStatus],
+  resetOn: [keyword, faceProfileState],
 });
 
 const employeeColumns = [
@@ -102,7 +97,7 @@ const employeeColumns = [
   { accessorKey: "actions", header: "操作" },
 ];
 
-const faceStatusOptions = [
+const faceProfileStateOptions = [
   { label: "未录入", value: "none", description: "还没有建立录脸档案" },
   { label: "待录入", value: "pending", description: "已分配设备，等待完成录入" },
   { label: "录入成功", value: "success", description: "录脸数据已可用于识别" },
@@ -117,8 +112,9 @@ const headerBadges = computed(() => {
     list.push({ label: `关键词: ${keyword.value}`, color: "primary" as const });
   }
 
-  if (faceStatus.value) {
-    const label = faceStatusOptions.find((item) => item.value === faceStatus.value)?.label || faceStatus.value;
+  if (faceProfileState.value) {
+    const label =
+      faceProfileStateOptions.find((item) => item.value === faceProfileState.value)?.label || faceProfileState.value;
     list.push({ label: `状态: ${label}`, color: "warning" as const });
   }
 
@@ -135,6 +131,7 @@ const activeDeviceOptions = computed(() =>
 
 const currentFaceEmployee = computed(() => rows.value.find((item) => item.id === faceTaskEmployeeId.value) ?? null);
 const currentEditingEmployee = computed(() => rows.value.find((item) => item.id === editingId.value) ?? null);
+const isSavingEmployee = computed(() => createEmployee.isPending.value || updateEmployee.isPending.value);
 
 const faceTaskActionLabel = computed(() => {
   const status = currentFaceEmployee.value?.faceProfile?.status;
@@ -266,14 +263,14 @@ async function handleSubmit() {
   const isEditing = Boolean(editingId.value);
 
   try {
-    if (isEditing) {
-      await saveEmployee.mutateAsync({
+    if (editingId.value) {
+      await updateEmployee.mutateAsync({
         id: editingId.value,
         code: form.value.code.trim(),
         name: form.value.name.trim(),
       });
     } else {
-      await saveEmployee.mutateAsync({
+      await createEmployee.mutateAsync({
         code: form.value.code.trim(),
         name: form.value.name.trim(),
       });
@@ -292,7 +289,7 @@ async function handleSubmit() {
 function resetFilters() {
   resetPage();
   keyword.value = "";
-  faceStatus.value = undefined;
+  faceProfileState.value = undefined;
 }
 
 function clearFaceRouteState() {
@@ -444,7 +441,12 @@ async function handleDeleteEmployee(confirmText: string) {
             </UFormField>
 
             <UFormField label="录脸状态">
-              <USelect v-model="faceStatus" :items="faceStatusOptions" placeholder="全部状态" class="w-full" />
+              <USelect
+                v-model="faceProfileState"
+                :items="faceProfileStateOptions"
+                placeholder="全部状态"
+                class="w-full"
+              />
             </UFormField>
           </div>
 
@@ -700,13 +702,13 @@ async function handleDeleteEmployee(confirmText: string) {
             />
 
             <div class="flex flex-col gap-3 pt-2">
-              <UButton
-                type="submit"
-                data-testid="employee-submit-button"
-                :loading="saveEmployee.isPending.value"
-                class="w-full rounded-2xl"
-                icon="i-lucide-save"
-              >
+                <UButton
+                  type="submit"
+                  data-testid="employee-submit-button"
+                  :loading="isSavingEmployee"
+                  class="w-full rounded-2xl"
+                  icon="i-lucide-save"
+                >
                 {{ editingId ? "保存修改" : "创建员工" }}
               </UButton>
 

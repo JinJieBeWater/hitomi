@@ -11,22 +11,22 @@ const fields: AuthFormField[] = [
   {
     name: "email",
     type: "email",
-    label: "Email",
-    placeholder: "Enter your email",
+    label: "邮箱",
+    placeholder: "请输入邮箱",
     required: true,
   },
   {
     name: "password",
     type: "password",
-    label: "Password",
-    placeholder: "Enter your password",
+    label: "密码",
+    placeholder: "请输入密码",
     required: true,
   },
 ];
 
 const schema = z.object({
-  email: z.email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  email: z.email("请输入有效的邮箱地址"),
+  password: z.string().min(8, "密码至少需要 8 位"),
 });
 
 type Schema = z.output<typeof schema>;
@@ -41,18 +41,18 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
       },
       {
         onSuccess: async () => {
-          toast.add({ title: "Sign in successful" });
+          toast.add({ title: "登录成功" });
           await navigateTo("/dashboard", { replace: true, external: true });
         },
         onError: (error) => {
-          toast.add({ title: "Sign in failed", description: error.error.message });
+          toast.add({ title: "登录失败", description: error.error.message });
         },
       },
     );
   } catch (error: any) {
     toast.add({
-      title: "An unexpected error occurred",
-      description: error.message || "Please try again.",
+      title: "发生未预期错误",
+      description: error.message || "请稍后重试。",
     });
   } finally {
     loading.value = false;
@@ -65,14 +65,14 @@ async function onSubmit(event: FormSubmitEvent<Schema>) {
     <UAuthForm
       :schema="schema"
       :fields="fields"
-      title="Welcome Back"
+      title="管理员登录"
       icon="i-lucide-log-in"
-      :submit="{ label: 'Sign In', loading }"
+      :submit="{ label: '登录', loading }"
       @submit="onSubmit"
     >
       <template #description>
-        Need an account?
-        <ULink class="text-primary font-medium" @click="$emit('switchToSignUp')"> Sign Up </ULink>
+        还没有账号？
+        <ULink class="font-medium text-primary" @click="$emit('switchToSignUp')"> 去注册 </ULink>
       </template>
     </UAuthForm>
   </UPageCard>

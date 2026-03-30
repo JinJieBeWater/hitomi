@@ -69,7 +69,7 @@ function handleConfirm() {
     :close="!props.submitting"
     :title="`确认删除${props.entityLabel}`"
     description="删除后不可恢复，相关录脸任务和考勤记录会一并移除。"
-    :content="{ class: 'sm:max-w-xl' }"
+    :ui="{ content: 'sm:max-w-xl' }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>

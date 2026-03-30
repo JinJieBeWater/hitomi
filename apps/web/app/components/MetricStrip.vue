@@ -23,7 +23,7 @@ function toneClass(color?: MetricTone) {
 }
 
 function shouldShowCaption(caption?: string): boolean {
-  return Boolean(caption) && !hiddenCaptions.has(caption);
+  return typeof caption === "string" && caption.length > 0 && !hiddenCaptions.has(caption);
 }
 </script>
 

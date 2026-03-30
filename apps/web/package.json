@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "nuxt build",
+    "check-types": "nuxt prepare && tsc --noEmit -p .nuxt/tsconfig.server.json && bunx vue-tsc --noEmit -p tsconfig.typecheck.json",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",

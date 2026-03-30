@@ -26,21 +26,21 @@ async function handleSignOut(): Promise<void> {
     await $authClient.signOut({
       fetchOptions: {
         onSuccess: async () => {
-          toast.add({ title: "Signed out successfully" });
+          toast.add({ title: "已退出登录" });
           await navigateTo("/", { replace: true });
         },
         onError: (error) => {
           toast.add({
-            title: "Sign out failed",
-            description: error?.error?.message || "Unknown error",
+            title: "退出登录失败",
+            description: error?.error?.message || "未知错误",
           });
         },
       },
     });
   } catch (error: any) {
     toast.add({
-      title: "An unexpected error occurred during sign out",
-      description: error.message || "Please try again.",
+      title: "退出登录时发生未预期错误",
+      description: error.message || "请稍后重试。",
     });
   }
 }

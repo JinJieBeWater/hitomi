@@ -1,5 +1,4 @@
-import { attendanceRecord, db } from "@hitomi/db";
-import { and, eq, gt } from "drizzle-orm";
+import { and, attendanceRecord, db, eq, gt } from "@hitomi/db";
 import { defineEventHandler } from "h3";
 
 import {

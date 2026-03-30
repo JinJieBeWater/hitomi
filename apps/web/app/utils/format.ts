@@ -29,7 +29,14 @@ export function minutesToTimeInput(value: number | null | undefined) {
 export function timeInputToMinutes(value: string) {
   if (!value) return null;
 
-  const [hour, minute] = value.split(":").map(Number);
+  const parts = value.split(":");
+
+  if (parts.length !== 2) {
+    return null;
+  }
+
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
 
   if (!Number.isInteger(hour) || !Number.isInteger(minute)) {
     return null;

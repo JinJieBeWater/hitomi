@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { NavigationMenuItem } from "@nuxt/ui";
-
 import ThemeToggle from "~/components/ThemeToggle.vue";
 import UserMenu from "~/components/UserMenu.vue";
 
@@ -10,7 +8,7 @@ function closeSidebar(): void {
   open.value = false;
 }
 
-function createLink(label: string, icon: string, to: string): NavigationMenuItem {
+function createLink(label: string, icon: string, to: string) {
   return {
     label,
     icon,
@@ -19,12 +17,12 @@ function createLink(label: string, icon: string, to: string): NavigationMenuItem
   };
 }
 
-const mainLinks: NavigationMenuItem[] = [
+const mainLinks = [
   createLink("概览", "i-lucide-layout-dashboard", "/dashboard"),
   createLink("员工管理", "i-lucide-users", "/employees"),
   createLink("设备管理", "i-lucide-monitor-smartphone", "/devices"),
   createLink("考勤配置", "i-lucide-settings-2", "/attendance-config"),
-  createLink("录脸任务", "i-lucide-scan-face", "/face-profiles"),
+  createLink("录脸记录", "i-lucide-scan-face", "/face-profiles"),
   createLink("考勤记录", "i-lucide-clipboard-check", "/attendance-records"),
 ];
 
@@ -32,7 +30,12 @@ const groups = [
   {
     id: "pages",
     label: "页面",
-    items: mainLinks,
+    items: mainLinks.map((item) => ({
+      id: item.to,
+      label: item.label,
+      icon: item.icon,
+      onSelect: item.onSelect,
+    })),
   },
 ];
 </script>
@@ -67,7 +70,7 @@ const groups = [
           :items="mainLinks"
           orientation="vertical"
           color="neutral"
-          variant="ghost"
+          variant="pill"
           highlight
           highlight-color="primary"
           tooltip

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref } from "vue";
 
 import { usePagedListState } from "~/composables/usePagedListState";
-import { colorFaceStatus, formatDateTime } from "~/utils/format";
+import { colorFaceStatus, formatDateTime, labelFaceStatus } from "~/utils/format";
 
 definePageMeta({
   layout: "dashboard",
@@ -15,8 +15,10 @@ const queryClient = useQueryClient();
 const toast = useToast();
 const pageSize = 20;
 
+type FaceProfileStatusFilter = "pending" | "success" | "failed" | "cancelled" | undefined;
+
 const page = ref(1);
-const status = ref<"pending" | "success" | "failed" | "cancelled" | undefined>();
+const status = ref<FaceProfileStatusFilter>();
 
 const faceProfilesQuery = useQuery(
   computed(() =>
@@ -24,12 +26,7 @@ const faceProfilesQuery = useQuery(
       input: {
         page: page.value,
         pageSize,
-        status: (status.value || undefined) as
-          | "pending"
-          | "success"
-          | "failed"
-          | "cancelled"
-          | undefined,
+        status: status.value,
       },
     }),
   ),
@@ -93,7 +90,7 @@ function resetFilters() {
 <template>
   <UDashboardPanel id="face-profiles">
     <template #header>
-      <PageHeader title="录脸任务">
+      <PageHeader title="录脸记录">
         <template #actions>
           <UButton variant="outline" icon="i-lucide-refresh-cw" @click="faceProfilesQuery.refetch()">刷新</UButton>
         </template>
@@ -102,7 +99,7 @@ function resetFilters() {
 
     <template #body>
       <div class="workspace-page-stack">
-        <DataSurface title="任务队列">
+        <DataSurface title="录脸记录列表">
           <template #actions>
             <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <USelect v-model="status" :items="statusOptions" placeholder="全部状态" class="w-full sm:min-w-40" />
@@ -129,13 +126,13 @@ function resetFilters() {
             color="error"
             icon="i-lucide-alert-circle"
             title="加载失败"
-            :description="faceProfilesQuery.error.value?.message || '无法加载录脸任务列表'"
+            :description="faceProfilesQuery.error.value?.message || '无法加载录脸记录列表'"
           />
 
           <EmptyState
             v-else-if="rows.length === 0"
-            title="暂无录脸任务"
-            description="当前条件下没有可处理的任务。"
+            title="暂无录脸记录"
+            description="暂无匹配的录脸记录。"
             icon="i-lucide-scan-face"
           />
 
@@ -144,7 +141,7 @@ function resetFilters() {
               <UTable
                 :data="rows"
                 :columns="faceProfileColumns"
-                empty="暂无录脸任务"
+                empty="暂无录脸记录"
                 :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[760px]' }"
               >
                 <template #employee-cell="{ row }">
@@ -177,7 +174,7 @@ function resetFilters() {
                 <template #actions-cell="{ row }">
                   <div class="flex flex-wrap gap-2">
                     <UButton size="xs" variant="outline" icon="i-lucide-arrow-up-right" @click="goToEmployee(row.original)">
-                      处理
+                      查看员工
                     </UButton>
 
                     <UButton
@@ -226,7 +223,7 @@ function resetFilters() {
 
                 <div class="mt-4 flex flex-wrap justify-end gap-2">
                   <UButton size="sm" variant="outline" icon="i-lucide-arrow-up-right" @click="goToEmployee(item)">
-                    处理
+                    查看员工
                   </UButton>
 
                   <UButton

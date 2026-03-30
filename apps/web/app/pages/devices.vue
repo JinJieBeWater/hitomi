@@ -116,15 +116,17 @@ const deviceStatusOptions = [
 ];
 
 const headerBadges = computed(() => {
-  const list = [{ label: `${total.value} 条记录`, color: "neutral" as const }];
+  const list: Array<{ label: string; color: "primary" | "warning" | "neutral" }> = [
+    { label: `${total.value} 条记录`, color: "neutral" },
+  ];
 
   if (keyword.value) {
-    list.push({ label: `关键词: ${keyword.value}`, color: "primary" as const });
+    list.push({ label: `关键词: ${keyword.value}`, color: "primary" });
   }
 
   if (status.value) {
     const label = deviceStatusOptions.find((item) => item.value === status.value)?.label || status.value;
-    list.push({ label: `状态: ${label}`, color: "warning" as const });
+    list.push({ label: `状态: ${label}`, color: "warning" });
   }
 
   return list;
