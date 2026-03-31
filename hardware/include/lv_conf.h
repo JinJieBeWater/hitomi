@@ -9,6 +9,14 @@
  * 2. or to any other place and
  *    - define `LV_CONF_INCLUDE_SIMPLE`;
  *    - add the path as an include path.
+ *
+ * Project notes for SZPI ESP32-S3:
+ * - Display stack: LVGL + esp_lcd
+ * - Color depth: RGB565
+ * - Logging: enabled at INFO level
+ * - Default font: Montserrat 14
+ * - LovyanGFX path: disabled
+ * - Examples and demos: disabled
  */
 
 /* clang-format off */

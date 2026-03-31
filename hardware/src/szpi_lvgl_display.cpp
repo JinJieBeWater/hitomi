@@ -2,6 +2,19 @@
 
 #include <szpi_lvgl_display.hpp>
 
+namespace {
+
+bool logEspError(esp_err_t err, const char* action) {
+  if (err == ESP_OK) {
+    return true;
+  }
+
+  Serial.printf("[SZPI.ESP_LCD] %s failed: %s\n", action, esp_err_to_name(err));
+  return false;
+}
+
+}  // namespace
+
 bool SzpiLvglDisplay::init() {
   if (_ready) {
     return true;
@@ -34,10 +47,6 @@ bool SzpiLvglDisplay::init() {
 
   _ready = true;
   return true;
-}
-
-bool SzpiLvglDisplay::ready() const {
-  return _ready;
 }
 
 lv_display_t* SzpiLvglDisplay::display() const {
@@ -99,20 +108,17 @@ bool SzpiLvglDisplay::initIoExpander() {
   cfg.scl_pullup_en = GPIO_PULLUP_ENABLE;
   cfg.master.clk_speed = 100000;
 
-  esp_err_t err = i2c_param_config(kI2cPort, &cfg);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] i2c_param_config failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(i2c_param_config(kI2cPort, &cfg), "i2c_param_config")) {
     return false;
   }
 
-  err = i2c_driver_install(kI2cPort, cfg.mode, 0, 0, 0);
+  esp_err_t err = i2c_driver_install(kI2cPort, cfg.mode, 0, 0, 0);
   if (err == ESP_ERR_INVALID_STATE) {
     i2c_driver_delete(kI2cPort);
     err = i2c_driver_install(kI2cPort, cfg.mode, 0, 0, 0);
   }
 
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] i2c_driver_install failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(err, "i2c_driver_install")) {
     return false;
   }
 
@@ -145,15 +151,11 @@ bool SzpiLvglDisplay::initBacklightPwm() {
   timerCfg.freq_hz = 5000;
   timerCfg.clk_cfg = LEDC_AUTO_CLK;
 
-  esp_err_t err = ledc_timer_config(&timerCfg);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] ledc_timer_config failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(ledc_timer_config(&timerCfg), "ledc_timer_config")) {
     return false;
   }
 
-  err = ledc_channel_config(&channelCfg);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] ledc_channel_config failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(ledc_channel_config(&channelCfg), "ledc_channel_config")) {
     return false;
   }
 
@@ -167,12 +169,11 @@ bool SzpiLvglDisplay::initPanel() {
   busCfg.miso_io_num = GPIO_NUM_NC;
   busCfg.quadwp_io_num = GPIO_NUM_NC;
   busCfg.quadhd_io_num = GPIO_NUM_NC;
-  busCfg.max_transfer_sz =
-      kHorizontalResolution * kBufferRows * sizeof(uint16_t);
+  busCfg.max_transfer_sz = kHorizontalResolution * kBufferRows * sizeof(uint16_t);
 
   esp_err_t err = spi_bus_initialize(kLcdSpiHost, &busCfg, SPI_DMA_CH_AUTO);
   if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-    Serial.printf("[SZPI.ESP_LCD] spi_bus_initialize failed: %s\n", esp_err_to_name(err));
+    logEspError(err, "spi_bus_initialize");
     return false;
   }
 
@@ -189,9 +190,7 @@ bool SzpiLvglDisplay::initPanel() {
 
   err = esp_lcd_new_panel_io_spi(
       reinterpret_cast<esp_lcd_spi_bus_handle_t>(kLcdSpiHost), &ioCfg, &_io);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_new_panel_io_spi failed: %s\n",
-                  esp_err_to_name(err));
+  if (!logEspError(err, "esp_lcd_new_panel_io_spi")) {
     return false;
   }
 
@@ -200,16 +199,11 @@ bool SzpiLvglDisplay::initPanel() {
   panelCfg.color_space = ESP_LCD_COLOR_SPACE_RGB;
   panelCfg.bits_per_pixel = 16;
 
-  err = esp_lcd_new_panel_st7789(_io, &panelCfg, &_panel);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_new_panel_st7789 failed: %s\n",
-                  esp_err_to_name(err));
+  if (!logEspError(esp_lcd_new_panel_st7789(_io, &panelCfg, &_panel), "esp_lcd_new_panel_st7789")) {
     return false;
   }
 
-  err = esp_lcd_panel_reset(_panel);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_panel_reset failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(esp_lcd_panel_reset(_panel), "esp_lcd_panel_reset")) {
     return false;
   }
 
@@ -218,36 +212,23 @@ bool SzpiLvglDisplay::initPanel() {
     return false;
   }
 
-  err = esp_lcd_panel_init(_panel);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_panel_init failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(esp_lcd_panel_init(_panel), "esp_lcd_panel_init")) {
     return false;
   }
 
-  err = esp_lcd_panel_invert_color(_panel, true);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_panel_invert_color failed: %s\n",
-                  esp_err_to_name(err));
+  if (!logEspError(esp_lcd_panel_invert_color(_panel, true), "esp_lcd_panel_invert_color")) {
     return false;
   }
 
-  err = esp_lcd_panel_swap_xy(_panel, true);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_panel_swap_xy failed: %s\n",
-                  esp_err_to_name(err));
+  if (!logEspError(esp_lcd_panel_swap_xy(_panel, true), "esp_lcd_panel_swap_xy")) {
     return false;
   }
 
-  err = esp_lcd_panel_mirror(_panel, true, false);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_panel_mirror failed: %s\n", esp_err_to_name(err));
+  if (!logEspError(esp_lcd_panel_mirror(_panel, true, false), "esp_lcd_panel_mirror")) {
     return false;
   }
 
-  err = esp_lcd_panel_disp_on_off(_panel, true);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] esp_lcd_panel_disp_on_off failed: %s\n",
-                  esp_err_to_name(err));
+  if (!logEspError(esp_lcd_panel_disp_on_off(_panel, true), "esp_lcd_panel_disp_on_off")) {
     return false;
   }
 

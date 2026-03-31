@@ -18,9 +18,7 @@ class SzpiLvglDisplay {
   static constexpr uint32_t kBufferRows = 20;
 
   bool init();
-  bool ready() const;
   lv_display_t* display() const;
-  bool setBacklightPercent(int percent);
 
  private:
   static void flushCallback(lv_display_t* display, const lv_area_t* area, uint8_t* pxMap);
@@ -33,6 +31,7 @@ class SzpiLvglDisplay {
   bool initLvglDisplay();
   bool writePca9557Register(uint8_t reg, uint8_t value);
   bool setPca9557OutputState(uint8_t gpioBit, bool level);
+  bool setBacklightPercent(int percent);
   void flush(const lv_area_t* area, uint8_t* pxMap);
 
   static constexpr i2c_port_t kI2cPort = I2C_NUM_0;
