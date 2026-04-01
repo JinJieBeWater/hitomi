@@ -13,6 +13,7 @@
 - 管理员登录继续使用现有认证表
 - 设备识别成功后直接上传 `employeeId`
 - 服务端不保存人脸特征和图片
+- 设备端模板库存储不属于服务端数据库范围，由设备本地持久化方案负责
 - 当前 MVP 默认使用中国时间，不额外存储时区信息
 - 当前答辩演示按单管理员、单设备场景实现
 
@@ -41,6 +42,7 @@
 
 - 当前 MVP 不额外建立 `employee-device` 绑定表
 - 设备本地保存员工信息、考勤配置、录脸任务和失败日志，这些内容不进入服务端数据库
+- 设备端人脸模板库主存储位于设备本地 `SD Card`，不进入服务端数据库
 
 ---
 
@@ -48,13 +50,13 @@
 
 用途：保存被考勤人员信息。
 
-| 字段名 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | `text` | 主键 | 随机字符串 ID |
-| `code` | `text` | 非空，唯一 | 员工编号、学号或工号 |
-| `name` | `text` | 非空 | 员工姓名 |
-| `created_at` | `integer` | 非空 | 毫秒时间戳 |
-| `updated_at` | `integer` | 非空 | 毫秒时间戳 |
+| 字段名       | 类型      | 约束       | 说明                 |
+| ------------ | --------- | ---------- | -------------------- |
+| `id`         | `text`    | 主键       | 随机字符串 ID        |
+| `code`       | `text`    | 非空，唯一 | 员工编号、学号或工号 |
+| `name`       | `text`    | 非空       | 员工姓名             |
+| `created_at` | `integer` | 非空       | 毫秒时间戳           |
+| `updated_at` | `integer` | 非空       | 毫秒时间戳           |
 
 业务约束：
 
@@ -66,16 +68,16 @@
 
 用途：保存设备注册信息和设备鉴权信息。
 
-| 字段名 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | `text` | 主键 | 随机字符串 ID |
-| `device_code` | `text` | 非空，唯一 | 后端自动生成的设备码 |
-| `name` | `text` | 非空 | 设备名称 |
-| `api_key_hash` | `text` | 非空 | 设备密钥哈希 |
-| `status` | `text` | 非空，默认 `active` | `active` 或 `disabled` |
-| `last_seen_at` | `integer` | 可空 | 最近在线时间，毫秒时间戳 |
-| `created_at` | `integer` | 非空 | 毫秒时间戳 |
-| `updated_at` | `integer` | 非空 | 毫秒时间戳 |
+| 字段名         | 类型      | 约束                | 说明                     |
+| -------------- | --------- | ------------------- | ------------------------ |
+| `id`           | `text`    | 主键                | 随机字符串 ID            |
+| `device_code`  | `text`    | 非空，唯一          | 后端自动生成的设备码     |
+| `name`         | `text`    | 非空                | 设备名称                 |
+| `api_key_hash` | `text`    | 非空                | 设备密钥哈希             |
+| `status`       | `text`    | 非空，默认 `active` | `active` 或 `disabled`   |
+| `last_seen_at` | `integer` | 可空                | 最近在线时间，毫秒时间戳 |
+| `created_at`   | `integer` | 非空                | 毫秒时间戳               |
+| `updated_at`   | `integer` | 非空                | 毫秒时间戳               |
 
 业务约束：
 
@@ -91,14 +93,14 @@
 
 用途：保存全局唯一的一套考勤时间段配置。
 
-| 字段名 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | `text` | 主键 | 随机字符串 ID |
+| 字段名              | 类型      | 约束 | 说明               |
+| ------------------- | --------- | ---- | ------------------ |
+| `id`                | `text`    | 主键 | 随机字符串 ID      |
 | `work_start_minute` | `integer` | 非空 | 上班打卡开始分钟数 |
-| `work_end_minute` | `integer` | 非空 | 上班打卡结束分钟数 |
-| `off_start_minute` | `integer` | 非空 | 下班打卡开始分钟数 |
-| `off_end_minute` | `integer` | 非空 | 下班打卡结束分钟数 |
-| `updated_at` | `integer` | 非空 | 毫秒时间戳 |
+| `work_end_minute`   | `integer` | 非空 | 上班打卡结束分钟数 |
+| `off_start_minute`  | `integer` | 非空 | 下班打卡开始分钟数 |
+| `off_end_minute`    | `integer` | 非空 | 下班打卡结束分钟数 |
+| `updated_at`        | `integer` | 非空 | 毫秒时间戳         |
 
 分钟数示例：
 
@@ -128,14 +130,14 @@
 
 用途：同时承担录脸任务和录脸结果状态表。
 
-| 字段名 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | `text` | 主键 | 随机字符串 ID，也可作为录脸任务 ID |
-| `employee_id` | `text` | 非空，唯一，外键 | 关联员工 |
-| `device_id` | `text` | 非空，外键 | 分配录脸的设备 |
-| `status` | `text` | 非空，默认 `pending` | `pending`、`success`、`failed`、`cancelled` |
-| `created_at` | `integer` | 非空 | 毫秒时间戳 |
-| `updated_at` | `integer` | 非空 | 毫秒时间戳 |
+| 字段名        | 类型      | 约束                 | 说明                                        |
+| ------------- | --------- | -------------------- | ------------------------------------------- |
+| `id`          | `text`    | 主键                 | 随机字符串 ID，也可作为录脸任务 ID          |
+| `employee_id` | `text`    | 非空，唯一，外键     | 关联员工                                    |
+| `device_id`   | `text`    | 非空，外键           | 分配录脸的设备                              |
+| `status`      | `text`    | 非空，默认 `pending` | `pending`、`success`、`failed`、`cancelled` |
+| `created_at`  | `integer` | 非空                 | 毫秒时间戳                                  |
+| `updated_at`  | `integer` | 非空                 | 毫秒时间戳                                  |
 
 业务约束：
 
@@ -164,16 +166,16 @@
 - 当前 MVP 只保存有效记录
 - 无效记录和重复记录不单独入库
 
-| 字段名 | 类型 | 约束 | 说明 |
-| --- | --- | --- | --- |
-| `id` | `text` | 主键 | 随机字符串 ID |
-| `employee_id` | `text` | 非空，外键 | 关联员工 |
-| `device_id` | `text` | 非空，外键 | 关联设备 |
-| `recognized_at` | `integer` | 非空 | 实际识别时间，毫秒时间戳 |
-| `local_date` | `text` | 非空 | 本地日期，格式 `YYYY-MM-DD` |
-| `type` | `text` | 非空 | `clock_in` 或 `clock_out` |
-| `created_at` | `integer` | 非空 | 创建时间，毫秒时间戳 |
-| `updated_at` | `integer` | 非空 | 更新时间，毫秒时间戳 |
+| 字段名          | 类型      | 约束       | 说明                        |
+| --------------- | --------- | ---------- | --------------------------- |
+| `id`            | `text`    | 主键       | 随机字符串 ID               |
+| `employee_id`   | `text`    | 非空，外键 | 关联员工                    |
+| `device_id`     | `text`    | 非空，外键 | 关联设备                    |
+| `recognized_at` | `integer` | 非空       | 实际识别时间，毫秒时间戳    |
+| `local_date`    | `text`    | 非空       | 本地日期，格式 `YYYY-MM-DD` |
+| `type`          | `text`    | 非空       | `clock_in` 或 `clock_out`   |
+| `created_at`    | `integer` | 非空       | 创建时间，毫秒时间戳        |
+| `updated_at`    | `integer` | 非空       | 更新时间，毫秒时间戳        |
 
 业务约束：
 

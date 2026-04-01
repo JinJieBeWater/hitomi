@@ -36,7 +36,7 @@ class FailureLogStore {
 
 class JsonLocalStore final : public LocalStore {
  public:
-  bool begin() override;
+  LocalStoreInitStatus begin() override;
   StoredRuntimeState load() override;
   bool saveCredentials(const core::DeviceCredentials& credentials) override;
   bool saveSnapshots(const core::SnapshotBundle& snapshots) override;
@@ -49,6 +49,7 @@ class JsonLocalStore final : public LocalStore {
   SnapshotStore snapshotStore_;
   AttendanceQueueStore attendanceQueueStore_;
   FailureLogStore failureLogStore_;
+  LocalStoreInitStatus initStatus_ = {};
 };
 
 }  // namespace infra

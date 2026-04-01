@@ -6,6 +6,11 @@
 
 namespace infra {
 
+struct LocalStoreInitStatus {
+  bool credentialsReady = false;
+  bool filesystemReady = false;
+};
+
 struct StoredRuntimeState {
   core::DeviceCredentials credentials;
   core::SnapshotBundle snapshots;
@@ -17,7 +22,7 @@ class LocalStore {
  public:
   virtual ~LocalStore() = default;
 
-  virtual bool begin() = 0;
+  virtual LocalStoreInitStatus begin() = 0;
   virtual StoredRuntimeState load() = 0;
   virtual bool saveCredentials(const core::DeviceCredentials& credentials) = 0;
   virtual bool saveSnapshots(const core::SnapshotBundle& snapshots) = 0;

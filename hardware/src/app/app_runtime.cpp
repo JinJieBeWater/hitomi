@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "app/runtime_diagnostics.hpp"
 #include "app/runtime_status.hpp"
 #include "board/app_config.hpp"
 #include "board/pins.hpp"
@@ -14,17 +15,29 @@
 #include "ui/status_screen_presenter.hpp"
 
 namespace app {
+namespace {
+
+bool facePortsReady(
+    const face::CameraPort& camera,
+    const face::EnrollmentServicePort& enrollmentService,
+    const face::RecognitionServicePort& recognitionService) {
+  return camera.available() && enrollmentService.available() && recognitionService.available();
+}
+
+}  // namespace
 
 AppRuntime::AppRuntime(
     infra::DisplayPort& display,
     infra::LocalStore& localStore,
     infra::DeviceApiClient& deviceApiClient,
+    infra::TemplateStorePort& templateStore,
     face::CameraPort& camera,
     face::EnrollmentServicePort& enrollmentService,
     face::RecognitionServicePort& recognitionService)
     : display_(display),
       localStore_(localStore),
       deviceApiClient_(deviceApiClient),
+      templateStore_(templateStore),
       camera_(camera),
       enrollmentService_(enrollmentService),
       recognitionService_(recognitionService) {}
@@ -35,16 +48,11 @@ void AppRuntime::setup() {
   Serial.begin(board::kSerialBaudRate);
   waitForSerial();
 
-  storageReady_ = localStore_.begin();
-  if (!storageReady_) {
-    Serial.println("[APP] local store init failed");
-  }
-
+  initStorage();
   loadPersistedState();
   initWifi();
 
-  faceModuleEnabled_ =
-      camera_.available() && enrollmentService_.available() && recognitionService_.available();
+  faceModuleEnabled_ = templateStoreReady_ && facePortsReady(camera_, enrollmentService_, recognitionService_);
 
   displayReady_ = display_.init();
   if (!displayReady_) {
@@ -59,6 +67,23 @@ void AppRuntime::setup() {
   probeConnectivity(nowMs);
   printRuntimeCheck();
   updateView();
+}
+
+void AppRuntime::initStorage() {
+  const infra::LocalStoreInitStatus initStatus = localStore_.begin();
+  credentialsReady_ = initStatus.credentialsReady;
+  filesystemReady_ = initStatus.filesystemReady;
+  templateStoreReady_ = templateStore_.begin();
+
+  if (!credentialsReady_) {
+    Serial.println("[APP] credentials store unavailable");
+  }
+  if (!filesystemReady_) {
+    Serial.println("[APP] LittleFS unavailable");
+  }
+  if (!templateStoreReady_) {
+    Serial.println("[APP] template store unavailable");
+  }
 }
 
 void AppRuntime::tick(uint32_t nowMs) {
@@ -91,6 +116,7 @@ void AppRuntime::waitForSerial() {
 
 void AppRuntime::printRuntimeCheck() {
   const esp_partition_t* partition = esp_ota_get_running_partition();
+  const RuntimeDiagnostics diagnostics = buildRuntimeDiagnostics(buildRuntimeStatus());
 
   Serial.println();
   Serial.println("=== Hitomi Device Runtime ===");
@@ -103,11 +129,17 @@ void AppRuntime::printRuntimeCheck() {
   Serial.printf("PSRAM detected: %s\n", psramFound() ? "yes" : "no");
   Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
   Serial.printf("Free PSRAM: %u bytes\n", ESP.getFreePsram());
-  Serial.printf("Storage ready: %s\n", storageReady_ ? "yes" : "no");
+  Serial.printf("Credentials store ready: %s\n", credentialsReady_ ? "yes" : "no");
+  Serial.printf("LittleFS ready: %s\n", filesystemReady_ ? "yes" : "no");
+  Serial.printf("Template store ready: %s\n", templateStoreReady_ ? "yes" : "no");
   Serial.printf("Display ready: %s\n", displayReady_ ? "yes" : "no");
   Serial.printf("WiFi configured: %s\n", board::wifiConfigured() ? "yes" : "no");
   Serial.printf("API configured: %s\n", board::apiConfigured() ? "yes" : "no");
   Serial.printf("Device credentials configured: %s\n", credentials_.configured() ? "yes" : "no");
+  Serial.println(diagnostics.credentialsLine.c_str());
+  Serial.println(diagnostics.snapshotLine.c_str());
+  Serial.println(diagnostics.queueLine.c_str());
+  Serial.println(diagnostics.faceLine.c_str());
 
   if (partition != nullptr) {
     Serial.printf("Running partition: %s (%u bytes)\n", partition->label, partition->size);
@@ -117,10 +149,6 @@ void AppRuntime::printRuntimeCheck() {
 }
 
 void AppRuntime::loadPersistedState() {
-  if (!storageReady_) {
-    return;
-  }
-
   infra::StoredRuntimeState state = localStore_.load();
   credentials_ = state.credentials;
   snapshots_ = state.snapshots;
@@ -163,10 +191,14 @@ void AppRuntime::probeConnectivity(uint32_t nowMs) {
     renderDirty_ = true;
 
     if (connectivity_ == ConnectivityState::Connected) {
-      lastSyncAttemptMs_ = 0;
-      lastUploadAttemptMs_ = 0;
+      resetNetworkTaskSchedule();
     }
   }
+}
+
+void AppRuntime::resetNetworkTaskSchedule() {
+  lastSyncAttemptMs_ = 0;
+  lastUploadAttemptMs_ = 0;
 }
 
 bool AppRuntime::shouldSync(uint32_t nowMs) const {
@@ -219,9 +251,7 @@ void AppRuntime::performSync(uint32_t nowMs) {
   }
 
   snapshots_ = core::applySyncSnapshot(snapshots_, result.data.value(), nowMs);
-  if (storageReady_) {
-    localStore_.saveSnapshots(snapshots_);
-  }
+  persistSnapshots();
   setLastError(std::nullopt);
   renderDirty_ = true;
 }
@@ -249,16 +279,13 @@ void AppRuntime::performUpload(uint32_t nowMs) {
     return;
   }
 
-  auto applied =
+  auto uploadState =
       core::applyUploadResults(pendingAttendanceRecords_, failureLogs_, result.data->results, nowMs);
-  pendingAttendanceRecords_ = std::move(applied.queue);
-  failureLogs_ = std::move(applied.logs);
+  pendingAttendanceRecords_ = std::move(uploadState.queue);
+  failureLogs_ = std::move(uploadState.logs);
   core::pruneFailureLogs(failureLogs_, board::kFailureLogLimit);
-
-  if (storageReady_) {
-    localStore_.savePendingAttendanceRecords(pendingAttendanceRecords_);
-    localStore_.saveFailureLogs(failureLogs_);
-  }
+  persistPendingAttendanceRecords();
+  persistFailureLogs();
 
   std::optional<core::ApiError> latestRejectedError;
   for (const auto& item : result.data->results) {
@@ -289,9 +316,28 @@ void AppRuntime::markUploadAttemptFailure(
     it->lastResultCode = errorCode;
   }
 
-  if (storageReady_) {
-    localStore_.savePendingAttendanceRecords(pendingAttendanceRecords_);
+  persistPendingAttendanceRecords();
+}
+
+void AppRuntime::persistSnapshots() {
+  if (!filesystemReady_) {
+    return;
   }
+  localStore_.saveSnapshots(snapshots_);
+}
+
+void AppRuntime::persistPendingAttendanceRecords() {
+  if (!filesystemReady_) {
+    return;
+  }
+  localStore_.savePendingAttendanceRecords(pendingAttendanceRecords_);
+}
+
+void AppRuntime::persistFailureLogs() {
+  if (!filesystemReady_) {
+    return;
+  }
+  localStore_.saveFailureLogs(failureLogs_);
 }
 
 void AppRuntime::appendApiFailureLog(
@@ -311,25 +357,30 @@ void AppRuntime::appendApiFailureLog(
       },
       board::kFailureLogLimit);
 
-  if (storageReady_) {
-    localStore_.saveFailureLogs(failureLogs_);
-  }
+  persistFailureLogs();
 }
 
-void AppRuntime::updateView() {
+RuntimeStatus AppRuntime::buildRuntimeStatus() const {
   RuntimeStatus status = {};
   status.firmwareTag = board::kFirmwareTag;
   status.credentials = credentials_;
   status.snapshots = snapshots_;
   status.pendingQueueSize = pendingAttendanceRecords_.size();
+  status.failureLogCount = failureLogs_.size();
   status.connectivity = connectivity_;
+  status.credentialsReady = credentialsReady_;
+  status.filesystemReady = filesystemReady_;
+  status.templateStoreReady = templateStoreReady_;
   status.wifiConfigured = board::wifiConfigured();
   status.syncInFlight = syncInFlight_;
   status.uploadInFlight = uploadInFlight_;
   status.faceModuleEnabled = faceModuleEnabled_;
   status.lastErrorCode = lastErrorCode_;
+  return status;
+}
 
-  display_.render(ui::StatusScreenPresenter::build(status));
+void AppRuntime::updateView() {
+  display_.render(ui::StatusScreenPresenter::build(buildRuntimeStatus()));
   renderDirty_ = false;
 }
 

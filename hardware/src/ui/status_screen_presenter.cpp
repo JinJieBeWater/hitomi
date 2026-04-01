@@ -30,6 +30,20 @@ std::string syncLabel(const app::RuntimeStatus& status) {
   return oss.str();
 }
 
+std::string subtitleLabel(const app::RuntimeStatus& status) {
+  if (status.snapshots.deviceName.empty()) {
+    return "SZPI ESP32-S3";
+  }
+  return status.snapshots.deviceName;
+}
+
+std::string credentialsLabel(const app::RuntimeStatus& status) {
+  if (!status.credentials.configured()) {
+    return "Credentials: missing";
+  }
+  return "Credentials: " + status.credentials.deviceCode;
+}
+
 std::string taskLabel(const app::RuntimeStatus& status) {
   if (!status.snapshots.enrollmentTask.has_value()) {
     return "Task: none";
@@ -41,21 +55,37 @@ std::string taskLabel(const app::RuntimeStatus& status) {
   return oss.str();
 }
 
+std::string storageLabel(const app::RuntimeStatus& status) {
+  if (!status.credentialsReady) {
+    return "Storage: credentials unavailable";
+  }
+  if (!status.filesystemReady) {
+    return "Storage: LittleFS unavailable";
+  }
+  if (!status.templateStoreReady) {
+    return "Storage: SD unavailable";
+  }
+  return "Storage: ready";
+}
+
+std::string faceModuleLabel(const app::RuntimeStatus& status) {
+  return std::string("Face module: ") + (status.faceModuleEnabled ? "Enabled" : "Disabled");
+}
+
 }  // namespace
 
 AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
   AppViewModel view = {};
   view.title = "Hitomi Device";
-  view.subtitle = status.snapshots.deviceName.empty() ? "SZPI ESP32-S3" : status.snapshots.deviceName;
-  view.credentialsLine = status.credentials.configured()
-      ? "Credentials: " + status.credentials.deviceCode
-      : "Credentials: missing";
+  view.subtitle = subtitleLabel(status);
+  view.credentialsLine = credentialsLabel(status);
+  view.storageLine = storageLabel(status);
   view.wifiLine = "WiFi: " + connectivityLabel(status.connectivity);
   view.syncLine = "Sync: " + syncLabel(status);
   view.taskLine = taskLabel(status);
   view.queueLine = "Queue: " + std::to_string(status.pendingQueueSize);
   view.errorLine = "Last error: " + status.lastErrorCode.value_or("none");
-  view.faceLine = std::string("Face module: ") + (status.faceModuleEnabled ? "Enabled" : "Disabled");
+  view.faceLine = faceModuleLabel(status);
   view.footer = status.firmwareTag;
   return view;
 }

@@ -8,6 +8,7 @@ struct AppViewModel {
   std::string title;
   std::string subtitle;
   std::string credentialsLine;
+  std::string storageLine;
   std::string wifiLine;
   std::string syncLine;
   std::string taskLine;

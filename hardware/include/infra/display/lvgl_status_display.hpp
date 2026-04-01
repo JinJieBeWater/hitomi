@@ -27,6 +27,7 @@ class LvglStatusDisplay final : public DisplayPort {
   lv_obj_t* titleLabel_ = nullptr;
   lv_obj_t* subtitleLabel_ = nullptr;
   lv_obj_t* credentialsLabel_ = nullptr;
+  lv_obj_t* storageLabel_ = nullptr;
   lv_obj_t* wifiLabel_ = nullptr;
   lv_obj_t* syncLabel_ = nullptr;
   lv_obj_t* taskLabel_ = nullptr;

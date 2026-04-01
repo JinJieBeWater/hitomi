@@ -1,5 +1,8 @@
 #include "infra/storage/json_local_store.hpp"
 
+#include <cstdio>
+#include <sys/stat.h>
+
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 
@@ -8,12 +11,32 @@
 namespace infra {
 namespace {
 
+constexpr char kLittleFsMountPath[] = "/littlefs";
 constexpr char kSnapshotsPath[] = "/snapshots.json";
 constexpr char kAttendanceQueuePath[] = "/attendance_queue.json";
 constexpr char kFailureLogsPath[] = "/failure_logs.json";
 
+std::string loadPreferenceString(Preferences& preferences, const char* key) {
+  if (!preferences.isKey(key)) {
+    return "";
+  }
+
+  return preferences.getString(key, "").c_str();
+}
+
+bool littleFsFileExists(const char* path) {
+  char mountedPath[64] = {};
+  const int written = std::snprintf(mountedPath, sizeof(mountedPath), "%s%s", kLittleFsMountPath, path);
+  if (written <= 0 || static_cast<std::size_t>(written) >= sizeof(mountedPath)) {
+    return false;
+  }
+
+  struct stat fileInfo = {};
+  return ::stat(mountedPath, &fileInfo) == 0;
+}
+
 bool readJsonFile(const char* path, DynamicJsonDocument& doc) {
-  if (!LittleFS.exists(path)) {
+  if (!littleFsFileExists(path)) {
     return false;
   }
 
@@ -69,8 +92,8 @@ bool CredentialsStore::begin() {
 
 core::DeviceCredentials CredentialsStore::load() {
   return {
-      .deviceCode = preferences_.getString("deviceCode", "").c_str(),
-      .apiKey = preferences_.getString("apiKey", "").c_str(),
+      .deviceCode = loadPreferenceString(preferences_, "deviceCode"),
+      .apiKey = loadPreferenceString(preferences_, "apiKey"),
   };
 }
 
@@ -269,33 +292,51 @@ bool FailureLogStore::save(const std::vector<core::FailureLogEntry>& logs) {
   return writeJsonFile(kFailureLogsPath, doc);
 }
 
-bool JsonLocalStore::begin() {
-  return LittleFS.begin(true) && credentialsStore_.begin();
+LocalStoreInitStatus JsonLocalStore::begin() {
+  initStatus_.credentialsReady = credentialsStore_.begin();
+  initStatus_.filesystemReady = LittleFS.begin(false);
+  return initStatus_;
 }
 
 StoredRuntimeState JsonLocalStore::load() {
-  return {
-      .credentials = credentialsStore_.load(),
-      .snapshots = snapshotStore_.load(),
-      .pendingAttendanceRecords = attendanceQueueStore_.load(),
-      .failureLogs = failureLogStore_.load(),
-  };
+  StoredRuntimeState state = {};
+  if (initStatus_.credentialsReady) {
+    state.credentials = credentialsStore_.load();
+  }
+  if (initStatus_.filesystemReady) {
+    state.snapshots = snapshotStore_.load();
+    state.pendingAttendanceRecords = attendanceQueueStore_.load();
+    state.failureLogs = failureLogStore_.load();
+  }
+  return state;
 }
 
 bool JsonLocalStore::saveCredentials(const core::DeviceCredentials& credentials) {
+  if (!initStatus_.credentialsReady) {
+    return false;
+  }
   return credentialsStore_.save(credentials);
 }
 
 bool JsonLocalStore::saveSnapshots(const core::SnapshotBundle& snapshots) {
+  if (!initStatus_.filesystemReady) {
+    return false;
+  }
   return snapshotStore_.save(snapshots);
 }
 
 bool JsonLocalStore::savePendingAttendanceRecords(
     const std::vector<core::PendingAttendanceRecord>& records) {
+  if (!initStatus_.filesystemReady) {
+    return false;
+  }
   return attendanceQueueStore_.save(records);
 }
 
 bool JsonLocalStore::saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) {
+  if (!initStatus_.filesystemReady) {
+    return false;
+  }
   return failureLogStore_.save(logs);
 }
 

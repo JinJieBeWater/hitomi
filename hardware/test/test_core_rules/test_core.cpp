@@ -8,10 +8,12 @@
 #include <vector>
 
 #include "app/runtime_status.hpp"
+#include "app/runtime_diagnostics.hpp"
 #include "core/models.hpp"
 #include "core/use_cases.hpp"
 #include "ui/status_screen_presenter.hpp"
 
+#include "../../src/app/runtime_diagnostics.cpp"
 #include "../../src/core/use_cases.cpp"
 #include "../../src/ui/status_screen_presenter.cpp"
 
@@ -268,6 +270,9 @@ void testStatusScreenPresenterBuildsStateLines() {
   };
   status.pendingQueueSize = 3;
   status.connectivity = app::ConnectivityState::Connected;
+  status.credentialsReady = true;
+  status.filesystemReady = true;
+  status.templateStoreReady = false;
   status.syncInFlight = true;
   status.lastErrorCode = std::optional<std::string>("DEVICE_DISABLED");
   status.faceModuleEnabled = false;
@@ -276,6 +281,7 @@ void testStatusScreenPresenterBuildsStateLines() {
 
   expect(view.title == "Hitomi Device", "view title should be stable");
   expect(view.credentialsLine.find("DEV-001") != std::string::npos, "credentials line should show device code");
+  expect(view.storageLine.find("SD unavailable") != std::string::npos, "storage line should show template store state");
   expect(view.wifiLine.find("Connected") != std::string::npos, "wifi line should show connectivity");
   expect(view.syncLine.find("Syncing") != std::string::npos, "sync line should show active sync");
   expect(view.taskLine.find("张三") != std::string::npos, "task line should show employee name");
@@ -283,6 +289,25 @@ void testStatusScreenPresenterBuildsStateLines() {
   expect(view.errorLine.find("DEVICE_DISABLED") != std::string::npos, "error line should show latest error");
   expect(view.faceLine.find("Disabled") != std::string::npos, "face line should show module state");
   expect(view.footer == "runtime-tag", "footer should use firmware tag");
+}
+
+void testRuntimeDiagnosticsExplainUnconfiguredState() {
+  app::RuntimeStatus status = {};
+  status.credentialsReady = true;
+  status.filesystemReady = true;
+  status.templateStoreReady = false;
+  status.pendingQueueSize = 0;
+  status.failureLogCount = 0;
+  status.faceModuleEnabled = false;
+
+  app::RuntimeDiagnostics diagnostics = app::buildRuntimeDiagnostics(status);
+
+  expect(diagnostics.credentialsLine == "Credentials: missing", "diagnostics should report missing credentials");
+  expect(diagnostics.snapshotLine == "Local cache: empty", "diagnostics should report empty cache");
+  expect(diagnostics.queueLine == "Pending uploads: 0, failure logs: 0", "diagnostics should report queue and log counts");
+  expect(
+      diagnostics.faceLine == "Recognition: disabled (template store unavailable)",
+      "diagnostics should explain why recognition is disabled");
 }
 
 }  // namespace
@@ -295,6 +320,7 @@ int main() {
       {"apply upload results", testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected},
       {"append failure log", testAppendFailureLogPrunesToMostRecent200},
       {"status screen presenter", testStatusScreenPresenterBuildsStateLines},
+      {"runtime diagnostics", testRuntimeDiagnosticsExplainUnconfiguredState},
   };
 
   for (const auto& test : tests) {
