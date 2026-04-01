@@ -14,6 +14,10 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Oxlint** - Oxlint + Oxfmt (linting & formatting)
 - **Turborepo** - Optimized monorepo build system
 
+## Hardware Target
+
+The device-side runtime in this project targets the [SZPI ESP32-S3 development board](https://wiki.lckfb.com/zh-hans/szpi-esp32s3/).
+
 ## Getting Started
 
 First, install the dependencies:
@@ -58,6 +62,7 @@ Open [http://localhost:3001](http://localhost:3001) in your browser to see the f
 hitomi/
 ├── apps/
 │   └── web/         # Fullstack application (Nuxt)
+├── hardware/        # PlatformIO firmware project for the SZPI ESP32-S3 board
 ├── packages/
 │   ├── api/         # API layer / business logic
 │   ├── auth/        # Authentication configuration & logic

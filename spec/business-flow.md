@@ -10,7 +10,7 @@
 - 后端接口：oRPC + Nitro API
 - 数据库：Drizzle + SQLite
 - 管理员登录：Better Auth
-- 硬件设备：ESP32
+- 硬件设备：[`SZPI ESP32-S3` 开发板](https://wiki.lckfb.com/zh-hans/szpi-esp32s3/)（基于 `ESP32-S3`）
 
 系统架构前提：
 
