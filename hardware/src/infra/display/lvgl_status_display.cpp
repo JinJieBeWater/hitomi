@@ -20,7 +20,7 @@ lv_obj_t* createStatusLabel(lv_obj_t* parent, lv_coord_t y, lv_text_align_t alig
   lv_obj_t* label = lv_label_create(parent);
   lv_obj_set_width(label, kScreenWidth);
   lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(label, lv_color_hex(0xF4F1DE), 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
   lv_obj_set_style_text_align(label, align, 0);
   lv_obj_align(label, LV_ALIGN_TOP_MID, 0, y);
   return label;
@@ -85,7 +85,6 @@ void LvglStatusDisplay::createUi() {
   titleLabel_ = createStatusLabel(screen, kTitleY, LV_TEXT_ALIGN_CENTER);
 
   subtitleLabel_ = createStatusLabel(screen, kSubtitleY, LV_TEXT_ALIGN_CENTER);
-  lv_obj_set_style_text_color(subtitleLabel_, lv_color_hex(0xBFD7EA), 0);
 
   credentialsLabel_ = createStatusLabel(screen, statusRowY(0), LV_TEXT_ALIGN_LEFT);
   storageLabel_ = createStatusLabel(screen, statusRowY(1), LV_TEXT_ALIGN_LEFT);
@@ -94,11 +93,11 @@ void LvglStatusDisplay::createUi() {
   taskLabel_ = createStatusLabel(screen, statusRowY(4), LV_TEXT_ALIGN_LEFT);
   queueLabel_ = createStatusLabel(screen, statusRowY(5), LV_TEXT_ALIGN_LEFT);
   errorLabel_ = createStatusLabel(screen, statusRowY(6), LV_TEXT_ALIGN_LEFT);
-  lv_obj_set_style_text_color(errorLabel_, lv_color_hex(0xE76F51), 0);
   faceLabel_ = createStatusLabel(screen, statusRowY(7), LV_TEXT_ALIGN_LEFT);
 
   footerLabel_ = lv_label_create(screen);
-  lv_obj_set_style_text_color(footerLabel_, lv_color_hex(0xE9C46A), 0);
+  lv_obj_set_style_text_font(footerLabel_, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(footerLabel_, lv_color_hex(0xFFFFFF), 0);
   lv_obj_align(footerLabel_, LV_ALIGN_BOTTOM_MID, 0, kFooterOffsetY);
 }
 
