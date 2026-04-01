@@ -34,9 +34,6 @@ class SzpiLvglDisplay {
   bool setBacklightPercent(int percent);
   void flush(const lv_area_t* area, uint8_t* pxMap);
 
-  static constexpr i2c_port_t kI2cPort = I2C_NUM_0;
-  static constexpr gpio_num_t kI2cSdaPin = GPIO_NUM_1;
-  static constexpr gpio_num_t kI2cSclPin = GPIO_NUM_2;
   static constexpr TickType_t kI2cTimeout = pdMS_TO_TICKS(1000);
 
   static constexpr uint8_t kPca9557Address = 0x19;
@@ -45,15 +42,6 @@ class SzpiLvglDisplay {
   static constexpr uint8_t kPca9557DefaultOutput = 0x05;
   static constexpr uint8_t kPca9557DefaultConfig = 0xF8;
   static constexpr uint8_t kLcdCsBit = 1u << 0;
-
-  static constexpr spi_host_device_t kLcdSpiHost = SPI3_HOST;
-  static constexpr gpio_num_t kLcdDcPin = GPIO_NUM_39;
-  static constexpr gpio_num_t kLcdMosiPin = GPIO_NUM_40;
-  static constexpr gpio_num_t kLcdSclkPin = GPIO_NUM_41;
-  static constexpr gpio_num_t kLcdBacklightPin = GPIO_NUM_42;
-  static constexpr uint32_t kPixelClockHz = 80 * 1000 * 1000;
-  static constexpr ledc_channel_t kBacklightChannel = LEDC_CHANNEL_0;
-  static constexpr ledc_timer_t kBacklightTimer = LEDC_TIMER_1;
 
   esp_lcd_panel_io_handle_t _io = nullptr;
   esp_lcd_panel_handle_t _panel = nullptr;

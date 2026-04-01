@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
-#include <szpi_lvgl_display.hpp>
+#include "board/pins.hpp"
+#include "infra/display/szpi_lvgl_display.hpp"
 
 namespace {
 
@@ -61,13 +62,13 @@ bool SzpiLvglDisplay::setBacklightPercent(int percent) {
   }
 
   uint32_t duty = (1023U * static_cast<uint32_t>(percent)) / 100U;
-  esp_err_t err = ledc_set_duty(LEDC_LOW_SPEED_MODE, kBacklightChannel, duty);
+  esp_err_t err = ledc_set_duty(LEDC_LOW_SPEED_MODE, board::kBacklightChannel, duty);
   if (err != ESP_OK) {
     Serial.printf("[SZPI.ESP_LCD] ledc_set_duty failed: %s\n", esp_err_to_name(err));
     return false;
   }
 
-  err = ledc_update_duty(LEDC_LOW_SPEED_MODE, kBacklightChannel);
+  err = ledc_update_duty(LEDC_LOW_SPEED_MODE, board::kBacklightChannel);
   if (err != ESP_OK) {
     Serial.printf("[SZPI.ESP_LCD] ledc_update_duty failed: %s\n", esp_err_to_name(err));
     return false;
@@ -102,20 +103,20 @@ bool SzpiLvglDisplay::onColorTransferDone(
 bool SzpiLvglDisplay::initIoExpander() {
   i2c_config_t cfg = {};
   cfg.mode = I2C_MODE_MASTER;
-  cfg.sda_io_num = kI2cSdaPin;
-  cfg.scl_io_num = kI2cSclPin;
+  cfg.sda_io_num = board::kI2cSdaPin;
+  cfg.scl_io_num = board::kI2cSclPin;
   cfg.sda_pullup_en = GPIO_PULLUP_ENABLE;
   cfg.scl_pullup_en = GPIO_PULLUP_ENABLE;
   cfg.master.clk_speed = 100000;
 
-  if (!logEspError(i2c_param_config(kI2cPort, &cfg), "i2c_param_config")) {
+  if (!logEspError(i2c_param_config(board::kI2cPort, &cfg), "i2c_param_config")) {
     return false;
   }
 
-  esp_err_t err = i2c_driver_install(kI2cPort, cfg.mode, 0, 0, 0);
+  esp_err_t err = i2c_driver_install(board::kI2cPort, cfg.mode, 0, 0, 0);
   if (err == ESP_ERR_INVALID_STATE) {
-    i2c_driver_delete(kI2cPort);
-    err = i2c_driver_install(kI2cPort, cfg.mode, 0, 0, 0);
+    i2c_driver_delete(board::kI2cPort);
+    err = i2c_driver_install(board::kI2cPort, cfg.mode, 0, 0, 0);
   }
 
   if (!logEspError(err, "i2c_driver_install")) {
@@ -135,11 +136,11 @@ bool SzpiLvglDisplay::initIoExpander() {
 
 bool SzpiLvglDisplay::initBacklightPwm() {
   ledc_channel_config_t channelCfg = {};
-  channelCfg.gpio_num = kLcdBacklightPin;
+  channelCfg.gpio_num = board::kLcdBacklightPin;
   channelCfg.speed_mode = LEDC_LOW_SPEED_MODE;
-  channelCfg.channel = kBacklightChannel;
+  channelCfg.channel = board::kBacklightChannel;
   channelCfg.intr_type = LEDC_INTR_DISABLE;
-  channelCfg.timer_sel = kBacklightTimer;
+  channelCfg.timer_sel = board::kBacklightTimer;
   channelCfg.duty = 0;
   channelCfg.hpoint = 0;
   channelCfg.flags.output_invert = true;
@@ -147,7 +148,7 @@ bool SzpiLvglDisplay::initBacklightPwm() {
   ledc_timer_config_t timerCfg = {};
   timerCfg.speed_mode = LEDC_LOW_SPEED_MODE;
   timerCfg.duty_resolution = LEDC_TIMER_10_BIT;
-  timerCfg.timer_num = kBacklightTimer;
+  timerCfg.timer_num = board::kBacklightTimer;
   timerCfg.freq_hz = 5000;
   timerCfg.clk_cfg = LEDC_AUTO_CLK;
 
@@ -164,23 +165,23 @@ bool SzpiLvglDisplay::initBacklightPwm() {
 
 bool SzpiLvglDisplay::initPanel() {
   spi_bus_config_t busCfg = {};
-  busCfg.sclk_io_num = kLcdSclkPin;
-  busCfg.mosi_io_num = kLcdMosiPin;
+  busCfg.sclk_io_num = board::kLcdSclkPin;
+  busCfg.mosi_io_num = board::kLcdMosiPin;
   busCfg.miso_io_num = GPIO_NUM_NC;
   busCfg.quadwp_io_num = GPIO_NUM_NC;
   busCfg.quadhd_io_num = GPIO_NUM_NC;
   busCfg.max_transfer_sz = kHorizontalResolution * kBufferRows * sizeof(uint16_t);
 
-  esp_err_t err = spi_bus_initialize(kLcdSpiHost, &busCfg, SPI_DMA_CH_AUTO);
+  esp_err_t err = spi_bus_initialize(board::kLcdSpiHost, &busCfg, SPI_DMA_CH_AUTO);
   if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
     logEspError(err, "spi_bus_initialize");
     return false;
   }
 
   esp_lcd_panel_io_spi_config_t ioCfg = {};
-  ioCfg.dc_gpio_num = kLcdDcPin;
+  ioCfg.dc_gpio_num = board::kLcdDcPin;
   ioCfg.cs_gpio_num = GPIO_NUM_NC;
-  ioCfg.pclk_hz = kPixelClockHz;
+  ioCfg.pclk_hz = board::kLcdPixelClockHz;
   ioCfg.lcd_cmd_bits = 8;
   ioCfg.lcd_param_bits = 8;
   ioCfg.spi_mode = 2;
@@ -189,7 +190,7 @@ bool SzpiLvglDisplay::initPanel() {
   ioCfg.user_ctx = this;
 
   err = esp_lcd_new_panel_io_spi(
-      reinterpret_cast<esp_lcd_spi_bus_handle_t>(kLcdSpiHost), &ioCfg, &_io);
+      reinterpret_cast<esp_lcd_spi_bus_handle_t>(board::kLcdSpiHost), &ioCfg, &_io);
   if (!logEspError(err, "esp_lcd_new_panel_io_spi")) {
     return false;
   }
@@ -266,7 +267,7 @@ bool SzpiLvglDisplay::initLvglDisplay() {
 bool SzpiLvglDisplay::writePca9557Register(uint8_t reg, uint8_t value) {
   uint8_t payload[] = {reg, value};
   esp_err_t err = i2c_master_write_to_device(
-      kI2cPort, kPca9557Address, payload, sizeof(payload), kI2cTimeout);
+      board::kI2cPort, kPca9557Address, payload, sizeof(payload), kI2cTimeout);
   if (err != ESP_OK) {
     Serial.printf("[SZPI.ESP_LCD] PCA9557 write reg=0x%02X value=0x%02X failed: %s\n", reg,
                   value, esp_err_to_name(err));
