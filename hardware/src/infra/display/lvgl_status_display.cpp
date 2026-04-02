@@ -5,25 +5,51 @@
 namespace infra {
 namespace {
 
-constexpr lv_coord_t kScreenWidth = 280;
+constexpr lv_coord_t kScreenWidth = 296;
+constexpr lv_coord_t kContentWidth = 296;
 constexpr lv_coord_t kTitleY = 12;
-constexpr lv_coord_t kSubtitleY = 36;
-constexpr lv_coord_t kStatusStartY = 64;
-constexpr lv_coord_t kStatusRowGap = 18;
-constexpr lv_coord_t kFooterOffsetY = -8;
+constexpr lv_coord_t kSubtitleY = 38;
+constexpr lv_coord_t kContentY = 68;
+constexpr lv_coord_t kFooterOffsetY = -10;
+constexpr uint32_t kTextColorHex = 0xFFFFFF;
+constexpr uint32_t kBackgroundColorHex = 0x1F8A3B;
 
-lv_coord_t statusRowY(uint8_t row) {
-  return static_cast<lv_coord_t>(kStatusStartY + row * kStatusRowGap);
+void applyLabelStyle(lv_obj_t* label, lv_text_align_t align) {
+  lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(kTextColorHex), 0);
+  lv_obj_set_style_text_align(label, align, 0);
 }
 
 lv_obj_t* createStatusLabel(lv_obj_t* parent, lv_coord_t y, lv_text_align_t align) {
   lv_obj_t* label = lv_label_create(parent);
   lv_obj_set_width(label, kScreenWidth);
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_set_style_text_align(label, align, 0);
+  applyLabelStyle(label, align);
   lv_obj_align(label, LV_ALIGN_TOP_MID, 0, y);
   return label;
+}
+
+std::string buildContentText(const ui::AppViewModel& viewModel) {
+  std::string content;
+  content.reserve(
+      viewModel.credentialsLine.size() + viewModel.storageLine.size() + viewModel.wifiLine.size() +
+      viewModel.syncLine.size() + viewModel.taskLine.size() + viewModel.queueLine.size() +
+      viewModel.errorLine.size() + viewModel.faceLine.size() + 16);
+  content.append(viewModel.credentialsLine)
+      .append("\n")
+      .append(viewModel.storageLine)
+      .append("\n")
+      .append(viewModel.wifiLine)
+      .append("\n")
+      .append(viewModel.syncLine)
+      .append("\n")
+      .append(viewModel.taskLine)
+      .append("\n")
+      .append(viewModel.queueLine)
+      .append("\n")
+      .append(viewModel.errorLine)
+      .append("\n")
+      .append(viewModel.faceLine);
+  return content;
 }
 
 }  // namespace
@@ -55,14 +81,8 @@ void LvglStatusDisplay::render(const ui::AppViewModel& viewModel) {
 
   lv_label_set_text(titleLabel_, viewModel.title.c_str());
   lv_label_set_text(subtitleLabel_, viewModel.subtitle.c_str());
-  lv_label_set_text(credentialsLabel_, viewModel.credentialsLine.c_str());
-  lv_label_set_text(storageLabel_, viewModel.storageLine.c_str());
-  lv_label_set_text(wifiLabel_, viewModel.wifiLine.c_str());
-  lv_label_set_text(syncLabel_, viewModel.syncLine.c_str());
-  lv_label_set_text(taskLabel_, viewModel.taskLine.c_str());
-  lv_label_set_text(queueLabel_, viewModel.queueLine.c_str());
-  lv_label_set_text(errorLabel_, viewModel.errorLine.c_str());
-  lv_label_set_text(faceLabel_, viewModel.faceLine.c_str());
+  const std::string content = buildContentText(viewModel);
+  lv_label_set_text(contentLabel_, content.c_str());
   lv_label_set_text(footerLabel_, viewModel.footer.c_str());
   lv_timer_handler();
 }
@@ -79,26 +99,22 @@ void LvglStatusDisplay::tick(uint32_t nowMs) {
 
 void LvglStatusDisplay::createUi() {
   lv_obj_t* screen = lv_screen_active();
-  lv_obj_set_style_bg_color(screen, lv_color_hex(0x102542), 0);
+  lv_obj_set_style_bg_color(screen, lv_color_hex(kBackgroundColorHex), 0);
   lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(screen, 0, 0);
 
   titleLabel_ = createStatusLabel(screen, kTitleY, LV_TEXT_ALIGN_CENTER);
-
   subtitleLabel_ = createStatusLabel(screen, kSubtitleY, LV_TEXT_ALIGN_CENTER);
 
-  credentialsLabel_ = createStatusLabel(screen, statusRowY(0), LV_TEXT_ALIGN_LEFT);
-  storageLabel_ = createStatusLabel(screen, statusRowY(1), LV_TEXT_ALIGN_LEFT);
-  wifiLabel_ = createStatusLabel(screen, statusRowY(2), LV_TEXT_ALIGN_LEFT);
-  syncLabel_ = createStatusLabel(screen, statusRowY(3), LV_TEXT_ALIGN_LEFT);
-  taskLabel_ = createStatusLabel(screen, statusRowY(4), LV_TEXT_ALIGN_LEFT);
-  queueLabel_ = createStatusLabel(screen, statusRowY(5), LV_TEXT_ALIGN_LEFT);
-  errorLabel_ = createStatusLabel(screen, statusRowY(6), LV_TEXT_ALIGN_LEFT);
-  faceLabel_ = createStatusLabel(screen, statusRowY(7), LV_TEXT_ALIGN_LEFT);
+  contentLabel_ = lv_label_create(screen);
+  lv_obj_set_width(contentLabel_, kContentWidth);
+  lv_label_set_long_mode(contentLabel_, LV_LABEL_LONG_WRAP);
+  applyLabelStyle(contentLabel_, LV_TEXT_ALIGN_LEFT);
+  lv_obj_align(contentLabel_, LV_ALIGN_TOP_LEFT, 12, kContentY);
 
   footerLabel_ = lv_label_create(screen);
-  lv_obj_set_style_text_font(footerLabel_, &lv_font_montserrat_14, 0);
-  lv_obj_set_style_text_color(footerLabel_, lv_color_hex(0xFFFFFF), 0);
-  lv_obj_align(footerLabel_, LV_ALIGN_BOTTOM_MID, 0, kFooterOffsetY);
+  applyLabelStyle(footerLabel_, LV_TEXT_ALIGN_LEFT);
+  lv_obj_align(footerLabel_, LV_ALIGN_BOTTOM_LEFT, 12, kFooterOffsetY);
 }
 
 const char* LvglStatusDisplay::lvglLogLevelName(lv_log_level_t level) {

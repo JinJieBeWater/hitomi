@@ -252,7 +252,7 @@ bool SzpiLvglDisplay::initLvglDisplay() {
   }
 
   lv_display_set_driver_data(_display, this);
-  lv_display_set_color_format(_display, LV_COLOR_FORMAT_RGB565);
+  lv_display_set_color_format(_display, LV_COLOR_FORMAT_RGB565_SWAPPED);
   lv_display_set_flush_cb(_display, flushCallback);
   lv_display_set_buffers(
       _display,

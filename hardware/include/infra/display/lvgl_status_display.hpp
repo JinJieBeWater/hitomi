@@ -26,14 +26,7 @@ class LvglStatusDisplay final : public DisplayPort {
   lv_display_t* display_ = nullptr;
   lv_obj_t* titleLabel_ = nullptr;
   lv_obj_t* subtitleLabel_ = nullptr;
-  lv_obj_t* credentialsLabel_ = nullptr;
-  lv_obj_t* storageLabel_ = nullptr;
-  lv_obj_t* wifiLabel_ = nullptr;
-  lv_obj_t* syncLabel_ = nullptr;
-  lv_obj_t* taskLabel_ = nullptr;
-  lv_obj_t* queueLabel_ = nullptr;
-  lv_obj_t* errorLabel_ = nullptr;
-  lv_obj_t* faceLabel_ = nullptr;
+  lv_obj_t* contentLabel_ = nullptr;
   lv_obj_t* footerLabel_ = nullptr;
   uint32_t lastLvglTickMs_ = 0;
 };
