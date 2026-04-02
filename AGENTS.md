@@ -12,6 +12,10 @@ This repository uses `AGENTS.md` as the cross-agent entrypoint for project-speci
 
 - For any non-trivial change, align with the relevant `spec/` document before editing code.
 - Use Chinese for code review findings, review summaries, and review discussions.
+- Use a GitHub-friendly commit format for git commits.
+- Prefer an English subject with an existing repo-style prefix such as `feat:`, `fix:`, `docs:`, `chore:`, `hardware:`, or `feat(hardware):`.
+- Keep the commit subject concise and searchable. Put extra context in the commit body when needed, and that body may be written in Chinese.
+- Do not use a full-Chinese commit subject unless the repository history has already established that style for the same area.
 - Treat `web/api/db` and `hardware` as two different development tracks.
 - `hardware/` is a standalone PlatformIO project and is not part of the root `bun` / `turbo` task graph.
 - Prefer the smallest verification command set that matches the scope of the change.
