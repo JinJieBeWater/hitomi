@@ -24,17 +24,19 @@ class AppRuntime {
       face::EnrollmentServicePort& enrollmentService,
       face::RecognitionServicePort& recognitionService);
 
-  void setup();
+ void setup();
   void tick(uint32_t nowMs);
 
  private:
-  void initStorage();
+  void initLocalStore();
+  void initTemplateStore();
   void waitForSerial();
   void printRuntimeCheck();
   void loadPersistedState();
   void initWifi();
   void pollBootButton(uint32_t nowMs);
   void probeConnectivity(uint32_t nowMs);
+  void probeTemplateStore(uint32_t nowMs);
   void resetNetworkTaskSchedule();
   bool shouldSync(uint32_t nowMs) const;
   bool shouldUpload(uint32_t nowMs) const;
@@ -43,6 +45,9 @@ class AppRuntime {
   void persistSnapshots();
   void persistPendingAttendanceRecords();
   void persistFailureLogs();
+  void persistStorageAux();
+  void applyTemplateStoreStatus(const infra::TemplateStoreStatus& status, bool replaceSummary);
+  void runTemplateStoreSelfTest();
   void markUploadAttemptFailure(
       const std::vector<core::PendingAttendanceRecord>& batch,
       uint64_t occurredAt,
@@ -65,6 +70,7 @@ class AppRuntime {
   core::SnapshotBundle snapshots_;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords_;
   std::vector<core::FailureLogEntry> failureLogs_;
+  infra::StorageAuxState storageAux_;
   ConnectivityState connectivity_ = ConnectivityState::Unknown;
   bool credentialsReady_ = false;
   bool filesystemReady_ = false;
@@ -77,6 +83,7 @@ class AppRuntime {
   bool lastButtonPressed_ = false;
   uint32_t lastButtonPollMs_ = 0;
   uint32_t lastNetworkProbeMs_ = 0;
+  uint32_t lastTemplateStoreProbeMs_ = 0;
   uint32_t lastSyncAttemptMs_ = 0;
   uint32_t lastUploadAttemptMs_ = 0;
   std::optional<std::string> lastErrorCode_;

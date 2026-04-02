@@ -48,11 +48,11 @@ void AppRuntime::setup() {
   Serial.begin(board::kSerialBaudRate);
   waitForSerial();
 
-  initStorage();
+  initLocalStore();
   loadPersistedState();
+  initTemplateStore();
+  runTemplateStoreSelfTest();
   initWifi();
-
-  faceModuleEnabled_ = templateStoreReady_ && facePortsReady(camera_, enrollmentService_, recognitionService_);
 
   displayReady_ = display_.init();
   if (!displayReady_) {
@@ -62,6 +62,7 @@ void AppRuntime::setup() {
   const uint32_t nowMs = millis();
   lastButtonPollMs_ = nowMs;
   lastNetworkProbeMs_ = nowMs;
+  lastTemplateStoreProbeMs_ = nowMs;
   lastButtonPressed_ = digitalRead(board::kBootKeyPin) == LOW;
 
   probeConnectivity(nowMs);
@@ -69,11 +70,10 @@ void AppRuntime::setup() {
   updateView();
 }
 
-void AppRuntime::initStorage() {
+void AppRuntime::initLocalStore() {
   const infra::LocalStoreInitStatus initStatus = localStore_.begin();
   credentialsReady_ = initStatus.credentialsReady;
   filesystemReady_ = initStatus.filesystemReady;
-  templateStoreReady_ = templateStore_.begin();
 
   if (!credentialsReady_) {
     Serial.println("[APP] credentials store unavailable");
@@ -81,6 +81,13 @@ void AppRuntime::initStorage() {
   if (!filesystemReady_) {
     Serial.println("[APP] LittleFS unavailable");
   }
+}
+
+void AppRuntime::initTemplateStore() {
+  const infra::TemplateStoreInitStatus initStatus = templateStore_.begin();
+  applyTemplateStoreStatus(initStatus, initStatus.ready);
+  persistStorageAux();
+
   if (!templateStoreReady_) {
     Serial.println("[APP] template store unavailable");
   }
@@ -93,6 +100,8 @@ void AppRuntime::tick(uint32_t nowMs) {
   if (nowMs - lastNetworkProbeMs_ >= board::kNetworkProbeIntervalMs) {
     probeConnectivity(nowMs);
   }
+
+  probeTemplateStore(nowMs);
 
   if (shouldSync(nowMs)) {
     performSync(nowMs);
@@ -138,6 +147,7 @@ void AppRuntime::printRuntimeCheck() {
   Serial.printf("Device credentials configured: %s\n", credentials_.configured() ? "yes" : "no");
   Serial.println(diagnostics.credentialsLine.c_str());
   Serial.println(diagnostics.snapshotLine.c_str());
+  Serial.println(diagnostics.storageLine.c_str());
   Serial.println(diagnostics.queueLine.c_str());
   Serial.println(diagnostics.faceLine.c_str());
 
@@ -154,6 +164,7 @@ void AppRuntime::loadPersistedState() {
   snapshots_ = state.snapshots;
   pendingAttendanceRecords_ = state.pendingAttendanceRecords;
   failureLogs_ = state.failureLogs;
+  storageAux_ = state.storageAux;
 }
 
 void AppRuntime::initWifi() {
@@ -194,6 +205,21 @@ void AppRuntime::probeConnectivity(uint32_t nowMs) {
       resetNetworkTaskSchedule();
     }
   }
+}
+
+void AppRuntime::probeTemplateStore(uint32_t nowMs) {
+  if (templateStoreReady_) {
+    return;
+  }
+  if (nowMs - lastTemplateStoreProbeMs_ < board::kTemplateStoreProbeIntervalMs) {
+    return;
+  }
+
+  lastTemplateStoreProbeMs_ = nowMs;
+  const infra::TemplateStoreInitStatus initStatus = templateStore_.begin();
+  applyTemplateStoreStatus(initStatus, initStatus.ready);
+  persistStorageAux();
+  renderDirty_ = true;
 }
 
 void AppRuntime::resetNetworkTaskSchedule() {
@@ -340,6 +366,56 @@ void AppRuntime::persistFailureLogs() {
   localStore_.saveFailureLogs(failureLogs_);
 }
 
+void AppRuntime::persistStorageAux() {
+  if (!filesystemReady_) {
+    return;
+  }
+  localStore_.saveStorageAux(storageAux_);
+}
+
+void AppRuntime::applyTemplateStoreStatus(const infra::TemplateStoreStatus& status, bool replaceSummary) {
+  templateStoreReady_ = status.ready;
+  storageAux_.templateStoreHealth = status.health;
+  if (replaceSummary) {
+    storageAux_.templateLibrarySummary = status.summary;
+  }
+  faceModuleEnabled_ = templateStoreReady_ && facePortsReady(camera_, enrollmentService_, recognitionService_);
+}
+
+void AppRuntime::runTemplateStoreSelfTest() {
+#ifdef HITOMI_SD_SELF_TEST
+  if (!templateStoreReady_) {
+    return;
+  }
+
+  const std::vector<uint8_t> smokeBytes = {0x48, 0x49, 0x54, 0x4F, 0x4D, 0x49};
+  if (!templateStore_.upsertTemplate("__smoke__", smokeBytes, millis())) {
+    Serial.println("[APP] SD self-test write failed");
+    applyTemplateStoreStatus(templateStore_.status(), false);
+    persistStorageAux();
+    return;
+  }
+
+  auto smokeBlob = templateStore_.readTemplate("__smoke__");
+  if (!smokeBlob.has_value() || smokeBlob->bytes != smokeBytes) {
+    Serial.println("[APP] SD self-test read failed");
+    applyTemplateStoreStatus(templateStore_.status(), false);
+    persistStorageAux();
+    return;
+  }
+
+  if (!templateStore_.removeTemplate("__smoke__")) {
+    Serial.println("[APP] SD self-test delete failed");
+    applyTemplateStoreStatus(templateStore_.status(), false);
+    persistStorageAux();
+    return;
+  }
+
+  applyTemplateStoreStatus(templateStore_.status(), true);
+  persistStorageAux();
+#endif
+}
+
 void AppRuntime::appendApiFailureLog(
     const char* api,
     uint64_t occurredAt,
@@ -371,6 +447,10 @@ RuntimeStatus AppRuntime::buildRuntimeStatus() const {
   status.credentialsReady = credentialsReady_;
   status.filesystemReady = filesystemReady_;
   status.templateStoreReady = templateStoreReady_;
+  status.templateStoreStatusCode = storageAux_.templateStoreHealth.statusCode;
+  status.templateCount = storageAux_.templateLibrarySummary.templateCount;
+  status.sdTotalBytes = storageAux_.templateStoreHealth.totalBytes;
+  status.sdUsedBytes = storageAux_.templateStoreHealth.usedBytes;
   status.wifiConfigured = board::wifiConfigured();
   status.syncInFlight = syncInFlight_;
   status.uploadInFlight = uploadInFlight_;

@@ -2,8 +2,26 @@
 
 #include <sstream>
 
+#include "infra/template_store_port.hpp"
+
 namespace app {
 namespace {
+
+std::string storageLine(const RuntimeStatus& status) {
+  if (!status.credentialsReady) {
+    return "Storage: credentials unavailable";
+  }
+  if (!status.filesystemReady) {
+    return "Storage: LittleFS unavailable";
+  }
+  if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
+    return "Storage: SD invalid manifest";
+  }
+  if (infra::templateStoreMounted(status.templateStoreStatusCode)) {
+    return "Storage: SD ready (templates=" + std::to_string(status.templateCount) + ")";
+  }
+  return "Storage: SD unavailable";
+}
 
 bool hasLocalCache(const RuntimeStatus& status) {
   const core::SnapshotBundle& snapshots = status.snapshots;
@@ -46,6 +64,9 @@ std::string queueLine(const RuntimeStatus& status) {
 }
 
 std::string faceLine(const RuntimeStatus& status) {
+  if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
+    return "Recognition: disabled (SD invalid manifest)";
+  }
   if (!status.templateStoreReady) {
     return "Recognition: disabled (template store unavailable)";
   }
@@ -61,6 +82,7 @@ RuntimeDiagnostics buildRuntimeDiagnostics(const RuntimeStatus& status) {
   return {
       .credentialsLine = credentialsLine(status),
       .snapshotLine = snapshotLine(status),
+      .storageLine = storageLine(status),
       .queueLine = queueLine(status),
       .faceLine = faceLine(status),
   };

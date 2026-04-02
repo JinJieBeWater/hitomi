@@ -6,14 +6,14 @@
 #include "infra/display/lvgl_status_display.hpp"
 #include "infra/network/http_device_api_client.hpp"
 #include "infra/storage/json_local_store.hpp"
-#include "infra/template_store_port.hpp"
+#include "infra/storage/sd_mmc_template_store.hpp"
 
 namespace {
 
 infra::LvglStatusDisplay gDisplay;
 infra::JsonLocalStore gLocalStore;
 infra::HttpDeviceApiClient gDeviceApiClient(board::apiBaseUrl());
-infra::NoopTemplateStorePort gTemplateStore;
+infra::SdMmcTemplateStore gTemplateStore;
 face::NoopCameraPort gCamera;
 face::NoopEnrollmentServicePort gEnrollmentService;
 face::NoopRecognitionServicePort gRecognitionService;

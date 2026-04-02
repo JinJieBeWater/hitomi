@@ -10,11 +10,16 @@
 #include "app/runtime_status.hpp"
 #include "app/runtime_diagnostics.hpp"
 #include "core/models.hpp"
+#include "infra/storage/storage_aux_codec.hpp"
+#include "infra/storage/template_manifest_codec.hpp"
+#include "infra/template_store_port.hpp"
 #include "core/use_cases.hpp"
 #include "ui/status_screen_presenter.hpp"
 
 #include "../../src/app/runtime_diagnostics.cpp"
 #include "../../src/core/use_cases.cpp"
+#include "../../src/infra/storage/storage_aux_codec.cpp"
+#include "../../src/infra/storage/template_manifest_codec.cpp"
 #include "../../src/ui/status_screen_presenter.cpp"
 
 namespace {
@@ -31,6 +36,11 @@ using core::FailureLogEntry;
 using core::PendingAttendanceRecord;
 using core::SnapshotBundle;
 using core::SyncPayload;
+using infra::StorageAuxState;
+using infra::TemplateLibrarySummary;
+using infra::TemplateManifest;
+using infra::TemplateManifestItem;
+using infra::TemplateStoreHealthSummary;
 using ui::AppViewModel;
 
 void expect(bool condition, const std::string& message) {
@@ -250,6 +260,81 @@ void testAppendFailureLogPrunesToMostRecent200() {
   expect(logs.back().id == "log-204", "newest entry should be retained");
 }
 
+void testTemplateManifestCodecRoundTrips() {
+  TemplateManifest manifest = {};
+  manifest.schemaVersion = 1;
+  manifest.updatedAt = 1'775'068'800'000ULL;
+  manifest.items = {
+      TemplateManifestItem{
+          .employeeId = "emp_001",
+          .updatedAt = 1'775'068'700'000ULL,
+          .sizeBytes = 512,
+      },
+      TemplateManifestItem{
+          .employeeId = "emp_002",
+          .updatedAt = 1'775'068'710'000ULL,
+          .sizeBytes = 768,
+      },
+  };
+
+  const std::string encoded = infra::encodeTemplateManifest(manifest);
+  auto decoded = infra::decodeTemplateManifest(encoded);
+
+  expect(decoded.has_value(), "manifest should decode after round trip");
+  expect(decoded->schemaVersion == 1, "schema version should survive round trip");
+  expect(decoded->updatedAt == manifest.updatedAt, "updatedAt should survive round trip");
+  expect(decoded->items.size() == 2, "manifest items should survive round trip");
+  expect(decoded->items.front().employeeId == "emp_001", "first manifest item should survive round trip");
+  expect(decoded->items.back().sizeBytes == 768, "item size should survive round trip");
+}
+
+void testTemplateManifestCodecRejectsInvalidJson() {
+  auto decoded = infra::decodeTemplateManifest("{\"schemaVersion\":1,\"items\":[}");
+
+  expect(!decoded.has_value(), "invalid manifest json should be rejected");
+}
+
+void testTemplateManifestSummaryTreatsMissingManifestAsEmptyLibrary() {
+  TemplateLibrarySummary summary = infra::summarizeTemplateManifest(std::nullopt, 1'775'068'800'000ULL);
+
+  expect(summary.templateCount == 0, "missing manifest should produce empty library summary");
+  expect(summary.manifestUpdatedAt == 0, "missing manifest should not report manifest updatedAt");
+  expect(summary.lastLoadedAt == 1'775'068'800'000ULL, "summary should capture load timestamp");
+}
+
+void testTemplatePathUsesStableEmployeeMapping() {
+  expect(
+      infra::templatePathForEmployee("emp_001") == "/templates/emp_001.bin",
+      "template path should be derived from employee id");
+}
+
+void testStorageAuxCodecRoundTrips() {
+  StorageAuxState aux = {};
+  aux.templateLibrarySummary = TemplateLibrarySummary{
+      .templateCount = 3,
+      .manifestUpdatedAt = 1'775'068'800'000ULL,
+      .lastLoadedAt = 1'775'068'900'000ULL,
+  };
+  aux.templateStoreHealth = TemplateStoreHealthSummary{
+      .statusCode = infra::kTemplateStoreMountedReady,
+      .checkedAt = 1'775'068'950'000ULL,
+      .detail = "ok",
+      .cardSizeBytes = 4ULL * 1024 * 1024 * 1024,
+      .totalBytes = 3ULL * 1024 * 1024 * 1024,
+      .usedBytes = 64ULL * 1024,
+  };
+
+  const std::string encoded = infra::encodeStorageAuxState(aux);
+  auto decoded = infra::decodeStorageAuxState(encoded);
+
+  expect(decoded.has_value(), "storage aux should decode after round trip");
+  expect(decoded->templateLibrarySummary.templateCount == 3, "template count should survive round trip");
+  expect(
+      decoded->templateStoreHealth.statusCode == infra::kTemplateStoreMountedReady,
+      "template store status should survive round trip");
+  expect(decoded->templateStoreHealth.usedBytes == 64ULL * 1024, "used bytes should survive round trip");
+}
+
 void testStatusScreenPresenterBuildsStateLines() {
   app::RuntimeStatus status = {};
   status.firmwareTag = "runtime-tag";
@@ -272,7 +357,11 @@ void testStatusScreenPresenterBuildsStateLines() {
   status.connectivity = app::ConnectivityState::Connected;
   status.credentialsReady = true;
   status.filesystemReady = true;
-  status.templateStoreReady = false;
+  status.templateStoreReady = true;
+  status.templateStoreStatusCode = infra::kTemplateStoreMountedReady;
+  status.templateCount = 2;
+  status.sdTotalBytes = 1024;
+  status.sdUsedBytes = 256;
   status.syncInFlight = true;
   status.lastErrorCode = std::optional<std::string>("DEVICE_DISABLED");
   status.faceModuleEnabled = false;
@@ -281,7 +370,7 @@ void testStatusScreenPresenterBuildsStateLines() {
 
   expect(view.title == "Hitomi Device", "view title should be stable");
   expect(view.credentialsLine.find("DEV-001") != std::string::npos, "credentials line should show device code");
-  expect(view.storageLine.find("SD unavailable") != std::string::npos, "storage line should show template store state");
+  expect(view.storageLine.find("templates=2") != std::string::npos, "storage line should show template count");
   expect(view.wifiLine.find("Connected") != std::string::npos, "wifi line should show connectivity");
   expect(view.syncLine.find("Syncing") != std::string::npos, "sync line should show active sync");
   expect(view.taskLine.find("张三") != std::string::npos, "task line should show employee name");
@@ -291,11 +380,24 @@ void testStatusScreenPresenterBuildsStateLines() {
   expect(view.footer == "runtime-tag", "footer should use firmware tag");
 }
 
+void testStatusScreenPresenterShowsInvalidManifestState() {
+  app::RuntimeStatus status = {};
+  status.credentialsReady = true;
+  status.filesystemReady = true;
+  status.templateStoreReady = false;
+  status.templateStoreStatusCode = infra::kTemplateStoreManifestInvalid;
+
+  AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.storageLine.find("invalid manifest") != std::string::npos, "storage line should explain manifest failure");
+}
+
 void testRuntimeDiagnosticsExplainUnconfiguredState() {
   app::RuntimeStatus status = {};
   status.credentialsReady = true;
   status.filesystemReady = true;
   status.templateStoreReady = false;
+  status.templateStoreStatusCode = infra::kTemplateStoreCardMissing;
   status.pendingQueueSize = 0;
   status.failureLogCount = 0;
   status.faceModuleEnabled = false;
@@ -304,10 +406,26 @@ void testRuntimeDiagnosticsExplainUnconfiguredState() {
 
   expect(diagnostics.credentialsLine == "Credentials: missing", "diagnostics should report missing credentials");
   expect(diagnostics.snapshotLine == "Local cache: empty", "diagnostics should report empty cache");
+  expect(diagnostics.storageLine == "Storage: SD unavailable", "diagnostics should report SD unavailable state");
   expect(diagnostics.queueLine == "Pending uploads: 0, failure logs: 0", "diagnostics should report queue and log counts");
   expect(
       diagnostics.faceLine == "Recognition: disabled (template store unavailable)",
       "diagnostics should explain why recognition is disabled");
+}
+
+void testRuntimeDiagnosticsExplainInvalidManifestState() {
+  app::RuntimeStatus status = {};
+  status.credentialsReady = true;
+  status.filesystemReady = true;
+  status.templateStoreReady = false;
+  status.templateStoreStatusCode = infra::kTemplateStoreManifestInvalid;
+
+  app::RuntimeDiagnostics diagnostics = app::buildRuntimeDiagnostics(status);
+
+  expect(diagnostics.storageLine == "Storage: SD invalid manifest",
+         "diagnostics should surface invalid manifest state");
+  expect(diagnostics.faceLine == "Recognition: disabled (SD invalid manifest)",
+         "diagnostics should explain invalid manifest state");
 }
 
 }  // namespace
@@ -319,8 +437,15 @@ int main() {
       {"enqueue attendance record", testEnqueueAttendanceRecordKeepsEarlierDuplicate},
       {"apply upload results", testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected},
       {"append failure log", testAppendFailureLogPrunesToMostRecent200},
+      {"template manifest codec", testTemplateManifestCodecRoundTrips},
+      {"template manifest invalid json", testTemplateManifestCodecRejectsInvalidJson},
+      {"template summary empty library", testTemplateManifestSummaryTreatsMissingManifestAsEmptyLibrary},
+      {"template path mapping", testTemplatePathUsesStableEmployeeMapping},
+      {"storage aux codec", testStorageAuxCodecRoundTrips},
       {"status screen presenter", testStatusScreenPresenterBuildsStateLines},
+      {"status screen invalid manifest", testStatusScreenPresenterShowsInvalidManifestState},
       {"runtime diagnostics", testRuntimeDiagnosticsExplainUnconfiguredState},
+      {"runtime diagnostics invalid manifest", testRuntimeDiagnosticsExplainInvalidManifestState},
   };
 
   for (const auto& test : tests) {

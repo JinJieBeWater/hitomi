@@ -1,12 +1,15 @@
 #include "infra/storage/json_local_store.hpp"
 
 #include <cstdio>
+#include <optional>
+#include <string>
 #include <sys/stat.h>
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
 
 #include "core/use_cases.hpp"
+#include "infra/storage/storage_aux_codec.hpp"
 
 namespace infra {
 namespace {
@@ -15,6 +18,7 @@ constexpr char kLittleFsMountPath[] = "/littlefs";
 constexpr char kSnapshotsPath[] = "/snapshots.json";
 constexpr char kAttendanceQueuePath[] = "/attendance_queue.json";
 constexpr char kFailureLogsPath[] = "/failure_logs.json";
+constexpr char kStorageAuxPath[] = "/storage_aux.json";
 
 std::string loadPreferenceString(Preferences& preferences, const char* key) {
   if (!preferences.isKey(key)) {
@@ -59,6 +63,38 @@ bool writeJsonFile(const char* path, const DynamicJsonDocument& doc) {
   const std::size_t written = serializeJson(doc, file);
   file.close();
   return written > 0;
+}
+
+std::optional<std::string> readTextFile(const char* path) {
+  if (!littleFsFileExists(path)) {
+    return std::nullopt;
+  }
+
+  File file = LittleFS.open(path, "r");
+  if (!file) {
+    return std::nullopt;
+  }
+
+  std::string content;
+  content.reserve(file.size());
+  while (file.available()) {
+    content.push_back(static_cast<char>(file.read()));
+  }
+
+  file.close();
+  return content;
+}
+
+bool writeTextFile(const char* path, const std::string& content) {
+  File file = LittleFS.open(path, "w");
+  if (!file) {
+    return false;
+  }
+
+  const std::size_t written =
+      file.write(reinterpret_cast<const uint8_t*>(content.data()), content.size());
+  file.close();
+  return written == content.size();
 }
 
 core::AttendanceConfigSnapshot parseAttendanceConfig(JsonVariantConst value) {
@@ -292,6 +328,20 @@ bool FailureLogStore::save(const std::vector<core::FailureLogEntry>& logs) {
   return writeJsonFile(kFailureLogsPath, doc);
 }
 
+StorageAuxState StorageAuxStore::load() {
+  auto content = readTextFile(kStorageAuxPath);
+  if (!content.has_value()) {
+    return {};
+  }
+
+  auto storageAux = decodeStorageAuxState(content.value());
+  return storageAux.value_or(StorageAuxState{});
+}
+
+bool StorageAuxStore::save(const StorageAuxState& storageAux) {
+  return writeTextFile(kStorageAuxPath, encodeStorageAuxState(storageAux));
+}
+
 LocalStoreInitStatus JsonLocalStore::begin() {
   initStatus_.credentialsReady = credentialsStore_.begin();
   initStatus_.filesystemReady = LittleFS.begin(false);
@@ -307,6 +357,7 @@ StoredRuntimeState JsonLocalStore::load() {
     state.snapshots = snapshotStore_.load();
     state.pendingAttendanceRecords = attendanceQueueStore_.load();
     state.failureLogs = failureLogStore_.load();
+    state.storageAux = storageAuxStore_.load();
   }
   return state;
 }
@@ -338,6 +389,13 @@ bool JsonLocalStore::saveFailureLogs(const std::vector<core::FailureLogEntry>& l
     return false;
   }
   return failureLogStore_.save(logs);
+}
+
+bool JsonLocalStore::saveStorageAux(const StorageAuxState& storageAux) {
+  if (!initStatus_.filesystemReady) {
+    return false;
+  }
+  return storageAuxStore_.save(storageAux);
 }
 
 }  // namespace infra

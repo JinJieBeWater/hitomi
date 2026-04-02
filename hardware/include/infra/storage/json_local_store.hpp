@@ -34,6 +34,12 @@ class FailureLogStore {
   bool save(const std::vector<core::FailureLogEntry>& logs);
 };
 
+class StorageAuxStore {
+ public:
+  StorageAuxState load();
+  bool save(const StorageAuxState& storageAux);
+};
+
 class JsonLocalStore final : public LocalStore {
  public:
   LocalStoreInitStatus begin() override;
@@ -43,12 +49,14 @@ class JsonLocalStore final : public LocalStore {
   bool savePendingAttendanceRecords(
       const std::vector<core::PendingAttendanceRecord>& records) override;
   bool saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) override;
+  bool saveStorageAux(const StorageAuxState& storageAux) override;
 
  private:
   CredentialsStore credentialsStore_;
   SnapshotStore snapshotStore_;
   AttendanceQueueStore attendanceQueueStore_;
   FailureLogStore failureLogStore_;
+  StorageAuxStore storageAuxStore_;
   LocalStoreInitStatus initStatus_ = {};
 };
 

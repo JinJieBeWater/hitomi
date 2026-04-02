@@ -27,8 +27,13 @@ constexpr uint32_t kButtonPollIntervalMs = 50;
 constexpr uint32_t kNetworkProbeIntervalMs = 250;
 constexpr uint32_t kSyncIntervalMs = 60 * 1000;
 constexpr uint32_t kUploadRetryIntervalMs = 15 * 1000;
+constexpr uint32_t kTemplateStoreProbeIntervalMs = 2000;
 constexpr std::size_t kFailureLogLimit = 200;
 constexpr std::size_t kUploadBatchSize = 100;
+constexpr char kSdMountPoint[] = "/sdcard";
+constexpr bool kSdMode1Bit = true;
+constexpr bool kSdFormatIfMountFailed = false;
+constexpr uint8_t kSdMaxOpenFiles = 5;
 
 inline const char* wifiSsid() {
   return HITOMI_WIFI_SSID;

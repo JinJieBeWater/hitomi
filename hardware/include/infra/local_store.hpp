@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "core/models.hpp"
+#include "infra/template_store_port.hpp"
 
 namespace infra {
 
@@ -11,11 +12,17 @@ struct LocalStoreInitStatus {
   bool filesystemReady = false;
 };
 
+struct StorageAuxState {
+  TemplateLibrarySummary templateLibrarySummary;
+  TemplateStoreHealthSummary templateStoreHealth;
+};
+
 struct StoredRuntimeState {
   core::DeviceCredentials credentials;
   core::SnapshotBundle snapshots;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
   std::vector<core::FailureLogEntry> failureLogs;
+  StorageAuxState storageAux;
 };
 
 class LocalStore {
@@ -29,6 +36,7 @@ class LocalStore {
   virtual bool savePendingAttendanceRecords(
       const std::vector<core::PendingAttendanceRecord>& records) = 0;
   virtual bool saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) = 0;
+  virtual bool saveStorageAux(const StorageAuxState& storageAux) = 0;
 };
 
 }  // namespace infra

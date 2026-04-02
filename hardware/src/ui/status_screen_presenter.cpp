@@ -2,6 +2,8 @@
 
 #include <sstream>
 
+#include "infra/template_store_port.hpp"
+
 namespace ui {
 namespace {
 
@@ -61,6 +63,14 @@ std::string storageLabel(const app::RuntimeStatus& status) {
   }
   if (!status.filesystemReady) {
     return "Storage: LittleFS unavailable";
+  }
+  if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
+    return "Storage: SD invalid manifest";
+  }
+  if (infra::templateStoreMounted(status.templateStoreStatusCode)) {
+    std::ostringstream oss;
+    oss << "Storage: SD ready (templates=" << status.templateCount << ")";
+    return oss.str();
   }
   if (!status.templateStoreReady) {
     return "Storage: SD unavailable";

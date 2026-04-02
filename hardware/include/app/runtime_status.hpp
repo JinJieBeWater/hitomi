@@ -24,6 +24,10 @@ struct RuntimeStatus {
   bool credentialsReady = false;
   bool filesystemReady = false;
   bool templateStoreReady = false;
+  std::string templateStoreStatusCode;
+  std::size_t templateCount = 0;
+  uint64_t sdTotalBytes = 0;
+  uint64_t sdUsedBytes = 0;
   bool wifiConfigured = false;
   bool syncInFlight = false;
   bool uploadInFlight = false;

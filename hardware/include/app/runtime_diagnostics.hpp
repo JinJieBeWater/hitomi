@@ -9,6 +9,7 @@ namespace app {
 struct RuntimeDiagnostics {
   std::string credentialsLine;
   std::string snapshotLine;
+  std::string storageLine;
   std::string queueLine;
   std::string faceLine;
 };

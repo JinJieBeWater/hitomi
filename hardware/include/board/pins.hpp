@@ -22,4 +22,8 @@ constexpr uint32_t kLcdPixelClockHz = 80 * 1000 * 1000;
 constexpr ledc_channel_t kBacklightChannel = LEDC_CHANNEL_0;
 constexpr ledc_timer_t kBacklightTimer = LEDC_TIMER_1;
 
+constexpr gpio_num_t kSdMmcClkPin = GPIO_NUM_47;
+constexpr gpio_num_t kSdMmcCmdPin = GPIO_NUM_48;
+constexpr gpio_num_t kSdMmcD0Pin = GPIO_NUM_21;
+
 }  // namespace board
