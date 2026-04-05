@@ -25,6 +25,7 @@ constexpr unsigned long kLoopYieldDelayMs = 1;
 constexpr uint32_t kLvglHandlerPeriodMs = 5;
 constexpr uint32_t kButtonPollIntervalMs = 50;
 constexpr uint32_t kNetworkProbeIntervalMs = 250;
+constexpr uint32_t kApiProbeIntervalMs = 15 * 1000;
 constexpr uint32_t kSyncIntervalMs = 60 * 1000;
 constexpr uint32_t kUploadRetryIntervalMs = 15 * 1000;
 constexpr uint32_t kTemplateStoreProbeIntervalMs = 2000;

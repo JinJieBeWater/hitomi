@@ -362,6 +362,8 @@ void testStatusScreenPresenterBuildsStateLines() {
   status.templateCount = 2;
   status.sdTotalBytes = 1024;
   status.sdUsedBytes = 256;
+  status.apiConfigured = true;
+  status.apiProbeSucceeded = true;
   status.syncInFlight = true;
   status.lastErrorCode = std::optional<std::string>("DEVICE_DISABLED");
   status.faceModuleEnabled = false;
@@ -372,6 +374,7 @@ void testStatusScreenPresenterBuildsStateLines() {
   expect(view.credentialsLine.find("DEV-001") != std::string::npos, "credentials line should show device code");
   expect(view.storageLine.find("templates=2") != std::string::npos, "storage line should show template count");
   expect(view.wifiLine.find("Connected") != std::string::npos, "wifi line should show connectivity");
+  expect(view.apiLine.find("reachable") != std::string::npos, "api line should show probe success");
   expect(view.syncLine.find("Syncing") != std::string::npos, "sync line should show active sync");
   expect(view.taskLine.find("张三") != std::string::npos, "task line should show employee name");
   expect(view.queueLine.find("3") != std::string::npos, "queue line should show pending count");
@@ -390,6 +393,18 @@ void testStatusScreenPresenterShowsInvalidManifestState() {
   AppViewModel view = ui::StatusScreenPresenter::build(status);
 
   expect(view.storageLine.find("invalid manifest") != std::string::npos, "storage line should explain manifest failure");
+}
+
+void testStatusScreenPresenterShowsApiProbeFailure() {
+  app::RuntimeStatus status = {};
+  status.apiConfigured = true;
+  status.connectivity = app::ConnectivityState::Connected;
+  status.apiProbeSucceeded = false;
+  status.apiProbeStatusCode = std::optional<std::string>("HTTP_404");
+
+  AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.apiLine.find("HTTP_404") != std::string::npos, "api line should surface probe failure code");
 }
 
 void testRuntimeDiagnosticsExplainUnconfiguredState() {
@@ -444,6 +459,7 @@ int main() {
       {"storage aux codec", testStorageAuxCodecRoundTrips},
       {"status screen presenter", testStatusScreenPresenterBuildsStateLines},
       {"status screen invalid manifest", testStatusScreenPresenterShowsInvalidManifestState},
+      {"status screen api probe failure", testStatusScreenPresenterShowsApiProbeFailure},
       {"runtime diagnostics", testRuntimeDiagnosticsExplainUnconfiguredState},
       {"runtime diagnostics invalid manifest", testRuntimeDiagnosticsExplainInvalidManifestState},
   };

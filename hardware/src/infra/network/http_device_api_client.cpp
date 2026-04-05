@@ -205,6 +205,59 @@ bool HttpDeviceApiClient::configured() const {
   return !baseUrl_.empty();
 }
 
+ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
+  ApiResult<ServerProbeResponse> result = {};
+  if (WiFi.status() != WL_CONNECTED) {
+    result.error = makeTransportError("NETWORK_UNAVAILABLE", "WiFi is not connected", true);
+    return result;
+  }
+
+  WiFiClient client;
+  HTTPClient http;
+  if (!http.begin(client, endpointUrl("/rpc/healthCheck").c_str())) {
+    result.error = makeTransportError("HTTP_BEGIN_FAILED", "Failed to open HTTP connection", true);
+    return result;
+  }
+
+  const int httpCode = http.POST("");
+  const String responseBody = http.getString();
+  http.end();
+
+  if (httpCode <= 0) {
+    result.error = makeTransportError(
+        "HTTP_REQUEST_FAILED", "HTTP request failed: " + std::to_string(httpCode), true);
+    return result;
+  }
+
+  DynamicJsonDocument responseDoc(1024);
+  const auto deserializeError = deserializeJson(responseDoc, responseBody);
+  if (deserializeError) {
+    result.error = makeTransportError("INVALID_RESPONSE", deserializeError.c_str(), true);
+    return result;
+  }
+
+  if (httpCode < 200 || httpCode >= 300) {
+    result.error = makeTransportError(
+        "HTTP_" + std::to_string(httpCode),
+        "RPC healthCheck returned HTTP " + std::to_string(httpCode),
+        httpCode >= 500);
+    return result;
+  }
+
+  const char* rpcValue = responseDoc["json"];
+  if (rpcValue == nullptr || std::string(rpcValue) != "OK") {
+    result.error = makeTransportError("INVALID_RESPONSE", "Unexpected RPC healthCheck payload", true);
+    return result;
+  }
+
+  result.success = true;
+  result.data = ServerProbeResponse{
+      .service = "rpc.healthCheck",
+      .now = 0,
+  };
+  return result;
+}
+
 ApiResult<core::SyncPayload> HttpDeviceApiClient::sync(const core::DeviceCredentials& credentials) {
   DynamicJsonDocument requestDoc(1024);
   requestDoc["deviceCode"] = credentials.deviceCode;

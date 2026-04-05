@@ -38,11 +38,17 @@ struct AttendanceUploadResponse {
   int rejected = 0;
 };
 
+struct ServerProbeResponse {
+  std::string service;
+  uint64_t now = 0;
+};
+
 class DeviceApiClient {
  public:
   virtual ~DeviceApiClient() = default;
 
   virtual bool configured() const = 0;
+  virtual ApiResult<ServerProbeResponse> probeServer() = 0;
   virtual ApiResult<core::SyncPayload> sync(const core::DeviceCredentials& credentials) = 0;
   virtual ApiResult<EnrollmentReportResponse> reportEnrollment(
       const core::DeviceCredentials& credentials, const EnrollmentReportRequest& request) = 0;

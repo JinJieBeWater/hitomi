@@ -10,6 +10,7 @@ struct AppViewModel {
   std::string credentialsLine;
   std::string storageLine;
   std::string wifiLine;
+  std::string apiLine;
   std::string syncLine;
   std::string taskLine;
   std::string queueLine;

@@ -1,5 +1,5 @@
 import "@hitomi/env/web";
-import { resolveAppPort } from "@hitomi/env/app";
+import { resolveAppListenHost, resolveAppPort } from "@hitomi/env/app";
 
 export default defineNuxtConfig({
   compatibilityDate: "latest",
@@ -13,6 +13,7 @@ export default defineNuxtConfig({
   },
   css: ["~/assets/css/main.css"],
   devServer: {
+    host: resolveAppListenHost(),
     port: resolveAppPort(),
   },
   runtimeConfig: {

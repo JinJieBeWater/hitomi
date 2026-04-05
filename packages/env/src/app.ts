@@ -1,7 +1,8 @@
 type EnvValue = null | number | string | undefined;
 type EnvLike = Record<string, EnvValue>;
 
-const defaultHost = "localhost";
+const defaultListenHost = "localhost";
+const defaultPublicHost = "localhost";
 const defaultPort = 3001;
 
 function readValue(env: EnvLike, key: string): string | undefined {
@@ -16,9 +17,17 @@ function readValue(env: EnvLike, key: string): string | undefined {
   return text || undefined;
 }
 
-function normalizeHost(host?: string): string {
+function normalizeListenHost(host?: string): string {
+  if (!host) {
+    return defaultListenHost;
+  }
+
+  return host;
+}
+
+function normalizePublicHost(host?: string): string {
   if (!host || host === "0.0.0.0" || host === "::") {
-    return defaultHost;
+    return defaultPublicHost;
   }
 
   return host;
@@ -44,8 +53,12 @@ export function resolveAppPort(env: EnvLike = process.env): number {
   return parsePort(value);
 }
 
+export function resolveAppListenHost(env: EnvLike = process.env): string {
+  return normalizeListenHost(readValue(env, "HOST") ?? readValue(env, "APP_HOST"));
+}
+
 export function resolveAppHost(env: EnvLike = process.env): string {
-  return normalizeHost(readValue(env, "HOST") ?? readValue(env, "APP_HOST"));
+  return normalizePublicHost(readValue(env, "HOST") ?? readValue(env, "APP_HOST"));
 }
 
 export function resolveAppOrigin(env: EnvLike = process.env): string {

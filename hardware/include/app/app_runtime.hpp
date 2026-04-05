@@ -24,7 +24,7 @@ class AppRuntime {
       face::EnrollmentServicePort& enrollmentService,
       face::RecognitionServicePort& recognitionService);
 
- void setup();
+  void setup();
   void tick(uint32_t nowMs);
 
  private:
@@ -36,6 +36,8 @@ class AppRuntime {
   void initWifi();
   void pollBootButton(uint32_t nowMs);
   void probeConnectivity(uint32_t nowMs);
+  bool shouldProbeApi(uint32_t nowMs) const;
+  void performApiProbe(uint32_t nowMs);
   void probeTemplateStore(uint32_t nowMs);
   void resetNetworkTaskSchedule();
   bool shouldSync(uint32_t nowMs) const;
@@ -77,15 +79,19 @@ class AppRuntime {
   bool templateStoreReady_ = false;
   bool displayReady_ = false;
   bool faceModuleEnabled_ = false;
+  bool apiProbeInFlight_ = false;
+  bool apiProbeSucceeded_ = false;
   bool syncInFlight_ = false;
   bool uploadInFlight_ = false;
   bool renderDirty_ = true;
   bool lastButtonPressed_ = false;
   uint32_t lastButtonPollMs_ = 0;
+  uint32_t lastApiProbeAttemptMs_ = 0;
   uint32_t lastNetworkProbeMs_ = 0;
   uint32_t lastTemplateStoreProbeMs_ = 0;
   uint32_t lastSyncAttemptMs_ = 0;
   uint32_t lastUploadAttemptMs_ = 0;
+  std::optional<std::string> apiProbeStatusCode_;
   std::optional<std::string> lastErrorCode_;
 };
 

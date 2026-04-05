@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import dotenv from "dotenv";
 import { createEnv } from "@t3-oss/env-core";
 import { z } from "zod";
-import { resolveAppHost, resolveAppOrigin, resolveAppPort } from "./app";
+import { resolveAppListenHost, resolveAppOrigin, resolveAppPort } from "./app";
 import { resolveWebEnvPath } from "./paths";
 
 export const serverEnvPath = resolveWebEnvPath();
@@ -33,7 +33,7 @@ const appOrigin = resolveAppOrigin(process.env);
 
 export const env = {
   ...rawEnv,
-  APP_HOST: rawEnv.APP_HOST ?? resolveAppHost(process.env),
+  APP_HOST: rawEnv.APP_HOST ?? resolveAppListenHost(process.env),
   APP_PORT: rawEnv.APP_PORT ?? resolveAppPort(process.env),
   APP_BASE_URL: rawEnv.APP_BASE_URL ?? appOrigin,
   BETTER_AUTH_URL: rawEnv.BETTER_AUTH_URL ?? appOrigin,

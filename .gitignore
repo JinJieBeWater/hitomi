@@ -49,6 +49,7 @@ coverage
 .cache
 tmp
 temp
+hardware/platformio.local.ini
 
 # Local database
 /local.db

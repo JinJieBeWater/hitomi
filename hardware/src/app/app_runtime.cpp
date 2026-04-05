@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "app/api_probe_policy.hpp"
 #include "app/runtime_diagnostics.hpp"
 #include "app/runtime_status.hpp"
 #include "board/app_config.hpp"
@@ -99,6 +100,10 @@ void AppRuntime::tick(uint32_t nowMs) {
 
   if (nowMs - lastNetworkProbeMs_ >= board::kNetworkProbeIntervalMs) {
     probeConnectivity(nowMs);
+  }
+
+  if (shouldProbeApi(nowMs)) {
+    performApiProbe(nowMs);
   }
 
   probeTemplateStore(nowMs);
@@ -203,8 +208,48 @@ void AppRuntime::probeConnectivity(uint32_t nowMs) {
 
     if (connectivity_ == ConnectivityState::Connected) {
       resetNetworkTaskSchedule();
+    } else {
+      apiProbeInFlight_ = false;
     }
   }
+}
+
+bool AppRuntime::shouldProbeApi(uint32_t nowMs) const {
+  return app::shouldProbeApi(
+      board::apiConfigured() && deviceApiClient_.configured(),
+      apiProbeInFlight_,
+      connectivity_,
+      lastApiProbeAttemptMs_,
+      nowMs);
+}
+
+void AppRuntime::performApiProbe(uint32_t nowMs) {
+  apiProbeInFlight_ = true;
+  lastApiProbeAttemptMs_ = nowMs;
+  renderDirty_ = true;
+
+  const auto result = deviceApiClient_.probeServer();
+
+  apiProbeInFlight_ = false;
+  const ApiProbeOutcome outcome = toApiProbeOutcome(result);
+  apiProbeSucceeded_ = outcome.succeeded;
+  apiProbeStatusCode_ = outcome.statusCode;
+
+  if (result.success && result.data.has_value()) {
+    Serial.printf(
+        "[APP] API reachable service=%s now=%llu\n",
+        result.data->service.c_str(),
+        static_cast<unsigned long long>(result.data->now));
+  } else if (result.error.has_value()) {
+    Serial.printf(
+        "[APP] API probe failed code=%s message=%s\n",
+        result.error->code.c_str(),
+        result.error->message.c_str());
+  } else {
+    Serial.println("[APP] API probe failed without error details");
+  }
+
+  renderDirty_ = true;
 }
 
 void AppRuntime::probeTemplateStore(uint32_t nowMs) {
@@ -223,6 +268,7 @@ void AppRuntime::probeTemplateStore(uint32_t nowMs) {
 }
 
 void AppRuntime::resetNetworkTaskSchedule() {
+  lastApiProbeAttemptMs_ = 0;
   lastSyncAttemptMs_ = 0;
   lastUploadAttemptMs_ = 0;
 }
@@ -277,6 +323,8 @@ void AppRuntime::performSync(uint32_t nowMs) {
   }
 
   snapshots_ = core::applySyncSnapshot(snapshots_, result.data.value(), nowMs);
+  apiProbeSucceeded_ = true;
+  apiProbeStatusCode_ = std::nullopt;
   persistSnapshots();
   setLastError(std::nullopt);
   renderDirty_ = true;
@@ -310,6 +358,8 @@ void AppRuntime::performUpload(uint32_t nowMs) {
   pendingAttendanceRecords_ = std::move(uploadState.queue);
   failureLogs_ = std::move(uploadState.logs);
   core::pruneFailureLogs(failureLogs_, board::kFailureLogLimit);
+  apiProbeSucceeded_ = true;
+  apiProbeStatusCode_ = std::nullopt;
   persistPendingAttendanceRecords();
   persistFailureLogs();
 
@@ -452,6 +502,10 @@ RuntimeStatus AppRuntime::buildRuntimeStatus() const {
   status.sdTotalBytes = storageAux_.templateStoreHealth.totalBytes;
   status.sdUsedBytes = storageAux_.templateStoreHealth.usedBytes;
   status.wifiConfigured = board::wifiConfigured();
+  status.apiConfigured = board::apiConfigured() && deviceApiClient_.configured();
+  status.apiProbeInFlight = apiProbeInFlight_;
+  status.apiProbeSucceeded = apiProbeSucceeded_;
+  status.apiProbeStatusCode = apiProbeStatusCode_;
   status.syncInFlight = syncInFlight_;
   status.uploadInFlight = uploadInFlight_;
   status.faceModuleEnabled = faceModuleEnabled_;

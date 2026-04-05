@@ -32,13 +32,15 @@ std::string buildContentText(const ui::AppViewModel& viewModel) {
   std::string content;
   content.reserve(
       viewModel.credentialsLine.size() + viewModel.storageLine.size() + viewModel.wifiLine.size() +
-      viewModel.syncLine.size() + viewModel.taskLine.size() + viewModel.queueLine.size() +
+      viewModel.apiLine.size() + viewModel.syncLine.size() + viewModel.taskLine.size() + viewModel.queueLine.size() +
       viewModel.errorLine.size() + viewModel.faceLine.size() + 16);
   content.append(viewModel.credentialsLine)
       .append("\n")
       .append(viewModel.storageLine)
       .append("\n")
       .append(viewModel.wifiLine)
+      .append("\n")
+      .append(viewModel.apiLine)
       .append("\n")
       .append(viewModel.syncLine)
       .append("\n")

@@ -82,6 +82,25 @@ std::string faceModuleLabel(const app::RuntimeStatus& status) {
   return std::string("Face module: ") + (status.faceModuleEnabled ? "Enabled" : "Disabled");
 }
 
+std::string apiLabel(const app::RuntimeStatus& status) {
+  if (!status.apiConfigured) {
+    return "API: missing";
+  }
+  if (status.apiProbeInFlight) {
+    return "API: probing";
+  }
+  if (status.connectivity != app::ConnectivityState::Connected) {
+    return "API: waiting for WiFi";
+  }
+  if (status.apiProbeSucceeded) {
+    return "API: reachable";
+  }
+  if (status.apiProbeStatusCode.has_value()) {
+    return "API: failed (" + status.apiProbeStatusCode.value() + ")";
+  }
+  return "API: waiting";
+}
+
 }  // namespace
 
 AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
@@ -91,6 +110,7 @@ AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
   view.credentialsLine = credentialsLabel(status);
   view.storageLine = storageLabel(status);
   view.wifiLine = "WiFi: " + connectivityLabel(status.connectivity);
+  view.apiLine = apiLabel(status);
   view.syncLine = "Sync: " + syncLabel(status);
   view.taskLine = taskLabel(status);
   view.queueLine = "Queue: " + std::to_string(status.pendingQueueSize);

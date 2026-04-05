@@ -11,6 +11,7 @@ class HttpDeviceApiClient final : public DeviceApiClient {
   explicit HttpDeviceApiClient(std::string baseUrl);
 
   bool configured() const override;
+  ApiResult<ServerProbeResponse> probeServer() override;
   ApiResult<core::SyncPayload> sync(const core::DeviceCredentials& credentials) override;
   ApiResult<EnrollmentReportResponse> reportEnrollment(
       const core::DeviceCredentials& credentials, const EnrollmentReportRequest& request) override;
