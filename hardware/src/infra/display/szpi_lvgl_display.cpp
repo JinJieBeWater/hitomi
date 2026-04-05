@@ -1,9 +1,41 @@
-#include <Arduino.h>
-
-#include "board/pins.hpp"
 #include "infra/display/szpi_lvgl_display.hpp"
 
+#include <Arduino.h>
+
+#include <driver/i2c.h>
+#include <driver/ledc.h>
+#include <driver/spi_master.h>
+#include <esp_err.h>
+#include <esp_heap_caps.h>
+#include <esp_lcd_panel_io.h>
+#include <esp_lcd_panel_ops.h>
+#include <esp_lcd_panel_vendor.h>
+#include <freertos/FreeRTOS.h>
+#include <lvgl.h>
+
+#include <memory>
+#include <utility>
+
+#include "board/pins.hpp"
+
 namespace {
+
+constexpr TickType_t kI2cTimeout = pdMS_TO_TICKS(1000);
+
+constexpr uint8_t kPca9557Address = 0x19;
+constexpr uint8_t kPca9557OutputReg = 0x01;
+constexpr uint8_t kPca9557ConfigReg = 0x03;
+constexpr uint8_t kPca9557DefaultOutput = 0x05;
+constexpr uint8_t kPca9557DefaultConfig = 0xF8;
+constexpr uint8_t kLcdCsBit = 1u << 0;
+
+struct SzpiLvglDisplayImpl {
+  esp_lcd_panel_io_handle_t io = nullptr;
+  esp_lcd_panel_handle_t panel = nullptr;
+  lv_display_t* display = nullptr;
+  uint16_t* drawBuffer = nullptr;
+  bool ready = false;
+};
 
 bool logEspError(esp_err_t err, const char* action) {
   if (err == ESP_OK) {
@@ -14,93 +46,62 @@ bool logEspError(esp_err_t err, const char* action) {
   return false;
 }
 
-}  // namespace
-
-bool SzpiLvglDisplay::init() {
-  if (_ready) {
-    return true;
-  }
-
-  if (!initIoExpander()) {
-    Serial.println("[SZPI.ESP_LCD] PCA9557 init failed");
-    return false;
-  }
-
-  if (!initBacklightPwm()) {
-    Serial.println("[SZPI.ESP_LCD] Backlight PWM init failed");
-    return false;
-  }
-
-  if (!initPanel()) {
-    Serial.println("[SZPI.ESP_LCD] Panel init failed");
-    return false;
-  }
-
-  if (!initLvglDisplay()) {
-    Serial.println("[SZPI.ESP_LCD] LVGL display init failed");
-    return false;
-  }
-
-  if (!setBacklightPercent(100)) {
-    Serial.println("[SZPI.ESP_LCD] Failed to enable backlight");
-    return false;
-  }
-
-  _ready = true;
-  return true;
-}
-
-lv_display_t* SzpiLvglDisplay::display() const {
-  return _display;
-}
-
-bool SzpiLvglDisplay::setBacklightPercent(int percent) {
-  if (percent < 0) {
-    percent = 0;
-  } else if (percent > 100) {
-    percent = 100;
-  }
-
-  uint32_t duty = (1023U * static_cast<uint32_t>(percent)) / 100U;
-  esp_err_t err = ledc_set_duty(LEDC_LOW_SPEED_MODE, board::kBacklightChannel, duty);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] ledc_set_duty failed: %s\n", esp_err_to_name(err));
-    return false;
-  }
-
-  err = ledc_update_duty(LEDC_LOW_SPEED_MODE, board::kBacklightChannel);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] ledc_update_duty failed: %s\n", esp_err_to_name(err));
-    return false;
-  }
-
-  return true;
-}
-
-void SzpiLvglDisplay::flushCallback(lv_display_t* display, const lv_area_t* area, uint8_t* pxMap) {
-  auto* driver = static_cast<SzpiLvglDisplay*>(lv_display_get_driver_data(display));
-  if (driver == nullptr) {
+void flushCallback(lv_display_t* display, const lv_area_t* area, uint8_t* pxMap) {
+  auto* impl = static_cast<SzpiLvglDisplayImpl*>(lv_display_get_driver_data(display));
+  if (impl == nullptr || impl->panel == nullptr) {
     lv_display_flush_ready(display);
     return;
   }
 
-  driver->flush(area, pxMap);
+  esp_err_t err =
+      esp_lcd_panel_draw_bitmap(impl->panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, pxMap);
+  if (err != ESP_OK) {
+    Serial.printf("[SZPI.ESP_LCD] draw_bitmap failed: %s\n", esp_err_to_name(err));
+    lv_display_flush_ready(display);
+  }
 }
 
-bool SzpiLvglDisplay::onColorTransferDone(
+bool onColorTransferDone(
     esp_lcd_panel_io_handle_t panelIo, esp_lcd_panel_io_event_data_t* eventData, void* userCtx) {
   static_cast<void>(panelIo);
   static_cast<void>(eventData);
 
-  auto* driver = static_cast<SzpiLvglDisplay*>(userCtx);
-  if (driver != nullptr && driver->_display != nullptr) {
-    lv_display_flush_ready(driver->_display);
+  auto* impl = static_cast<SzpiLvglDisplayImpl*>(userCtx);
+  if (impl != nullptr && impl->display != nullptr) {
+    lv_display_flush_ready(impl->display);
   }
 
   return false;
 }
 
-bool SzpiLvglDisplay::initIoExpander() {
+bool writePca9557Register(uint8_t reg, uint8_t value) {
+  uint8_t payload[] = {reg, value};
+  esp_err_t err =
+      i2c_master_write_to_device(board::kI2cPort, kPca9557Address, payload, sizeof(payload), kI2cTimeout);
+  if (err != ESP_OK) {
+    Serial.printf(
+        "[SZPI.ESP_LCD] PCA9557 write reg=0x%02X value=0x%02X failed: %s\n",
+        reg,
+        value,
+        esp_err_to_name(err));
+    return false;
+  }
+
+  return true;
+}
+
+bool setPca9557OutputState(uint8_t gpioBit, bool level) {
+  uint8_t output = kPca9557DefaultOutput;
+  if (level) {
+    output |= gpioBit;
+  } else {
+    output &= static_cast<uint8_t>(~gpioBit);
+  }
+
+  return writePca9557Register(kPca9557OutputReg, output);
+}
+
+bool initIoExpander() {
   i2c_config_t cfg = {};
   cfg.mode = I2C_MODE_MASTER;
   cfg.sda_io_num = board::kI2cSdaPin;
@@ -123,18 +124,11 @@ bool SzpiLvglDisplay::initIoExpander() {
     return false;
   }
 
-  if (!writePca9557Register(kPca9557OutputReg, kPca9557DefaultOutput)) {
-    return false;
-  }
-
-  if (!writePca9557Register(kPca9557ConfigReg, kPca9557DefaultConfig)) {
-    return false;
-  }
-
-  return true;
+  return writePca9557Register(kPca9557OutputReg, kPca9557DefaultOutput) &&
+         writePca9557Register(kPca9557ConfigReg, kPca9557DefaultConfig);
 }
 
-bool SzpiLvglDisplay::initBacklightPwm() {
+bool initBacklightPwm() {
   ledc_channel_config_t channelCfg = {};
   channelCfg.gpio_num = board::kLcdBacklightPin;
   channelCfg.speed_mode = LEDC_LOW_SPEED_MODE;
@@ -152,25 +146,42 @@ bool SzpiLvglDisplay::initBacklightPwm() {
   timerCfg.freq_hz = 5000;
   timerCfg.clk_cfg = LEDC_AUTO_CLK;
 
-  if (!logEspError(ledc_timer_config(&timerCfg), "ledc_timer_config")) {
+  return logEspError(ledc_timer_config(&timerCfg), "ledc_timer_config") &&
+         logEspError(ledc_channel_config(&channelCfg), "ledc_channel_config");
+}
+
+bool setBacklightPercent(int percent) {
+  if (percent < 0) {
+    percent = 0;
+  } else if (percent > 100) {
+    percent = 100;
+  }
+
+  uint32_t duty = (1023U * static_cast<uint32_t>(percent)) / 100U;
+  esp_err_t err = ledc_set_duty(LEDC_LOW_SPEED_MODE, board::kBacklightChannel, duty);
+  if (err != ESP_OK) {
+    Serial.printf("[SZPI.ESP_LCD] ledc_set_duty failed: %s\n", esp_err_to_name(err));
     return false;
   }
 
-  if (!logEspError(ledc_channel_config(&channelCfg), "ledc_channel_config")) {
+  err = ledc_update_duty(LEDC_LOW_SPEED_MODE, board::kBacklightChannel);
+  if (err != ESP_OK) {
+    Serial.printf("[SZPI.ESP_LCD] ledc_update_duty failed: %s\n", esp_err_to_name(err));
     return false;
   }
 
   return true;
 }
 
-bool SzpiLvglDisplay::initPanel() {
+bool initPanel(SzpiLvglDisplayImpl& impl) {
   spi_bus_config_t busCfg = {};
   busCfg.sclk_io_num = board::kLcdSclkPin;
   busCfg.mosi_io_num = board::kLcdMosiPin;
   busCfg.miso_io_num = GPIO_NUM_NC;
   busCfg.quadwp_io_num = GPIO_NUM_NC;
   busCfg.quadhd_io_num = GPIO_NUM_NC;
-  busCfg.max_transfer_sz = kHorizontalResolution * kBufferRows * sizeof(uint16_t);
+  busCfg.max_transfer_sz =
+      SzpiLvglDisplay::kHorizontalResolution * SzpiLvglDisplay::kBufferRows * sizeof(uint16_t);
 
   esp_err_t err = spi_bus_initialize(board::kLcdSpiHost, &busCfg, SPI_DMA_CH_AUTO);
   if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
@@ -187,10 +198,10 @@ bool SzpiLvglDisplay::initPanel() {
   ioCfg.spi_mode = 2;
   ioCfg.trans_queue_depth = 1;
   ioCfg.on_color_trans_done = onColorTransferDone;
-  ioCfg.user_ctx = this;
+  ioCfg.user_ctx = &impl;
 
   err = esp_lcd_new_panel_io_spi(
-      reinterpret_cast<esp_lcd_spi_bus_handle_t>(board::kLcdSpiHost), &ioCfg, &_io);
+      reinterpret_cast<esp_lcd_spi_bus_handle_t>(board::kLcdSpiHost), &ioCfg, &impl.io);
   if (!logEspError(err, "esp_lcd_new_panel_io_spi")) {
     return false;
   }
@@ -200,99 +211,101 @@ bool SzpiLvglDisplay::initPanel() {
   panelCfg.color_space = ESP_LCD_COLOR_SPACE_RGB;
   panelCfg.bits_per_pixel = 16;
 
-  if (!logEspError(esp_lcd_new_panel_st7789(_io, &panelCfg, &_panel), "esp_lcd_new_panel_st7789")) {
+  if (!logEspError(esp_lcd_new_panel_st7789(impl.io, &panelCfg, &impl.panel), "esp_lcd_new_panel_st7789")) {
     return false;
   }
-
-  if (!logEspError(esp_lcd_panel_reset(_panel), "esp_lcd_panel_reset")) {
+  if (!logEspError(esp_lcd_panel_reset(impl.panel), "esp_lcd_panel_reset")) {
     return false;
   }
-
   if (!setPca9557OutputState(kLcdCsBit, false)) {
     Serial.println("[SZPI.ESP_LCD] Failed to pull LCD_CS low");
     return false;
   }
-
-  if (!logEspError(esp_lcd_panel_init(_panel), "esp_lcd_panel_init")) {
+  if (!logEspError(esp_lcd_panel_init(impl.panel), "esp_lcd_panel_init")) {
     return false;
   }
-
-  if (!logEspError(esp_lcd_panel_invert_color(_panel, true), "esp_lcd_panel_invert_color")) {
+  if (!logEspError(esp_lcd_panel_invert_color(impl.panel, true), "esp_lcd_panel_invert_color")) {
     return false;
   }
-
-  if (!logEspError(esp_lcd_panel_swap_xy(_panel, true), "esp_lcd_panel_swap_xy")) {
+  if (!logEspError(esp_lcd_panel_swap_xy(impl.panel, true), "esp_lcd_panel_swap_xy")) {
     return false;
   }
-
-  if (!logEspError(esp_lcd_panel_mirror(_panel, true, false), "esp_lcd_panel_mirror")) {
+  if (!logEspError(esp_lcd_panel_mirror(impl.panel, true, false), "esp_lcd_panel_mirror")) {
     return false;
   }
-
-  if (!logEspError(esp_lcd_panel_disp_on_off(_panel, true), "esp_lcd_panel_disp_on_off")) {
-    return false;
-  }
-
-  return true;
+  return logEspError(esp_lcd_panel_disp_on_off(impl.panel, true), "esp_lcd_panel_disp_on_off");
 }
 
-bool SzpiLvglDisplay::initLvglDisplay() {
-  _drawBuffer = static_cast<uint16_t*>(heap_caps_malloc(
-      kHorizontalResolution * kBufferRows * sizeof(uint16_t),
+bool initLvglDisplay(SzpiLvglDisplayImpl& impl) {
+  impl.drawBuffer = static_cast<uint16_t*>(heap_caps_malloc(
+      SzpiLvglDisplay::kHorizontalResolution * SzpiLvglDisplay::kBufferRows * sizeof(uint16_t),
       MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
-  if (_drawBuffer == nullptr) {
+  if (impl.drawBuffer == nullptr) {
     Serial.println("[SZPI.ESP_LCD] Failed to allocate LVGL draw buffer");
     return false;
   }
 
-  _display = lv_display_create(kHorizontalResolution, kVerticalResolution);
-  if (_display == nullptr) {
+  impl.display = lv_display_create(SzpiLvglDisplay::kHorizontalResolution, SzpiLvglDisplay::kVerticalResolution);
+  if (impl.display == nullptr) {
     Serial.println("[SZPI.ESP_LCD] lv_display_create failed");
     return false;
   }
 
-  lv_display_set_driver_data(_display, this);
-  lv_display_set_color_format(_display, LV_COLOR_FORMAT_RGB565_SWAPPED);
-  lv_display_set_flush_cb(_display, flushCallback);
+  lv_display_set_driver_data(impl.display, &impl);
+  lv_display_set_color_format(impl.display, LV_COLOR_FORMAT_RGB565_SWAPPED);
+  lv_display_set_flush_cb(impl.display, flushCallback);
   lv_display_set_buffers(
-      _display,
-      _drawBuffer,
+      impl.display,
+      impl.drawBuffer,
       nullptr,
-      kHorizontalResolution * kBufferRows * sizeof(uint16_t),
+      SzpiLvglDisplay::kHorizontalResolution * SzpiLvglDisplay::kBufferRows * sizeof(uint16_t),
       LV_DISPLAY_RENDER_MODE_PARTIAL);
 
   return true;
 }
 
-bool SzpiLvglDisplay::writePca9557Register(uint8_t reg, uint8_t value) {
-  uint8_t payload[] = {reg, value};
-  esp_err_t err = i2c_master_write_to_device(
-      board::kI2cPort, kPca9557Address, payload, sizeof(payload), kI2cTimeout);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] PCA9557 write reg=0x%02X value=0x%02X failed: %s\n", reg,
-                  value, esp_err_to_name(err));
+}  // namespace
+
+struct SzpiLvglDisplay::Impl : SzpiLvglDisplayImpl {};
+
+SzpiLvglDisplay::SzpiLvglDisplay() : impl_(std::make_unique<Impl>()) {}
+
+SzpiLvglDisplay::~SzpiLvglDisplay() = default;
+
+SzpiLvglDisplay::SzpiLvglDisplay(SzpiLvglDisplay&&) noexcept = default;
+
+SzpiLvglDisplay& SzpiLvglDisplay::operator=(SzpiLvglDisplay&&) noexcept = default;
+
+bool SzpiLvglDisplay::init() {
+  if (impl_->ready) {
+    return true;
+  }
+
+  if (!initIoExpander()) {
+    Serial.println("[SZPI.ESP_LCD] PCA9557 init failed");
+    return false;
+  }
+  if (!initBacklightPwm()) {
+    Serial.println("[SZPI.ESP_LCD] Backlight PWM init failed");
+    return false;
+  }
+  if (!initPanel(*impl_)) {
+    Serial.println("[SZPI.ESP_LCD] Panel init failed");
+    return false;
+  }
+  if (!initLvglDisplay(*impl_)) {
+    Serial.println("[SZPI.ESP_LCD] LVGL display init failed");
+    return false;
+  }
+  if (!setBacklightPercent(100)) {
+    Serial.println("[SZPI.ESP_LCD] Failed to enable backlight");
     return false;
   }
 
+  impl_->ready = true;
   return true;
 }
 
-bool SzpiLvglDisplay::setPca9557OutputState(uint8_t gpioBit, bool level) {
-  uint8_t output = kPca9557DefaultOutput;
-  if (level) {
-    output |= gpioBit;
-  } else {
-    output &= static_cast<uint8_t>(~gpioBit);
-  }
-
-  return writePca9557Register(kPca9557OutputReg, output);
-}
-
-void SzpiLvglDisplay::flush(const lv_area_t* area, uint8_t* pxMap) {
-  esp_err_t err = esp_lcd_panel_draw_bitmap(
-      _panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, pxMap);
-  if (err != ESP_OK) {
-    Serial.printf("[SZPI.ESP_LCD] draw_bitmap failed: %s\n", esp_err_to_name(err));
-    lv_display_flush_ready(_display);
-  }
+lv_display_t* SzpiLvglDisplay::display() const {
+  return impl_->display;
 }

@@ -54,6 +54,7 @@ hardware/platformio.local.ini
 # Local database
 /local.db
 .codex
+.omx/
 立创·实战派ESP32-S3开发板资料/01-例程/立创实战派ESP32-S3-例程-IDF5.1.zip
 立创·实战派ESP32-S3开发板资料/01-例程/立创实战派ESP32-S3-例程-IDF5.4.zip
 立创·实战派ESP32-S3开发板资料/02-文档/01-外壳3D打印文件.zip

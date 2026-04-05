@@ -1,47 +1,21 @@
 #pragma once
 
-#include <Preferences.h>
+#include <memory>
 
 #include "infra/local_store.hpp"
 
 namespace infra {
 
-class CredentialsStore {
- public:
-  bool begin();
-  core::DeviceCredentials load();
-  bool save(const core::DeviceCredentials& credentials);
-
- private:
-  Preferences preferences_;
-};
-
-class SnapshotStore {
- public:
-  core::SnapshotBundle load();
-  bool save(const core::SnapshotBundle& snapshots);
-};
-
-class AttendanceQueueStore {
- public:
-  std::vector<core::PendingAttendanceRecord> load();
-  bool save(const std::vector<core::PendingAttendanceRecord>& records);
-};
-
-class FailureLogStore {
- public:
-  std::vector<core::FailureLogEntry> load();
-  bool save(const std::vector<core::FailureLogEntry>& logs);
-};
-
-class StorageAuxStore {
- public:
-  StorageAuxState load();
-  bool save(const StorageAuxState& storageAux);
-};
-
 class JsonLocalStore final : public LocalStore {
  public:
+  JsonLocalStore();
+  ~JsonLocalStore() override;
+
+  JsonLocalStore(const JsonLocalStore&) = delete;
+  JsonLocalStore& operator=(const JsonLocalStore&) = delete;
+  JsonLocalStore(JsonLocalStore&&) noexcept;
+  JsonLocalStore& operator=(JsonLocalStore&&) noexcept;
+
   LocalStoreInitStatus begin() override;
   StoredRuntimeState load() override;
   bool saveCredentials(const core::DeviceCredentials& credentials) override;
@@ -52,12 +26,8 @@ class JsonLocalStore final : public LocalStore {
   bool saveStorageAux(const StorageAuxState& storageAux) override;
 
  private:
-  CredentialsStore credentialsStore_;
-  SnapshotStore snapshotStore_;
-  AttendanceQueueStore attendanceQueueStore_;
-  FailureLogStore failureLogStore_;
-  StorageAuxStore storageAuxStore_;
-  LocalStoreInitStatus initStatus_ = {};
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace infra

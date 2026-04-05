@@ -4,9 +4,11 @@
 #include <optional>
 #include <string>
 #include <sys/stat.h>
+#include <utility>
 
 #include <ArduinoJson.h>
 #include <LittleFS.h>
+#include <Preferences.h>
 
 #include "core/use_cases.hpp"
 #include "infra/storage/storage_aux_codec.hpp"
@@ -120,282 +122,317 @@ core::EnrollmentTaskSnapshot parseEnrollmentTask(JsonVariantConst value) {
   };
 }
 
-}  // namespace
+class CredentialsStore {
+ public:
+  bool begin() {
+    return preferences_.begin("hitomi-device", false);
+  }
 
-bool CredentialsStore::begin() {
-  return preferences_.begin("hitomi-device", false);
-}
+  core::DeviceCredentials load() {
+    return {
+        .deviceCode = loadPreferenceString(preferences_, "deviceCode"),
+        .apiKey = loadPreferenceString(preferences_, "apiKey"),
+    };
+  }
 
-core::DeviceCredentials CredentialsStore::load() {
-  return {
-      .deviceCode = loadPreferenceString(preferences_, "deviceCode"),
-      .apiKey = loadPreferenceString(preferences_, "apiKey"),
-  };
-}
+  bool save(const core::DeviceCredentials& credentials) {
+    return preferences_.putString("deviceCode", credentials.deviceCode.c_str()) > 0 &&
+           preferences_.putString("apiKey", credentials.apiKey.c_str()) > 0;
+  }
 
-bool CredentialsStore::save(const core::DeviceCredentials& credentials) {
-  return preferences_.putString("deviceCode", credentials.deviceCode.c_str()) > 0 &&
-         preferences_.putString("apiKey", credentials.apiKey.c_str()) > 0;
-}
+ private:
+  Preferences preferences_;
+};
 
-core::SnapshotBundle SnapshotStore::load() {
-  core::SnapshotBundle snapshots = {};
-  DynamicJsonDocument doc(32 * 1024);
-  if (!readJsonFile(kSnapshotsPath, doc)) {
+class SnapshotStore {
+ public:
+  core::SnapshotBundle load() {
+    core::SnapshotBundle snapshots = {};
+    DynamicJsonDocument doc(32 * 1024);
+    if (!readJsonFile(kSnapshotsPath, doc)) {
+      return snapshots;
+    }
+
+    snapshots.timezone = doc["timezone"] | "Asia/Shanghai";
+    snapshots.deviceId = doc["deviceId"] | "";
+    snapshots.deviceName = doc["deviceName"] | "";
+    snapshots.deviceStatus = doc["deviceStatus"] | "";
+    snapshots.attendanceConfigSyncedAt = doc["attendanceConfigSyncedAt"] | 0ULL;
+    snapshots.employeesSyncedAt = doc["employeesSyncedAt"] | 0ULL;
+    snapshots.enrollmentTaskSyncedAt = doc["enrollmentTaskSyncedAt"] | 0ULL;
+    snapshots.lastSyncAt = doc["lastSyncAt"] | 0ULL;
+    snapshots.lastServerTime = doc["lastServerTime"] | 0ULL;
+
+    if (!doc["attendanceConfig"].isNull()) {
+      snapshots.attendanceConfig = parseAttendanceConfig(doc["attendanceConfig"]);
+    }
+    if (!doc["enrollmentTask"].isNull()) {
+      snapshots.enrollmentTask = parseEnrollmentTask(doc["enrollmentTask"]);
+    }
+
+    JsonArrayConst employees = doc["employees"].as<JsonArrayConst>();
+    for (JsonVariantConst item : employees) {
+      snapshots.employees.push_back(core::EmployeeSnapshot{
+          .id = item["id"] | "",
+          .code = item["code"] | "",
+          .name = item["name"] | "",
+          .updatedAt = item["updatedAt"] | 0ULL,
+      });
+    }
+
     return snapshots;
   }
 
-  snapshots.timezone = doc["timezone"] | "Asia/Shanghai";
-  snapshots.deviceId = doc["deviceId"] | "";
-  snapshots.deviceName = doc["deviceName"] | "";
-  snapshots.deviceStatus = doc["deviceStatus"] | "";
-  snapshots.attendanceConfigSyncedAt = doc["attendanceConfigSyncedAt"] | 0ULL;
-  snapshots.employeesSyncedAt = doc["employeesSyncedAt"] | 0ULL;
-  snapshots.enrollmentTaskSyncedAt = doc["enrollmentTaskSyncedAt"] | 0ULL;
-  snapshots.lastSyncAt = doc["lastSyncAt"] | 0ULL;
-  snapshots.lastServerTime = doc["lastServerTime"] | 0ULL;
+  bool save(const core::SnapshotBundle& snapshots) {
+    DynamicJsonDocument doc(32 * 1024);
+    doc["timezone"] = snapshots.timezone;
+    doc["deviceId"] = snapshots.deviceId;
+    doc["deviceName"] = snapshots.deviceName;
+    doc["deviceStatus"] = snapshots.deviceStatus;
+    doc["attendanceConfigSyncedAt"] = snapshots.attendanceConfigSyncedAt;
+    doc["employeesSyncedAt"] = snapshots.employeesSyncedAt;
+    doc["enrollmentTaskSyncedAt"] = snapshots.enrollmentTaskSyncedAt;
+    doc["lastSyncAt"] = snapshots.lastSyncAt;
+    doc["lastServerTime"] = snapshots.lastServerTime;
 
-  if (!doc["attendanceConfig"].isNull()) {
-    snapshots.attendanceConfig = parseAttendanceConfig(doc["attendanceConfig"]);
+    if (snapshots.attendanceConfig.has_value()) {
+      JsonObject config = doc.createNestedObject("attendanceConfig");
+      config["id"] = snapshots.attendanceConfig->id;
+      config["workStartMinute"] = snapshots.attendanceConfig->workStartMinute;
+      config["workEndMinute"] = snapshots.attendanceConfig->workEndMinute;
+      config["offStartMinute"] = snapshots.attendanceConfig->offStartMinute;
+      config["offEndMinute"] = snapshots.attendanceConfig->offEndMinute;
+      config["updatedAt"] = snapshots.attendanceConfig->updatedAt;
+    } else {
+      doc["attendanceConfig"] = nullptr;
+    }
+
+    JsonArray employees = doc.createNestedArray("employees");
+    for (const auto& employee : snapshots.employees) {
+      JsonObject item = employees.createNestedObject();
+      item["id"] = employee.id;
+      item["code"] = employee.code;
+      item["name"] = employee.name;
+      item["updatedAt"] = employee.updatedAt;
+    }
+
+    if (snapshots.enrollmentTask.has_value()) {
+      JsonObject task = doc.createNestedObject("enrollmentTask");
+      task["taskId"] = snapshots.enrollmentTask->taskId;
+      task["employeeId"] = snapshots.enrollmentTask->employeeId;
+      task["employeeCode"] = snapshots.enrollmentTask->employeeCode;
+      task["employeeName"] = snapshots.enrollmentTask->employeeName;
+      task["status"] = snapshots.enrollmentTask->status;
+      task["createdAt"] = snapshots.enrollmentTask->createdAt;
+      task["updatedAt"] = snapshots.enrollmentTask->updatedAt;
+    } else {
+      doc["enrollmentTask"] = nullptr;
+    }
+
+    return writeJsonFile(kSnapshotsPath, doc);
   }
-  if (!doc["enrollmentTask"].isNull()) {
-    snapshots.enrollmentTask = parseEnrollmentTask(doc["enrollmentTask"]);
-  }
+};
 
-  JsonArrayConst employees = doc["employees"].as<JsonArrayConst>();
-  for (JsonVariantConst item : employees) {
-    snapshots.employees.push_back(core::EmployeeSnapshot{
-        .id = item["id"] | "",
-        .code = item["code"] | "",
-        .name = item["name"] | "",
-        .updatedAt = item["updatedAt"] | 0ULL,
-    });
-  }
+class AttendanceQueueStore {
+ public:
+  std::vector<core::PendingAttendanceRecord> load() {
+    std::vector<core::PendingAttendanceRecord> records;
+    DynamicJsonDocument doc(32 * 1024);
+    if (!readJsonFile(kAttendanceQueuePath, doc)) {
+      return records;
+    }
 
-  return snapshots;
-}
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    for (JsonVariantConst item : items) {
+      auto type = core::attendanceTypeFromApiValue(item["type"] | "");
+      if (!type.has_value()) {
+        continue;
+      }
 
-bool SnapshotStore::save(const core::SnapshotBundle& snapshots) {
-  DynamicJsonDocument doc(32 * 1024);
-  doc["timezone"] = snapshots.timezone;
-  doc["deviceId"] = snapshots.deviceId;
-  doc["deviceName"] = snapshots.deviceName;
-  doc["deviceStatus"] = snapshots.deviceStatus;
-  doc["attendanceConfigSyncedAt"] = snapshots.attendanceConfigSyncedAt;
-  doc["employeesSyncedAt"] = snapshots.employeesSyncedAt;
-  doc["enrollmentTaskSyncedAt"] = snapshots.enrollmentTaskSyncedAt;
-  doc["lastSyncAt"] = snapshots.lastSyncAt;
-  doc["lastServerTime"] = snapshots.lastServerTime;
+      core::PendingAttendanceRecord record = {
+          .clientRecordId = item["clientRecordId"] | "",
+          .employeeId = item["employeeId"] | "",
+          .recognizedAt = item["recognizedAt"] | 0ULL,
+          .type = type.value(),
+          .localDate = item["localDate"] | "",
+          .createdAt = item["createdAt"] | 0ULL,
+          .lastAttemptAt = item["lastAttemptAt"].isNull()
+              ? std::nullopt
+              : std::optional<uint64_t>(item["lastAttemptAt"] | 0ULL),
+          .lastResultCode = item["lastResultCode"].isNull()
+              ? std::nullopt
+              : std::optional<std::string>(item["lastResultCode"].as<const char*>()),
+      };
+      records.push_back(record);
+    }
 
-  if (snapshots.attendanceConfig.has_value()) {
-    JsonObject config = doc.createNestedObject("attendanceConfig");
-    config["id"] = snapshots.attendanceConfig->id;
-    config["workStartMinute"] = snapshots.attendanceConfig->workStartMinute;
-    config["workEndMinute"] = snapshots.attendanceConfig->workEndMinute;
-    config["offStartMinute"] = snapshots.attendanceConfig->offStartMinute;
-    config["offEndMinute"] = snapshots.attendanceConfig->offEndMinute;
-    config["updatedAt"] = snapshots.attendanceConfig->updatedAt;
-  } else {
-    doc["attendanceConfig"] = nullptr;
-  }
-
-  JsonArray employees = doc.createNestedArray("employees");
-  for (const auto& employee : snapshots.employees) {
-    JsonObject item = employees.createNestedObject();
-    item["id"] = employee.id;
-    item["code"] = employee.code;
-    item["name"] = employee.name;
-    item["updatedAt"] = employee.updatedAt;
-  }
-
-  if (snapshots.enrollmentTask.has_value()) {
-    JsonObject task = doc.createNestedObject("enrollmentTask");
-    task["taskId"] = snapshots.enrollmentTask->taskId;
-    task["employeeId"] = snapshots.enrollmentTask->employeeId;
-    task["employeeCode"] = snapshots.enrollmentTask->employeeCode;
-    task["employeeName"] = snapshots.enrollmentTask->employeeName;
-    task["status"] = snapshots.enrollmentTask->status;
-    task["createdAt"] = snapshots.enrollmentTask->createdAt;
-    task["updatedAt"] = snapshots.enrollmentTask->updatedAt;
-  } else {
-    doc["enrollmentTask"] = nullptr;
-  }
-
-  return writeJsonFile(kSnapshotsPath, doc);
-}
-
-std::vector<core::PendingAttendanceRecord> AttendanceQueueStore::load() {
-  std::vector<core::PendingAttendanceRecord> records;
-  DynamicJsonDocument doc(32 * 1024);
-  if (!readJsonFile(kAttendanceQueuePath, doc)) {
     return records;
   }
 
-  JsonArrayConst items = doc["items"].as<JsonArrayConst>();
-  for (JsonVariantConst item : items) {
-    auto type = core::attendanceTypeFromApiValue(item["type"] | "");
-    if (!type.has_value()) {
-      continue;
+  bool save(const std::vector<core::PendingAttendanceRecord>& records) {
+    DynamicJsonDocument doc(32 * 1024);
+    JsonArray items = doc.createNestedArray("items");
+    for (const auto& record : records) {
+      JsonObject item = items.createNestedObject();
+      item["clientRecordId"] = record.clientRecordId;
+      item["employeeId"] = record.employeeId;
+      item["recognizedAt"] = record.recognizedAt;
+      item["type"] = core::attendanceTypeToApiValue(record.type);
+      item["localDate"] = record.localDate;
+      item["createdAt"] = record.createdAt;
+      if (record.lastAttemptAt.has_value()) {
+        item["lastAttemptAt"] = record.lastAttemptAt.value();
+      } else {
+        item["lastAttemptAt"] = nullptr;
+      }
+      if (record.lastResultCode.has_value()) {
+        item["lastResultCode"] = record.lastResultCode.value();
+      } else {
+        item["lastResultCode"] = nullptr;
+      }
     }
 
-    core::PendingAttendanceRecord record = {
-        .clientRecordId = item["clientRecordId"] | "",
-        .employeeId = item["employeeId"] | "",
-        .recognizedAt = item["recognizedAt"] | 0ULL,
-        .type = type.value(),
-        .localDate = item["localDate"] | "",
-        .createdAt = item["createdAt"] | 0ULL,
-        .lastAttemptAt = item["lastAttemptAt"].isNull()
-            ? std::nullopt
-            : std::optional<uint64_t>(item["lastAttemptAt"] | 0ULL),
-        .lastResultCode = item["lastResultCode"].isNull()
-            ? std::nullopt
-            : std::optional<std::string>(item["lastResultCode"].as<const char*>()),
-    };
-    records.push_back(record);
+    return writeJsonFile(kAttendanceQueuePath, doc);
   }
+};
 
-  return records;
-}
-
-bool AttendanceQueueStore::save(const std::vector<core::PendingAttendanceRecord>& records) {
-  DynamicJsonDocument doc(32 * 1024);
-  JsonArray items = doc.createNestedArray("items");
-  for (const auto& record : records) {
-    JsonObject item = items.createNestedObject();
-    item["clientRecordId"] = record.clientRecordId;
-    item["employeeId"] = record.employeeId;
-    item["recognizedAt"] = record.recognizedAt;
-    item["type"] = core::attendanceTypeToApiValue(record.type);
-    item["localDate"] = record.localDate;
-    item["createdAt"] = record.createdAt;
-    if (record.lastAttemptAt.has_value()) {
-      item["lastAttemptAt"] = record.lastAttemptAt.value();
-    } else {
-      item["lastAttemptAt"] = nullptr;
+class FailureLogStore {
+ public:
+  std::vector<core::FailureLogEntry> load() {
+    std::vector<core::FailureLogEntry> logs;
+    DynamicJsonDocument doc(24 * 1024);
+    if (!readJsonFile(kFailureLogsPath, doc)) {
+      return logs;
     }
-    if (record.lastResultCode.has_value()) {
-      item["lastResultCode"] = record.lastResultCode.value();
-    } else {
-      item["lastResultCode"] = nullptr;
+
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    for (JsonVariantConst item : items) {
+      logs.push_back(core::FailureLogEntry{
+          .id = item["id"] | "",
+          .api = item["api"] | "",
+          .occurredAt = item["occurredAt"] | 0ULL,
+          .code = item["code"] | "",
+          .message = item["message"] | "",
+          .relatedId = item["relatedId"].isNull()
+              ? std::nullopt
+              : std::optional<std::string>(item["relatedId"].as<const char*>()),
+      });
     }
-  }
 
-  return writeJsonFile(kAttendanceQueuePath, doc);
-}
-
-std::vector<core::FailureLogEntry> FailureLogStore::load() {
-  std::vector<core::FailureLogEntry> logs;
-  DynamicJsonDocument doc(24 * 1024);
-  if (!readJsonFile(kFailureLogsPath, doc)) {
     return logs;
   }
 
-  JsonArrayConst items = doc["items"].as<JsonArrayConst>();
-  for (JsonVariantConst item : items) {
-    logs.push_back(core::FailureLogEntry{
-        .id = item["id"] | "",
-        .api = item["api"] | "",
-        .occurredAt = item["occurredAt"] | 0ULL,
-        .code = item["code"] | "",
-        .message = item["message"] | "",
-        .relatedId = item["relatedId"].isNull()
-            ? std::nullopt
-            : std::optional<std::string>(item["relatedId"].as<const char*>()),
-    });
-  }
-
-  return logs;
-}
-
-bool FailureLogStore::save(const std::vector<core::FailureLogEntry>& logs) {
-  DynamicJsonDocument doc(24 * 1024);
-  JsonArray items = doc.createNestedArray("items");
-  for (const auto& log : logs) {
-    JsonObject item = items.createNestedObject();
-    item["id"] = log.id;
-    item["api"] = log.api;
-    item["occurredAt"] = log.occurredAt;
-    item["code"] = log.code;
-    item["message"] = log.message;
-    if (log.relatedId.has_value()) {
-      item["relatedId"] = log.relatedId.value();
-    } else {
-      item["relatedId"] = nullptr;
+  bool save(const std::vector<core::FailureLogEntry>& logs) {
+    DynamicJsonDocument doc(24 * 1024);
+    JsonArray items = doc.createNestedArray("items");
+    for (const auto& log : logs) {
+      JsonObject item = items.createNestedObject();
+      item["id"] = log.id;
+      item["api"] = log.api;
+      item["occurredAt"] = log.occurredAt;
+      item["code"] = log.code;
+      item["message"] = log.message;
+      if (log.relatedId.has_value()) {
+        item["relatedId"] = log.relatedId.value();
+      } else {
+        item["relatedId"] = nullptr;
+      }
     }
+
+    return writeJsonFile(kFailureLogsPath, doc);
+  }
+};
+
+class StorageAuxStore {
+ public:
+  StorageAuxState load() {
+    auto content = readTextFile(kStorageAuxPath);
+    if (!content.has_value()) {
+      return {};
+    }
+
+    auto storageAux = decodeStorageAuxState(content.value());
+    return storageAux.value_or(StorageAuxState{});
   }
 
-  return writeJsonFile(kFailureLogsPath, doc);
-}
-
-StorageAuxState StorageAuxStore::load() {
-  auto content = readTextFile(kStorageAuxPath);
-  if (!content.has_value()) {
-    return {};
+  bool save(const StorageAuxState& storageAux) {
+    return writeTextFile(kStorageAuxPath, encodeStorageAuxState(storageAux));
   }
+};
 
-  auto storageAux = decodeStorageAuxState(content.value());
-  return storageAux.value_or(StorageAuxState{});
-}
+}  // namespace
 
-bool StorageAuxStore::save(const StorageAuxState& storageAux) {
-  return writeTextFile(kStorageAuxPath, encodeStorageAuxState(storageAux));
-}
+struct JsonLocalStore::Impl {
+  CredentialsStore credentialsStore;
+  SnapshotStore snapshotStore;
+  AttendanceQueueStore attendanceQueueStore;
+  FailureLogStore failureLogStore;
+  StorageAuxStore storageAuxStore;
+  LocalStoreInitStatus initStatus = {};
+};
+
+JsonLocalStore::JsonLocalStore() : impl_(std::make_unique<Impl>()) {}
+
+JsonLocalStore::~JsonLocalStore() = default;
+
+JsonLocalStore::JsonLocalStore(JsonLocalStore&&) noexcept = default;
+
+JsonLocalStore& JsonLocalStore::operator=(JsonLocalStore&&) noexcept = default;
 
 LocalStoreInitStatus JsonLocalStore::begin() {
-  initStatus_.credentialsReady = credentialsStore_.begin();
-  initStatus_.filesystemReady = LittleFS.begin(false);
-  return initStatus_;
+  impl_->initStatus.credentialsReady = impl_->credentialsStore.begin();
+  impl_->initStatus.filesystemReady = LittleFS.begin(false);
+  return impl_->initStatus;
 }
 
 StoredRuntimeState JsonLocalStore::load() {
   StoredRuntimeState state = {};
-  if (initStatus_.credentialsReady) {
-    state.credentials = credentialsStore_.load();
+  if (impl_->initStatus.credentialsReady) {
+    state.credentials = impl_->credentialsStore.load();
   }
-  if (initStatus_.filesystemReady) {
-    state.snapshots = snapshotStore_.load();
-    state.pendingAttendanceRecords = attendanceQueueStore_.load();
-    state.failureLogs = failureLogStore_.load();
-    state.storageAux = storageAuxStore_.load();
+  if (impl_->initStatus.filesystemReady) {
+    state.snapshots = impl_->snapshotStore.load();
+    state.pendingAttendanceRecords = impl_->attendanceQueueStore.load();
+    state.failureLogs = impl_->failureLogStore.load();
+    state.storageAux = impl_->storageAuxStore.load();
   }
   return state;
 }
 
 bool JsonLocalStore::saveCredentials(const core::DeviceCredentials& credentials) {
-  if (!initStatus_.credentialsReady) {
+  if (!impl_->initStatus.credentialsReady) {
     return false;
   }
-  return credentialsStore_.save(credentials);
+  return impl_->credentialsStore.save(credentials);
 }
 
 bool JsonLocalStore::saveSnapshots(const core::SnapshotBundle& snapshots) {
-  if (!initStatus_.filesystemReady) {
+  if (!impl_->initStatus.filesystemReady) {
     return false;
   }
-  return snapshotStore_.save(snapshots);
+  return impl_->snapshotStore.save(snapshots);
 }
 
 bool JsonLocalStore::savePendingAttendanceRecords(
     const std::vector<core::PendingAttendanceRecord>& records) {
-  if (!initStatus_.filesystemReady) {
+  if (!impl_->initStatus.filesystemReady) {
     return false;
   }
-  return attendanceQueueStore_.save(records);
+  return impl_->attendanceQueueStore.save(records);
 }
 
 bool JsonLocalStore::saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) {
-  if (!initStatus_.filesystemReady) {
+  if (!impl_->initStatus.filesystemReady) {
     return false;
   }
-  return failureLogStore_.save(logs);
+  return impl_->failureLogStore.save(logs);
 }
 
 bool JsonLocalStore::saveStorageAux(const StorageAuxState& storageAux) {
-  if (!initStatus_.filesystemReady) {
+  if (!impl_->initStatus.filesystemReady) {
     return false;
   }
-  return storageAuxStore_.save(storageAux);
+  return impl_->storageAuxStore.save(storageAux);
 }
 
 }  // namespace infra

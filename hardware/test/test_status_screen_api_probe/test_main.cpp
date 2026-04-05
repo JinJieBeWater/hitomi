@@ -9,8 +9,6 @@
 #include "infra/template_store_port.hpp"
 #include "ui/status_screen_presenter.hpp"
 
-#include "../src/ui/status_screen_presenter.cpp"
-
 namespace {
 
 void expect(bool condition, const std::string& message) {
