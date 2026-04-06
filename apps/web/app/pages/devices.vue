@@ -18,10 +18,9 @@ const pageSize = 20;
 const page = ref(1);
 const keyword = ref("");
 const status = ref<"active" | "disabled" | undefined>();
-const editingId = ref<string | null>(null);
 const editorOpen = ref(false);
+const editingDevice = ref<{ id: string; name: string; status: string } | null>(null);
 const actionError = ref("");
-const editorError = ref("");
 const deleteDeviceOpen = ref(false);
 const deleteDeviceLoading = ref(false);
 const deleteDeviceError = ref("");
@@ -41,10 +40,6 @@ const activationTarget = ref<{
   bootstrapSerial?: string | null;
   bootstrapSecret?: string | null;
 } | null>(null);
-const form = ref({
-  name: "",
-  status: "active",
-});
 const deleteDeviceImpact = ref<{
   id: string;
   deviceCode: string;
@@ -67,9 +62,9 @@ const devicesQuery = useQuery(
   ),
 );
 
-const createDevice = useMutation($orpc.device.create.mutationOptions());
-const updateDevice = useMutation($orpc.device.update.mutationOptions());
 const removeDevice = useMutation($orpc.device.remove.mutationOptions());
+const updateDevice = useMutation($orpc.device.update.mutationOptions());
+
 const pendingActivationsQuery = useQuery(
   computed(() =>
     $orpc.device.listPendingActivations.queryOptions({
@@ -129,7 +124,7 @@ const deviceColumns = [
   { accessorKey: "status", header: "状态" },
   { accessorKey: "lastSeenAt", header: "最近在线" },
   { accessorKey: "createdAt", header: "创建时间" },
-  { accessorKey: "actions", header: "操作" },
+  { accessorKey: "actions", header: "" },
 ];
 
 const deviceStatusOptions = [
@@ -164,21 +159,22 @@ const createdResultOpen = computed({
   },
 });
 
-const currentEditingDevice = computed(
-  () => rows.value.find((item) => item.id === editingId.value) ?? null,
-);
+watch(deleteDeviceOpen, (open) => {
+  if (!open) {
+    deleteDeviceLoading.value = false;
+    deleteDeviceError.value = "";
+    deleteDeviceImpact.value = null;
+  }
+});
 
-function resetForm() {
-  editingId.value = null;
-  editorError.value = "";
-  form.value = {
-    name: "",
-    status: "active",
-  };
+function openCreate() {
+  editingDevice.value = null;
+  editorOpen.value = true;
 }
 
-function closeEditor() {
-  editorOpen.value = false;
+function startEdit(item: any) {
+  editingDevice.value = { id: item.id, name: item.name, status: item.status };
+  editorOpen.value = true;
 }
 
 function getDeviceDeleteErrorMessage(error: any, fallback = "删除设备失败，请稍后重试") {
@@ -193,70 +189,6 @@ function getDeviceDeleteErrorMessage(error: any, fallback = "删除设备失败�
   }
 
   return fallback;
-}
-
-function openCreate() {
-  resetForm();
-  editorOpen.value = true;
-}
-
-function startEdit(item: any) {
-  editingId.value = item.id;
-  editorError.value = "";
-  form.value = {
-    name: item.name,
-    status: item.status,
-  };
-  editorOpen.value = true;
-}
-
-watch(editorOpen, (open) => {
-  if (!open) {
-    resetForm();
-  }
-});
-
-watch(deleteDeviceOpen, (open) => {
-  if (!open) {
-    deleteDeviceLoading.value = false;
-    deleteDeviceError.value = "";
-    deleteDeviceImpact.value = null;
-  }
-});
-
-async function handleSubmit() {
-  editorError.value = "";
-  actionError.value = "";
-
-  try {
-    if (editingId.value) {
-      await updateDevice.mutateAsync({
-        id: editingId.value,
-        name: form.value.name.trim(),
-        status: form.value.status as "active" | "disabled",
-      });
-
-      toast.add({ title: "设备已更新" });
-    } else {
-      const result = await createDevice.mutateAsync({
-        name: form.value.name.trim(),
-      });
-
-      lastCreated.value = {
-        id: result.device.id,
-        name: result.device.name,
-        deviceCode: result.device.deviceCode,
-        initialApiKey: result.initialApiKey,
-        bootstrapSerial: result.bootstrapSerial,
-        bootstrapSecret: result.bootstrapSecret,
-      };
-    }
-
-    await queryClient.invalidateQueries();
-    closeEditor();
-  } catch (error: any) {
-    editorError.value = error?.message || "保存失败";
-  }
 }
 
 function openActivationWizard(device: {
@@ -365,8 +297,8 @@ async function handleDeleteDevice(confirmText: string) {
     await queryClient.invalidateQueries();
     deleteDeviceOpen.value = false;
 
-    if (editingId.value === result.id) {
-      closeEditor();
+    if (editingDevice.value?.id === result.id) {
+      editorOpen.value = false;
     }
 
     toast.add({
@@ -376,6 +308,31 @@ async function handleDeleteDevice(confirmText: string) {
   } catch (error: any) {
     deleteDeviceError.value = getDeviceDeleteErrorMessage(error);
   }
+}
+
+function getRowActions(item: any) {
+  return [
+    [
+      {
+        label: "编辑",
+        icon: "i-lucide-pencil-line",
+        onSelect: () => startEdit(item),
+      },
+      {
+        label: item.status === "active" ? "禁用" : "启用",
+        icon: "i-lucide-power",
+        onSelect: () => quickToggle(item),
+      },
+    ],
+    [
+      {
+        label: "删除",
+        icon: "i-lucide-trash-2",
+        color: "error" as const,
+        onSelect: () => openDeleteDevice(item),
+      },
+    ],
+  ];
 }
 </script>
 
@@ -437,33 +394,19 @@ async function handleDeleteDevice(confirmText: string) {
         </FilterBar>
 
         <DataSurface title="设备列表">
-          <div v-if="devicesQuery.status.value === 'pending'" class="space-y-3">
-            <USkeleton class="h-12 w-full rounded-2xl" />
-            <USkeleton class="h-12 w-full rounded-2xl" />
-            <USkeleton class="h-12 w-full rounded-2xl" />
-          </div>
-
-          <UAlert
-            v-else-if="devicesQuery.status.value === 'error'"
-            color="error"
-            icon="i-lucide-alert-circle"
-            title="加载失败"
-            :description="devicesQuery.error.value?.message || '无法加载设备列表'"
-          />
-
-          <EmptyState
-            v-else-if="rows.length === 0"
-            title="暂无设备"
-            description="当前筛选条件下没有可显示的设备记录。"
+          <QueryGuard
+            :status="devicesQuery.status.value"
+            :error="devicesQuery.error.value?.message"
+            :empty="rows.length === 0"
+            empty-title="暂无设备"
+            empty-description="当前筛选条件下没有可显示的设备记录。"
           >
-            <template #actions>
+            <template #empty-actions>
               <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()"
                 >创建设备</UButton
               >
             </template>
-          </EmptyState>
 
-          <template v-else>
             <div class="workspace-surface-table hidden md:block">
               <UTable
                 :data="rows"
@@ -491,35 +434,7 @@ async function handleDeleteDevice(confirmText: string) {
                 </template>
 
                 <template #actions-cell="{ row }">
-                  <div class="flex flex-wrap gap-2">
-                    <UButton
-                      size="xs"
-                      variant="outline"
-                      icon="i-lucide-pencil-line"
-                      @click="startEdit(row.original)"
-                    >
-                      编辑
-                    </UButton>
-
-                    <UButton
-                      size="xs"
-                      color="neutral"
-                      icon="i-lucide-power"
-                      @click="quickToggle(row.original)"
-                    >
-                      {{ row.original.status === "active" ? "禁用" : "启用" }}
-                    </UButton>
-
-                    <UButton
-                      size="xs"
-                      color="error"
-                      variant="outline"
-                      icon="i-lucide-trash-2"
-                      @click="openDeleteDevice(row.original)"
-                    >
-                      删除
-                    </UButton>
-                  </div>
+                  <RowActions :items="getRowActions(row.original)" />
                 </template>
               </UTable>
             </div>
@@ -534,12 +449,15 @@ async function handleDeleteDevice(confirmText: string) {
                     <div class="text-sm text-toned">{{ item.deviceCode }}</div>
                   </div>
 
-                  <UBadge
-                    :label="labelDeviceStatus(item.status)"
-                    :color="colorDeviceStatus(item.status)"
-                    variant="subtle"
-                    class="rounded-full"
-                  />
+                  <div class="flex items-center gap-2">
+                    <UBadge
+                      :label="labelDeviceStatus(item.status)"
+                      :color="colorDeviceStatus(item.status)"
+                      variant="subtle"
+                      class="rounded-full"
+                    />
+                    <RowActions :items="getRowActions(item)" trigger-size="sm" />
+                  </div>
                 </div>
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
@@ -557,37 +475,9 @@ async function handleDeleteDevice(confirmText: string) {
                     <div class="mt-1 text-highlighted">{{ formatDateTime(item.createdAt) }}</div>
                   </div>
                 </div>
-
-                <div class="mt-4 flex flex-wrap justify-end gap-2">
-                  <UButton
-                    size="sm"
-                    variant="outline"
-                    icon="i-lucide-pencil-line"
-                    @click="startEdit(item)"
-                  >
-                    编辑
-                  </UButton>
-                  <UButton
-                    size="sm"
-                    color="neutral"
-                    icon="i-lucide-power"
-                    @click="quickToggle(item)"
-                  >
-                    {{ item.status === "active" ? "禁用" : "启用" }}
-                  </UButton>
-                  <UButton
-                    size="sm"
-                    color="error"
-                    variant="outline"
-                    icon="i-lucide-trash-2"
-                    @click="openDeleteDevice(item)"
-                  >
-                    删除
-                  </UButton>
-                </div>
               </div>
             </div>
-          </template>
+          </QueryGuard>
 
           <template #footer>
             <ListPagination
@@ -653,80 +543,13 @@ async function handleDeleteDevice(confirmText: string) {
         </PageCard>
       </div>
 
-      <USlideover
-        v-model:open="editorOpen"
-        :title="editingId ? '编辑设备' : '创建设备'"
-        side="right"
-      >
-        <template #body>
-          <form class="space-y-5" @submit.prevent="handleSubmit">
-            <UFormField label="设备名称" required>
-              <UInput
-                v-model="form.name"
-                data-testid="device-name-input"
-                placeholder="例如 前台一号机"
-                icon="i-lucide-monitor"
-                class="w-full"
-              />
-            </UFormField>
-
-            <UFormField v-if="editingId" label="状态">
-              <USelect
-                v-model="form.status"
-                data-testid="device-status-select"
-                :items="deviceStatusOptions"
-                class="w-full"
-              />
-            </UFormField>
-
-            <UAlert
-              v-if="editorError"
-              color="error"
-              icon="i-lucide-alert-circle"
-              title="操作失败"
-              :description="editorError"
-            />
-
-            <div class="flex flex-col gap-3 pt-2">
-              <UButton
-                type="submit"
-                data-testid="device-submit-button"
-                :loading="createDevice.isPending.value || updateDevice.isPending.value"
-                class="w-full rounded-2xl"
-                icon="i-lucide-save"
-              >
-                {{ editingId ? "保存修改" : "创建设备" }}
-              </UButton>
-
-              <UButton
-                type="button"
-                variant="ghost"
-                color="neutral"
-                class="w-full"
-                @click="closeEditor()"
-                >取消</UButton
-              >
-            </div>
-
-            <div
-              v-if="editingId"
-              class="border-t border-neutral-200/70 pt-5 dark:border-neutral-800/80"
-            >
-              <UButton
-                type="button"
-                color="error"
-                variant="outline"
-                class="w-full rounded-2xl"
-                icon="i-lucide-trash-2"
-                :disabled="!currentEditingDevice"
-                @click="openDeleteDevice(currentEditingDevice)"
-              >
-                删除设备
-              </UButton>
-            </div>
-          </form>
-        </template>
-      </USlideover>
+      <DeviceSlideoverEditor
+        :open="editorOpen"
+        :device="editingDevice"
+        @update:open="editorOpen = $event"
+        @created="lastCreated = $event"
+        @request-delete="openDeleteDevice(editingDevice)"
+      />
 
       <DeviceCredentialsModal
         v-model:open="createdResultOpen"

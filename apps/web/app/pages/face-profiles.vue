@@ -47,7 +47,7 @@ const faceProfileColumns = [
   { accessorKey: "device", header: "设备" },
   { accessorKey: "status", header: "状态" },
   { accessorKey: "updatedAt", header: "更新时间" },
-  { accessorKey: "actions", header: "操作" },
+  { accessorKey: "actions", header: "" },
 ];
 
 const statusOptions = [
@@ -79,6 +79,28 @@ async function goToEmployee(item: any) {
       manageFace: item.employeeId,
     },
   });
+}
+
+function getRowActions(item: any) {
+  const actions = [
+    {
+      label: "查看员工",
+      icon: "i-lucide-arrow-up-right",
+      onSelect: () => goToEmployee(item),
+    },
+    ...(item.status === "pending"
+      ? [
+          {
+            label: "取消任务",
+            icon: "i-lucide-ban",
+            color: "error" as const,
+            onSelect: () => handleCancel(item.id),
+          },
+        ]
+      : []),
+  ];
+
+  return [actions];
 }
 
 function resetFilters() {
@@ -122,27 +144,13 @@ function resetFilters() {
             </div>
           </template>
 
-          <div v-if="faceProfilesQuery.status.value === 'pending'" class="space-y-3">
-            <USkeleton class="h-12 w-full rounded-2xl" />
-            <USkeleton class="h-12 w-full rounded-2xl" />
-            <USkeleton class="h-12 w-full rounded-2xl" />
-          </div>
-
-          <UAlert
-            v-else-if="faceProfilesQuery.status.value === 'error'"
-            color="error"
-            icon="i-lucide-alert-circle"
-            title="加载失败"
-            :description="faceProfilesQuery.error.value?.message || '无法加载录脸记录列表'"
-          />
-
-          <EmptyState
-            v-else-if="rows.length === 0"
-            title="暂无录脸记录"
-            description="暂无匹配的录脸记录。"
-          />
-
-          <template v-else>
+          <QueryGuard
+            :status="faceProfilesQuery.status.value"
+            :error="faceProfilesQuery.error.value?.message"
+            :empty="rows.length === 0"
+            empty-title="暂无录脸记录"
+            empty-description="暂无匹配的录脸记录。"
+          >
             <div class="workspace-surface-table hidden md:block">
               <UTable
                 :data="rows"
@@ -184,27 +192,7 @@ function resetFilters() {
                 </template>
 
                 <template #actions-cell="{ row }">
-                  <div class="flex flex-wrap gap-2">
-                    <UButton
-                      size="xs"
-                      variant="outline"
-                      icon="i-lucide-arrow-up-right"
-                      @click="goToEmployee(row.original)"
-                    >
-                      查看员工
-                    </UButton>
-
-                    <UButton
-                      v-if="row.original.status === 'pending'"
-                      size="xs"
-                      color="error"
-                      variant="outline"
-                      icon="i-lucide-ban"
-                      @click="handleCancel(row.original.id)"
-                    >
-                      取消
-                    </UButton>
-                  </div>
+                  <RowActions :items="getRowActions(row.original)" />
                 </template>
               </UTable>
             </div>
@@ -219,12 +207,15 @@ function resetFilters() {
                     <div class="text-sm text-toned">{{ item.employee?.code || "-" }}</div>
                   </div>
 
-                  <UBadge
-                    :label="labelFaceStatus(item.status)"
-                    :color="colorFaceStatus(item.status)"
-                    variant="subtle"
-                    class="rounded-full"
-                  />
+                  <div class="flex items-center gap-2">
+                    <UBadge
+                      :label="labelFaceStatus(item.status)"
+                      :color="colorFaceStatus(item.status)"
+                      variant="subtle"
+                      class="rounded-full"
+                    />
+                    <RowActions :items="getRowActions(item)" trigger-size="sm" />
+                  </div>
                 </div>
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
@@ -243,31 +234,9 @@ function resetFilters() {
                     <div class="mt-1 text-highlighted">{{ formatDateTime(item.updatedAt) }}</div>
                   </div>
                 </div>
-
-                <div class="mt-4 flex flex-wrap justify-end gap-2">
-                  <UButton
-                    size="sm"
-                    variant="outline"
-                    icon="i-lucide-arrow-up-right"
-                    @click="goToEmployee(item)"
-                  >
-                    查看员工
-                  </UButton>
-
-                  <UButton
-                    v-if="item.status === 'pending'"
-                    size="sm"
-                    color="error"
-                    variant="outline"
-                    icon="i-lucide-ban"
-                    @click="handleCancel(item.id)"
-                  >
-                    取消
-                  </UButton>
-                </div>
               </div>
             </div>
-          </template>
+          </QueryGuard>
 
           <template #footer>
             <ListPagination

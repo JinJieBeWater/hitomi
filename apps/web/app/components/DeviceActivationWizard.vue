@@ -248,13 +248,35 @@ async function handleIssueActivation() {
           :description="wizard.errorMessage.value"
         />
 
-        <UAlert
+        <div
           v-if="!serial.supported.value"
-          color="warning"
-          icon="i-lucide-monitor-warning"
-          title="当前浏览器不支持 Web Serial"
-          description="请使用 Chromium 浏览器，或回退到 PlatformIO / 串口工具手动发送命令。"
-        />
+          class="rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4 text-sm dark:border-amber-800/60 dark:bg-amber-950/40"
+        >
+          <div class="flex gap-3">
+            <UIcon name="i-lucide-monitor-warning" class="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div class="space-y-3">
+              <div>
+                <div class="font-semibold text-amber-900 dark:text-amber-200">当前页面不支持 Web Serial</div>
+                <div class="mt-1 text-amber-800 dark:text-amber-300">
+                  Web Serial API 仅在 <strong>安全上下文</strong>（HTTPS 或 localhost）下可用。
+                  通过局域网 IP 访问时需手动开启 Chrome 实验性标志。
+                </div>
+              </div>
+              <div class="space-y-1.5">
+                <div class="font-medium text-amber-900 dark:text-amber-200">解决方法：</div>
+                <ol class="list-inside list-decimal space-y-1 text-amber-800 dark:text-amber-300">
+                  <li>在 Chrome 地址栏打开 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code></li>
+                  <li>将当前页面地址（如 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">http://192.168.x.x:3000</code>）填入输入框</li>
+                  <li>点击 <strong>Enabled</strong>，然后点击 <strong>Relaunch</strong> 重启浏览器</li>
+                  <li>重新打开本页面</li>
+                </ol>
+              </div>
+              <div class="text-amber-700 dark:text-amber-400">
+                或者直接在运行服务的机器上用 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">http://localhost</code> 访问，无需额外配置。
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div class="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
           <div class="space-y-4">

@@ -14,12 +14,13 @@ const props = defineProps<{
 const hiddenCaptions = new Set(["当前页", "当前筛选"]);
 
 function toneClass(color?: MetricTone) {
+  if (color === "primary") return "bg-primary/10 text-primary ring-primary/20";
   if (color === "success") return "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20";
   if (color === "warning") return "bg-amber-500/10 text-amber-700 ring-amber-500/20";
   if (color === "error") return "bg-rose-500/10 text-rose-700 ring-rose-500/20";
   if (color === "neutral") return "bg-neutral-900/5 text-neutral-600 ring-neutral-900/10";
 
-  return "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20";
+  return "bg-primary/10 text-primary ring-primary/20";
 }
 
 function shouldShowCaption(caption?: string): boolean {

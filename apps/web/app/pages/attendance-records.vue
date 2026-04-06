@@ -249,27 +249,13 @@ function resetFilters() {
         </FilterBar>
 
         <DataSurface title="考勤记录列表">
-          <div v-if="recordsQuery.status.value === 'pending'" class="space-y-3">
-            <USkeleton class="h-12 w-full rounded-2xl" />
-            <USkeleton class="h-12 w-full rounded-2xl" />
-            <USkeleton class="h-12 w-full rounded-2xl" />
-          </div>
-
-          <UAlert
-            v-else-if="recordsQuery.status.value === 'error'"
-            color="error"
-            icon="i-lucide-alert-circle"
-            title="加载失败"
-            :description="recordsQuery.error.value?.message || '无法加载考勤记录'"
-          />
-
-          <EmptyState
-            v-else-if="rows.length === 0"
-            title="暂无考勤记录"
-            description="当前筛选条件下没有可显示的考勤记录。"
-          />
-
-          <template v-else>
+          <QueryGuard
+            :status="recordsQuery.status.value"
+            :error="recordsQuery.error.value?.message"
+            :empty="rows.length === 0"
+            empty-title="暂无考勤记录"
+            empty-description="当前筛选条件下没有可显示的考勤记录。"
+          >
             <div class="workspace-surface-table hidden md:block">
               <UTable
                 :data="rows"
@@ -351,7 +337,7 @@ function resetFilters() {
                 </div>
               </div>
             </div>
-          </template>
+          </QueryGuard>
 
           <template #footer>
             <ListPagination
