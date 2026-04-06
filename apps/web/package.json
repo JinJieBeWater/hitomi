@@ -23,6 +23,8 @@
     "@orpc/tanstack-query": "^1.13.6",
     "@orpc/zod": "catalog:",
     "@tanstack/vue-query": "^5.92.9",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "better-auth": "catalog:",
     "dotenv": "catalog:",
     "libsql": "catalog:",

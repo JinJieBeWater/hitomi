@@ -12,7 +12,7 @@ export default defineNuxtConfig({
   experimental: {
     payloadExtraction: "client",
   },
-  css: ["~/assets/css/main.css"],
+  css: ["~/assets/css/main.css", "@xterm/xterm/css/xterm.css"],
   devServer: {
     host: resolveAppListenHost(),
     port: resolveAppPort(),

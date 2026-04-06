@@ -25,6 +25,7 @@ export type DeviceSerialSummary = {
   deviceSerial: string;
   activationState: "activated" | "pending_activation" | "unconfigured";
   deviceCode: string;
+  lastErrorCode: string | null;
 };
 
 type DeviceSerialResponse = {
@@ -67,12 +68,15 @@ function timeoutPromise(timeoutMs: number) {
   });
 }
 
+const MAX_LOG_LINES = 500;
+
 export function useDeviceSerial() {
   const port = ref<BrowserSerialPort | null>(null);
   const reader = ref<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const writer = ref<WritableStreamDefaultWriter<Uint8Array> | null>(null);
   const lineBuffer = ref("");
   const lastRawLine = ref("");
+  const serialLogs = ref<string[]>([]);
   const supported = computed(() => getSerialApi() !== null);
   const connected = computed(() => port.value !== null);
   const encoder = new TextEncoder();
@@ -118,6 +122,18 @@ export function useDeviceSerial() {
     lineBuffer.value = "";
   }
 
+  function clearLogs() {
+    serialLogs.value = [];
+  }
+
+  function appendLog(line: string) {
+    if (!line) return;
+    serialLogs.value.push(line);
+    if (serialLogs.value.length > MAX_LOG_LINES) {
+      serialLogs.value.splice(0, serialLogs.value.length - MAX_LOG_LINES);
+    }
+  }
+
   async function readLine(timeoutMs = 5000): Promise<string> {
     const activeReader = reader.value;
     if (!activeReader) {
@@ -131,6 +147,7 @@ export function useDeviceSerial() {
         const line = lineBuffer.value.slice(0, newlineIndex).replace(/\r$/, "");
         lineBuffer.value = lineBuffer.value.slice(newlineIndex + 1);
         lastRawLine.value = line;
+        appendLog(line);
         return line;
       }
 
@@ -179,6 +196,8 @@ export function useDeviceSerial() {
     supported,
     connected,
     lastRawLine,
+    serialLogs,
+    clearLogs,
     connect,
     disconnect,
     sendCommand,

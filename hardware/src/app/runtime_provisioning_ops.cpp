@@ -22,7 +22,6 @@ void resetConnectivity(RuntimeState& state) {
   state.lastActivationAttemptMs = 0;
   state.apiProbeSucceeded = false;
   state.apiProbeStatusCode = std::nullopt;
-  state.activationRegistrationId = std::nullopt;
   state.activationInFlight = false;
   resetNetworkTaskSchedule(state);
 }
@@ -97,7 +96,7 @@ void processUsbProvisioning(const RuntimeContext& context, RuntimeState& state, 
       }
 
       const bool ok = applyUsbProvisioningCommand(context, state, command.value(), nowMs);
-      const std::string response = buildUsbProvisioningResponse(ok, ok ? "applied" : "rejected", state.deviceConfig);
+      const std::string response = buildUsbProvisioningResponse(ok, ok ? "applied" : "rejected", state.deviceConfig, state.lastErrorCode);
       Serial.println(response.c_str());
       state.renderDirty = true;
       continue;

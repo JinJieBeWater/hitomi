@@ -28,6 +28,8 @@ struct UsbProvisioningCommand {
 };
 
 std::optional<UsbProvisioningCommand> parseUsbProvisioningCommand(const std::string& line);
-std::string buildUsbProvisioningResponse(bool ok, const std::string& message, const core::DeviceConfig& config);
+std::string buildUsbProvisioningResponse(
+    bool ok, const std::string& message, const core::DeviceConfig& config,
+    const std::optional<std::string>& lastErrorCode = std::nullopt);
 
 }  // namespace app

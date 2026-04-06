@@ -31,6 +31,7 @@ constexpr uint32_t kActivationRetryIntervalMs = 5 * 1000;
 constexpr uint32_t kSyncIntervalMs = 60 * 1000;
 constexpr uint32_t kUploadRetryIntervalMs = 15 * 1000;
 constexpr uint32_t kTemplateStoreProbeIntervalMs = 2000;
+constexpr uint32_t kHttpRequestTimeoutMs = 5000;
 constexpr std::size_t kFailureLogLimit = 200;
 constexpr std::size_t kUploadBatchSize = 100;
 constexpr char kSdMountPoint[] = "/sdcard";

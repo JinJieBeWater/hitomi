@@ -33,10 +33,6 @@ const deviceDeleteInput = deviceIdInput.extend({
   confirmText: z.string().trim().min(1),
 });
 
-const activationIdInput = z.object({
-  deviceId: z.string().min(1),
-});
-
 export const deviceRouter = {
   list: protectedProcedure.input(listInput).handler(async ({ input }) => {
     const pageInput = normalizePageInput(input);
@@ -82,7 +78,6 @@ export const deviceRouter = {
         bootstrapSerial,
         bootstrapSecretHash,
         activationStatus: "pending",
-        pendingApiKey: initialApiKey,
       });
 
       const created = await getDevice(db, id);
@@ -107,7 +102,7 @@ export const deviceRouter = {
     .handler(async ({ input }) => {
       const where = input.status
         ? eq(device.activationStatus, input.status)
-        : or(eq(device.activationStatus, "pending"), eq(device.activationStatus, "issued"));
+        : eq(device.activationStatus, "pending");
 
       const items = await db.query.device.findMany({
         where,
@@ -125,49 +120,6 @@ export const deviceRouter = {
         updatedAt: item.updatedAt.getTime(),
       }));
     }),
-  issueActivation: protectedProcedure.input(activationIdInput).handler(async ({ input }) => {
-    const current = await db.query.device.findFirst({
-      where: eq(device.id, input.deviceId),
-    });
-
-    if (!current) {
-      throw adminError("NOT_FOUND", "DEVICE_NOT_FOUND", "Device activation was not found");
-    }
-    if (!current.bootstrapSerial || !current.bootstrapSecretHash) {
-      throw adminError(
-        "CONFLICT",
-        "DEVICE_BOOTSTRAP_NOT_CONFIGURED",
-        "Device bootstrap identity is not configured",
-      );
-    }
-    if (current.status === "disabled") {
-      throw adminError(
-        "CONFLICT",
-        "DEVICE_DISABLED",
-        "Disabled device cannot be issued activation credentials",
-      );
-    }
-
-    const nextApiKey = current.pendingApiKey ?? createApiKey();
-    const apiKeyHash = await sha256Hex(nextApiKey);
-
-    await db
-      .update(device)
-      .set({
-        apiKeyHash,
-        activationStatus: "issued",
-        pendingApiKey: nextApiKey,
-        // Preserve activatedAt for re-issued devices so history is not lost
-        activatedAt: current.activationStatus === "activated" ? current.activatedAt : null,
-      })
-      .where(eq(device.id, input.deviceId));
-
-    return {
-      deviceId: input.deviceId,
-      bootstrapSerial: current.bootstrapSerial,
-      status: "issued" as const,
-    };
-  }),
   update: protectedProcedure
     .input(
       z
@@ -232,6 +184,14 @@ export const deviceRouter = {
       confirmText: current.deviceCode,
     };
   }),
+  findByBootstrapSerial: protectedProcedure
+    .input(z.object({ serial: z.string().min(1) }))
+    .handler(async ({ input }) => {
+      const found = await db.query.device.findFirst({
+        where: eq(device.bootstrapSerial, input.serial),
+      });
+      return found ? serializeDeviceSummary(found) : null;
+    }),
   remove: protectedProcedure.input(deviceDeleteInput).handler(async ({ input }) => {
     const current = await getDevice(db, input.id);
 

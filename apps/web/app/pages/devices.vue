@@ -32,14 +32,7 @@ const lastCreated = ref<{
   bootstrapSecret: string;
   name: string;
 } | null>(null);
-const activationWizardOpen = ref(false);
-const activationTarget = ref<{
-  id: string;
-  name: string;
-  deviceCode: string;
-  bootstrapSerial?: string | null;
-  bootstrapSecret?: string | null;
-} | null>(null);
+const usbSlideoverOpen = ref(false);
 const deleteDeviceImpact = ref<{
   id: string;
   deviceCode: string;
@@ -65,15 +58,7 @@ const devicesQuery = useQuery(
 const removeDevice = useMutation($orpc.device.remove.mutationOptions());
 const updateDevice = useMutation($orpc.device.update.mutationOptions());
 
-const pendingActivationsQuery = useQuery(
-  computed(() =>
-    $orpc.device.listPendingActivations.queryOptions({
-      input: {},
-    }),
-  ),
-);
 const rows = computed(() => devicesQuery.data.value?.items ?? []);
-const pendingActivationRows = computed(() => pendingActivationsQuery.data.value ?? []);
 const { total, resetPage } = usePagedListState({
   page,
   pageSize,
@@ -189,27 +174,6 @@ function getDeviceDeleteErrorMessage(error: any, fallback = "删除设备失败�
   }
 
   return fallback;
-}
-
-function openActivationWizard(device: {
-  id: string;
-  name: string;
-  deviceCode: string;
-  bootstrapSerial?: string | null;
-  bootstrapSecret?: string | null;
-}) {
-  activationTarget.value = device;
-  lastCreated.value = null;
-  activationWizardOpen.value = true;
-}
-
-async function handleActivationCompleted() {
-  await Promise.all([
-    queryClient.invalidateQueries(),
-    pendingActivationsQuery.refetch(),
-    devicesQuery.refetch(),
-  ]);
-  activationWizardOpen.value = false;
 }
 
 async function quickToggle(item: any) {
@@ -341,9 +305,8 @@ function getRowActions(item: any) {
     <template #header>
       <PageHeader title="设备管理" :badges="headerBadges">
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="devicesQuery.refetch()"
-            >刷新</UButton
-          >
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="devicesQuery.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-usb" @click="usbSlideoverOpen = true">连接设备</UButton>
           <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()">创建设备</UButton>
         </template>
       </PageHeader>
@@ -489,58 +452,6 @@ function getRowActions(item: any) {
           </template>
         </DataSurface>
 
-        <PageCard
-          title="待激活设备"
-          subtitle="这里展示已创建且仍需后台发放激活的设备。"
-          icon="i-lucide-plug-zap"
-        >
-          <div class="space-y-3">
-            <p
-              v-if="!pendingActivationRows.length"
-              class="rounded-2xl border border-dashed border-neutral-300/70 px-4 py-5 text-sm text-muted dark:border-neutral-800/80"
-            >
-              当前没有待激活设备。
-            </p>
-
-            <div
-              v-for="item in pendingActivationRows"
-              :key="item.deviceId"
-              class="flex flex-col gap-3 rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80 lg:flex-row lg:items-center lg:justify-between"
-            >
-              <div class="space-y-1">
-                <div class="text-sm font-semibold text-highlighted">
-                  {{ item.deviceName }}
-                </div>
-                <div class="text-xs text-muted">设备码：{{ item.deviceCode }}</div>
-                <div class="text-xs text-muted">
-                  Bootstrap 序列号：{{ item.bootstrapSerial || "未配置" }}
-                </div>
-                <div class="text-xs text-muted">当前状态：{{ item.status }}</div>
-                <div class="text-xs text-muted">
-                  最近 Hello：{{ item.lastHelloAt ? formatDateTime(item.lastHelloAt) : "暂无" }}
-                </div>
-              </div>
-
-              <div class="flex items-center gap-2">
-                <UButton
-                  size="sm"
-                  color="primary"
-                  icon="i-lucide-usb"
-                  @click="
-                    openActivationWizard({
-                      id: item.deviceId,
-                      name: item.deviceName,
-                      deviceCode: item.deviceCode,
-                      bootstrapSerial: item.bootstrapSerial,
-                    })
-                  "
-                >
-                  {{ item.status === "issued" ? "继续激活" : "开始激活" }}
-                </UButton>
-              </div>
-            </div>
-          </div>
-        </PageCard>
       </div>
 
       <DeviceSlideoverEditor
@@ -556,20 +467,12 @@ function getRowActions(item: any) {
         :device="lastCreated"
         @copy:code="lastCreated && copyText('设备码', lastCreated.deviceCode)"
         @copy:key="lastCreated && copyText('初始化密钥', lastCreated.initialApiKey)"
-        @copy:bootstrap-serial="
-          lastCreated && copyText('Bootstrap 序列号', lastCreated.bootstrapSerial)
-        "
-        @copy:bootstrap-secret="
-          lastCreated && copyText('Bootstrap 密钥', lastCreated.bootstrapSecret)
-        "
-        @start-activation="lastCreated && openActivationWizard(lastCreated)"
+        @copy:bootstrap-serial="lastCreated && copyText('Bootstrap 序列号', lastCreated.bootstrapSerial)"
+        @copy:bootstrap-secret="lastCreated && copyText('Bootstrap 密钥', lastCreated.bootstrapSecret)"
+        @start-activation="createdResultOpen = false; usbSlideoverOpen = true"
       />
 
-      <DeviceActivationWizard
-        v-model:open="activationWizardOpen"
-        :device="activationTarget"
-        @completed="handleActivationCompleted"
-      />
+      <DeviceUsbSlideover v-model:open="usbSlideoverOpen" />
 
       <DeleteConfirmModal
         :open="deleteDeviceOpen"

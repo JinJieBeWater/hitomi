@@ -31,7 +31,6 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.activeWifiSsid = state.activeWifiSsid;
   status.activationState = state.deviceConfig.activationState();
   status.bootstrapConfigured = state.deviceConfig.bootstrapIdentity.configured();
-  status.activationRegistrationId = state.activationRegistrationId;
   status.apiConfigured = state.deviceConfig.backendLocator.configured() && context.deviceApiClient.configured();
   status.apiProbeInFlight = state.apiProbeInFlight;
   status.apiProbeSucceeded = state.apiProbeSucceeded;

@@ -1,12 +1,12 @@
 {
   "folders": [
-	{
-		"path": "."
-	},
-	{
-		"name": "hardware",
-		"path": "hardware"
-	}
-],
-  "settings": {}
+    {
+      "path": ".",
+    },
+    {
+      "name": "hardware",
+      "path": "hardware",
+    },
+  ],
+  "settings": {},
 }

@@ -47,12 +47,6 @@ export const bootstrapHelloBodySchema = z.object({
   wifiSsid: z.string().min(1).nullable().optional(),
 });
 
-export const activationStatusBodySchema = z.object({
-  deviceSerial: z.string().min(1),
-  bootstrapSecret: z.string().min(1),
-  registrationId: z.string().min(1),
-});
-
 export type DeviceErrorCode =
   | "DEVICE_AUTH_FAILED"
   | "DEVICE_BOOTSTRAP_AUTH_FAILED"
@@ -166,23 +160,24 @@ export async function authenticateBootstrapDevice(deviceSerial: string, bootstra
 }
 
 export async function buildBootstrapActivationResponse(activation: typeof device.$inferSelect) {
-  // pendingApiKey is populated when admin issues activation. The device treats
-  // receiving credentials as "activated", even though the DB status is still
-  // "issued" until the device first syncs and consumes the key.
-  if (activation.pendingApiKey) {
-    return {
-      registrationId: activation.id,
-      state: "activated",
-      deviceCode: activation.deviceCode,
-      apiKey: activation.pendingApiKey,
-    };
-  }
+  const newApiKey =
+    crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+  const apiKeyHash = await sha256Hex(newApiKey);
+
+  await db
+    .update(device)
+    .set({
+      apiKeyHash,
+      activationStatus: "activated",
+      activatedAt: activation.activatedAt ?? new Date(),
+    })
+    .where(eq(device.id, activation.id));
 
   return {
     registrationId: activation.id,
-    state: activation.activationStatus,
-    deviceCode: null,
-    apiKey: null,
+    state: "activated" as const,
+    deviceCode: activation.deviceCode,
+    apiKey: newApiKey,
   };
 }
 
@@ -213,9 +208,6 @@ export async function authenticateDevice(deviceCode: string, apiKey: string) {
     .update(device)
     .set({
       lastSeenAt: now,
-      activationStatus: current.pendingApiKey ? "activated" : current.activationStatus,
-      pendingApiKey: null,
-      activatedAt: current.pendingApiKey ? now : current.activatedAt,
     })
     .where(eq(device.id, current.id));
 

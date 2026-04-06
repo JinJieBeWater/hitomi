@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "board/app_config.hpp"
 #include "core/use_cases.hpp"
 
 namespace infra {
@@ -51,6 +52,7 @@ ApiResult<T> postJson(const std::string& url, const DynamicJsonDocument& request
     return result;
   }
 
+  http.setTimeout(board::kHttpRequestTimeoutMs);
   http.addHeader("Content-Type", "application/json");
   const int httpCode = http.POST(body);
   const String responseBody = http.getString();
@@ -240,6 +242,7 @@ ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
     return result;
   }
 
+  http.setTimeout(board::kHttpRequestTimeoutMs);
   const int httpCode = http.POST("");
   const String responseBody = http.getString();
   http.end();
@@ -294,15 +297,6 @@ ApiResult<BootstrapActivationResponse> HttpDeviceApiClient::bootstrapHello(const
       endpointUrl("/api/device/bootstrap/hello"), requestDoc, parseBootstrapActivationResponse);
 }
 
-ApiResult<BootstrapActivationResponse> HttpDeviceApiClient::pollActivation(
-    const core::BootstrapIdentity& identity, const std::string& registrationId) {
-  DynamicJsonDocument requestDoc(1024);
-  requestDoc["deviceSerial"] = identity.deviceSerial;
-  requestDoc["bootstrapSecret"] = identity.bootstrapSecret;
-  requestDoc["registrationId"] = registrationId;
-  return postJson<BootstrapActivationResponse>(
-      endpointUrl("/api/device/bootstrap/claim-status"), requestDoc, parseBootstrapActivationResponse);
-}
 
 ApiResult<core::SyncPayload> HttpDeviceApiClient::sync(const core::DeviceCredentials& credentials) {
   DynamicJsonDocument requestDoc(1024);

@@ -82,7 +82,9 @@ std::optional<UsbProvisioningCommand> parseUsbProvisioningCommand(const std::str
   return std::nullopt;
 }
 
-std::string buildUsbProvisioningResponse(bool ok, const std::string& message, const core::DeviceConfig& config) {
+std::string buildUsbProvisioningResponse(
+    bool ok, const std::string& message, const core::DeviceConfig& config,
+    const std::optional<std::string>& lastErrorCode) {
   StaticJsonDocument<512> doc;
   doc["ok"] = ok;
   doc["message"] = message;
@@ -94,6 +96,11 @@ std::string buildUsbProvisioningResponse(bool ok, const std::string& message, co
   summary["deviceSerial"] = config.bootstrapIdentity.deviceSerial;
   summary["activationState"] = activationStateValue(config.activationState());
   summary["deviceCode"] = config.runtimeCredentials.deviceCode;
+  if (lastErrorCode.has_value()) {
+    summary["lastErrorCode"] = lastErrorCode.value();
+  } else {
+    summary["lastErrorCode"] = nullptr;
+  }
 
   std::string output;
   serializeJson(doc, output);

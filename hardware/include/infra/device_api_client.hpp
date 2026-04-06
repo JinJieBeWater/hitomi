@@ -65,8 +65,6 @@ class DeviceApiClient {
   virtual void setBaseUrl(const std::string& baseUrl) = 0;
   virtual ApiResult<ServerProbeResponse> probeServer() = 0;
   virtual ApiResult<BootstrapActivationResponse> bootstrapHello(const BootstrapHelloRequest& request) = 0;
-  virtual ApiResult<BootstrapActivationResponse> pollActivation(
-      const core::BootstrapIdentity& identity, const std::string& registrationId) = 0;
   virtual ApiResult<core::SyncPayload> sync(const core::DeviceCredentials& credentials) = 0;
   virtual ApiResult<EnrollmentReportResponse> reportEnrollment(
       const core::DeviceCredentials& credentials, const EnrollmentReportRequest& request) = 0;

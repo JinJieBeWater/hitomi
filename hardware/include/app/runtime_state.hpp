@@ -43,7 +43,6 @@ struct RuntimeState {
   std::optional<std::string> apiProbeStatusCode;
   std::optional<std::string> lastErrorCode;
   std::optional<std::string> activeWifiSsid;
-  std::optional<std::string> activationRegistrationId;
   std::string serialCommandBuffer;
 };
 

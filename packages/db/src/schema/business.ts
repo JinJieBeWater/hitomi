@@ -4,7 +4,7 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 export const deviceStatuses = ["active", "disabled"] as const;
 export type DeviceStatus = (typeof deviceStatuses)[number];
 
-export const deviceActivationStatuses = ["pending", "issued", "activated"] as const;
+export const deviceActivationStatuses = ["pending", "activated"] as const;
 export type DeviceActivationStatus = (typeof deviceActivationStatuses)[number];
 
 export const faceProfileStatuses = ["pending", "success", "failed", "cancelled"] as const;
@@ -44,7 +44,6 @@ export const device = sqliteTable(
       .$type<DeviceActivationStatus>()
       .default("activated")
       .notNull(),
-    pendingApiKey: text("pending_api_key"),
     lastHelloAt: integer("last_hello_at", { mode: "timestamp_ms" }),
     activatedAt: integer("activated_at", { mode: "timestamp_ms" }),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),

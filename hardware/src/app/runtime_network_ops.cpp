@@ -104,47 +104,46 @@ void performActivation(const RuntimeContext& context, RuntimeState& state, uint3
   state.lastActivationAttemptMs = nowMs;
   state.renderDirty = true;
 
-  infra::ApiResult<infra::BootstrapActivationResponse> activationResult = {};
-  std::string apiPath = "/api/device/bootstrap/claim-status";
+  const char* apiPath = "/api/device/bootstrap/hello";
+  Serial.printf("[APP] Activation attempt path=%s serial=%s\n",
+      apiPath,
+      state.deviceConfig.bootstrapIdentity.deviceSerial.c_str());
 
-  if (!state.activationRegistrationId.has_value()) {
-    apiPath = "/api/device/bootstrap/hello";
-    activationResult = context.deviceApiClient.bootstrapHello({
-        .deviceSerial = state.deviceConfig.bootstrapIdentity.deviceSerial,
-        .bootstrapSecret = state.deviceConfig.bootstrapIdentity.bootstrapSecret,
-        .firmwareTag = board::kFirmwareTag,
-        .wifiSsid = state.activeWifiSsid,
-    });
-  } else {
-    activationResult = context.deviceApiClient.pollActivation(
-        state.deviceConfig.bootstrapIdentity, state.activationRegistrationId.value());
-  }
+  const auto activationResult = context.deviceApiClient.bootstrapHello({
+      .deviceSerial = state.deviceConfig.bootstrapIdentity.deviceSerial,
+      .bootstrapSecret = state.deviceConfig.bootstrapIdentity.bootstrapSecret,
+      .firmwareTag = board::kFirmwareTag,
+      .wifiSsid = state.activeWifiSsid,
+  });
 
   state.activationInFlight = false;
 
   if (!activationResult.success || !activationResult.data.has_value()) {
     setLastError(state, activationResult.error);
     if (activationResult.error.has_value()) {
-      appendApiFailureLog(context, state, apiPath.c_str(), nowMs, activationResult.error.value(), std::nullopt);
+      Serial.printf(
+          "[APP] Activation failed path=%s code=%s message=%s\n",
+          apiPath,
+          activationResult.error->code.c_str(),
+          activationResult.error->message.c_str());
+      appendApiFailureLog(context, state, apiPath, nowMs, activationResult.error.value(), std::nullopt);
     }
     state.renderDirty = true;
     return;
   }
 
   const auto& data = activationResult.data.value();
-  if (!data.registrationId.empty()) {
-    state.activationRegistrationId = data.registrationId;
-  }
-
   if (data.state == "activated" && data.deviceCode.has_value() && data.apiKey.has_value()) {
+    Serial.printf("[APP] Activated deviceCode=%s\n", data.deviceCode.value().c_str());
     state.deviceConfig.runtimeCredentials.deviceCode = data.deviceCode.value();
     state.deviceConfig.runtimeCredentials.apiKey = data.apiKey.value();
     state.credentials = state.deviceConfig.runtimeCredentials;
     persistDeviceConfig(context, state);
     context.localStore.saveCredentials(state.credentials);
-    state.activationRegistrationId = std::nullopt;
     state.faceModuleEnabled =
         state.templateStoreReady && facePortsReady(context) && state.credentials.configured();
+  } else {
+    Serial.printf("[APP] Activation response state=%s\n", data.state.c_str());
   }
 
   setLastError(state, std::nullopt);
