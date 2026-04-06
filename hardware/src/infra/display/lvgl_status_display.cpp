@@ -70,7 +70,7 @@ struct SidebarPageSpec {
 
 constexpr std::array<SidebarPageSpec, 3> kSidebarPages = {{
     {.page = SidebarPage::Home, .label = "Home"},
-    {.page = SidebarPage::Enroll, .label = "录脸"},
+    {.page = SidebarPage::Enroll, .label = "Enroll"},
     {.page = SidebarPage::System, .label = "System"},
 }};
 
@@ -334,14 +334,14 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
 
   std::string statusText;
   if (!hasTask) {
-    statusText = "占位：当前设备暂无录脸任务";
+    statusText = "No enrollment tasks for this device";
   } else if (data.enrollmentStarted) {
     const auto* task = selectedEnrollmentTask(data);
-    statusText = task == nullptr ? "占位：请重新选择要录入的任务" : "占位：开始为 " + task->title + " 进入录脸流程";
+    statusText = task == nullptr ? "Please reselect a task" : "Starting enrollment for " + task->title;
   } else if (selectedEnrollmentTask(data) != nullptr) {
-    statusText = "占位：任务已选中，点击开始录入";
+    statusText = "Task selected. Tap Start to enroll.";
   } else {
-    statusText = "占位：点击任务卡后开始录入";
+    statusText = "Tap a task card to select it";
   }
   lv_label_set_text(data.enrollStatusLabel, statusText.c_str());
 }
@@ -483,11 +483,12 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
 
   lv_obj_t* attendanceCaption = lv_label_create(attendanceCard);
   applyCaptionStyle(attendanceCaption, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(attendanceCaption, "最近打卡");
+  lv_label_set_text(attendanceCaption, "Last Check-in");
   lv_obj_align(attendanceCaption, LV_ALIGN_TOP_LEFT, 0, 0);
 
   data.homeAttendanceLabel = lv_label_create(attendanceCard);
   lv_obj_set_width(data.homeAttendanceLabel, kPageWidth - 20);
+  lv_label_set_long_mode(data.homeAttendanceLabel, LV_LABEL_LONG_DOT);
   applyLabelStyle(data.homeAttendanceLabel, LV_TEXT_ALIGN_LEFT);
   lv_obj_align(data.homeAttendanceLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 }
@@ -495,7 +496,7 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
 void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_t* header = lv_label_create(parent);
   applyCaptionStyle(header, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(header, "下发到当前设备的录脸任务");
+  lv_label_set_text(header, "Enrollment tasks for this device");
   lv_obj_set_width(header, kPageWidth);
   lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, kEnrollHeaderY);
 
@@ -518,10 +519,11 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_style_radius(data.enrollStartButton, 14, 0);
   lv_obj_t* startLabel = lv_label_create(data.enrollStartButton);
   applyLabelStyle(startLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
-  lv_label_set_text(startLabel, "开始录入");
+  lv_label_set_text(startLabel, "Start Enrollment");
   lv_obj_center(startLabel);
 
-  data.enrollStatusLabel = createPageLabel(parent, kEnrollStatusY, kMutedTextHex);
+  data.enrollStatusLabel = createPageLabel(parent, kEnrollStatusY, kPageWidth, kMutedTextHex);
+  lv_label_set_long_mode(data.enrollStatusLabel, LV_LABEL_LONG_DOT);
 }
 
 void createSystemPage(LvglStatusDisplayData& data, lv_obj_t* parent) {

@@ -71,12 +71,12 @@ std::string subtitleLabel(const app::RuntimeStatus& status) {
 
 std::string credentialsLabel(const app::RuntimeStatus& status) {
   if (status.credentials.configured()) {
-    return "Credentials: " + status.credentials.deviceCode;
+    return status.credentials.deviceCode;
   }
   if (status.bootstrapConfigured) {
-    return "Credentials: bootstrap only";
+    return "Bootstrap only";
   }
-  return "Credentials: missing";
+  return "Missing";
 }
 
 std::string taskLabel(const app::RuntimeStatus& status) {
@@ -99,23 +99,23 @@ std::string taskLabel(const app::RuntimeStatus& status) {
 
 std::string storageLabel(const app::RuntimeStatus& status) {
   if (!status.credentialsReady) {
-    return "Storage: credentials unavailable";
+    return "Credentials unavailable";
   }
   if (!status.filesystemReady) {
-    return "Storage: LittleFS unavailable";
+    return "LittleFS unavailable";
   }
   if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
-    return "Storage: SD invalid manifest";
+    return "SD invalid manifest";
   }
   if (infra::templateStoreMounted(status.templateStoreStatusCode)) {
     std::ostringstream oss;
-    oss << "Storage: SD ready (templates=" << status.templateCount << ")";
+    oss << "SD ready (templates=" << status.templateCount << ")";
     return oss.str();
   }
   if (!status.templateStoreReady) {
-    return "Storage: SD unavailable";
+    return "SD unavailable";
   }
-  return "Storage: ready";
+  return "Ready";
 }
 
 std::string faceModuleLabel(const app::RuntimeStatus& status) {
@@ -124,21 +124,21 @@ std::string faceModuleLabel(const app::RuntimeStatus& status) {
 
 std::string apiLabel(const app::RuntimeStatus& status) {
   if (!status.apiConfigured) {
-    return "API: missing origin";
+    return "Missing origin";
   }
   if (status.apiProbeInFlight) {
-    return "API: probing";
+    return "Probing";
   }
   if (status.connectivity != app::ConnectivityState::Connected) {
-    return "API: waiting for WiFi";
+    return "Waiting for WiFi";
   }
   if (status.apiProbeSucceeded) {
-    return "API: reachable";
+    return "Reachable";
   }
   if (status.apiProbeStatusCode.has_value()) {
-    return "API: failed (" + status.apiProbeStatusCode.value() + ")";
+    return "Failed (" + status.apiProbeStatusCode.value() + ")";
   }
-  return "API: waiting";
+  return "Waiting";
 }
 
 uint64_t effectiveStatusTime(const app::RuntimeStatus& status) {
@@ -151,28 +151,28 @@ uint64_t effectiveStatusTime(const app::RuntimeStatus& status) {
 
 std::string periodLabel(const app::RuntimeStatus& status) {
   if (!status.snapshots.attendanceConfig.has_value()) {
-    return "当前时段: 未配置";
+    return "Period: not configured";
   }
 
   const auto attendanceType =
       core::classifyAttendanceType(status.snapshots.attendanceConfig.value(), effectiveStatusTime(status));
   if (!attendanceType.has_value()) {
-    return "当前时段: 非打卡时间";
+    return "Period: outside window";
   }
 
-  return *attendanceType == core::AttendanceRecordType::ClockIn ? "当前时段: 上班" : "当前时段: 下班";
+  return *attendanceType == core::AttendanceRecordType::ClockIn ? "Period: Clock In" : "Period: Clock Out";
 }
 
 std::string attendanceResultLabel(const app::RuntimeStatus& status) {
   if (status.pendingQueueSize > 0) {
-    return "最近打卡成功: 已缓存 " + std::to_string(status.pendingQueueSize) + " 条记录";
+    return std::to_string(status.pendingQueueSize) + " record(s) queued";
   }
 
   if (status.lastErrorCode.has_value()) {
-    return "最近打卡: 等待业务链路接入 (" + status.lastErrorCode.value() + ")";
+    return "Error: " + status.lastErrorCode.value();
   }
 
-  return "最近打卡成功: 占位，等待识别与打卡链路接入";
+  return "";
 }
 
 std::vector<EnrollmentTaskItemViewModel> enrollmentTasks(const app::RuntimeStatus& status) {
@@ -194,10 +194,10 @@ std::vector<EnrollmentTaskItemViewModel> enrollmentTasks(const app::RuntimeStatu
 
 std::string enrollmentTaskSummary(const app::RuntimeStatus& status) {
   if (status.snapshots.enrollmentTasks.empty()) {
-    return "当前设备暂无录脸任务";
+    return "No enrollment tasks";
   }
 
-  return "待处理录脸任务: " + std::to_string(status.snapshots.enrollmentTasks.size()) + " 条";
+  return "Enrollment tasks: " + std::to_string(status.snapshots.enrollmentTasks.size()) + " pending";
 }
 
 }  // namespace
@@ -207,20 +207,20 @@ AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
   view.title = "Hitomi Device";
   view.subtitle = subtitleLabel(status);
   view.periodLine = periodLabel(status);
-  view.cameraHintLine = "摄像头画面占位";
+  view.cameraHintLine = "Camera feed placeholder";
   view.attendanceResultLine = attendanceResultLabel(status);
   view.enrollmentTasks = enrollmentTasks(status);
   view.enrollmentTaskSummaryLine = enrollmentTaskSummary(status);
   view.credentialsLine = credentialsLabel(status);
   view.storageLine = storageLabel(status);
-  view.wifiLine = "WiFi: " + connectivityLabel(status.connectivity) +
+  view.wifiLine = connectivityLabel(status.connectivity) +
       (status.activeWifiSsid.has_value() ? " (" + status.activeWifiSsid.value() + ")" : "");
   view.activationLine = activationLabel(status);
   view.apiLine = apiLabel(status);
   view.syncLine = "Sync: " + syncLabel(status);
   view.taskLine = taskLabel(status);
   view.queueLine = "Queue: " + std::to_string(status.pendingQueueSize);
-  view.errorLine = "Last error: " + status.lastErrorCode.value_or("none");
+  view.errorLine = status.lastErrorCode.value_or("None");
   view.faceLine = faceModuleLabel(status);
   view.footer = status.firmwareTag;
   return view;
