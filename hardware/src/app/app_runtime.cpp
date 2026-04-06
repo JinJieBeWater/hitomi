@@ -85,6 +85,10 @@ void AppRuntime::tick(uint32_t nowMs) {
   syncDeviceApiClientConfig(context, state);
   ensureWifiConnection(context, state, nowMs);
 
+  while (const auto command = context.display.consumeCommand()) {
+    handleDisplayCommand(context, state, *command, nowMs);
+  }
+
   if (nowMs - state.lastNetworkProbeMs >= board::kNetworkProbeIntervalMs) {
     probeConnectivity(context, state, nowMs);
   }

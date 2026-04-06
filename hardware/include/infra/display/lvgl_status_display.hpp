@@ -21,6 +21,7 @@ class LvglStatusDisplay final : public DisplayPort {
   bool ready() const override;
   void render(const ui::AppViewModel& viewModel) override;
   void tick(uint32_t nowMs) override;
+  std::optional<DisplayCommand> consumeCommand() override;
 
  private:
   struct Impl;

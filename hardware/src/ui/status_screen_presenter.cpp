@@ -180,12 +180,12 @@ std::vector<EnrollmentTaskItemViewModel> enrollmentTasks(const app::RuntimeStatu
   items.reserve(status.snapshots.enrollmentTasks.size());
 
   for (const auto& task : status.snapshots.enrollmentTasks) {
-    std::ostringstream meta;
-    meta << task.employeeCode << " | " << task.status << " | " << task.taskId;
+    const std::string title =
+        task.employeeCode.empty() ? task.employeeName : task.employeeCode + " " + task.employeeName;
     items.push_back(EnrollmentTaskItemViewModel{
         .taskId = task.taskId,
-        .title = task.employeeName,
-        .meta = meta.str(),
+        .title = title,
+        .meta = "Status: " + task.status,
     });
   }
 

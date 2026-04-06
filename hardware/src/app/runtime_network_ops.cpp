@@ -51,6 +51,24 @@ bool shouldProbeApi(const RuntimeContext& context, const RuntimeState& state, ui
       nowMs);
 }
 
+void handleDisplayCommand(
+    const RuntimeContext& context,
+    RuntimeState& state,
+    const infra::DisplayCommand& command,
+    uint32_t nowMs) {
+  switch (command.type) {
+    case infra::DisplayCommandType::RefreshData:
+      performManualRefresh(context, state, nowMs);
+      return;
+    case infra::DisplayCommandType::StartEnrollmentTask:
+      Serial.printf("[APP] Enrollment start requested taskId=%s\n", command.targetId.c_str());
+      state.renderDirty = true;
+      return;
+    default:
+      return;
+  }
+}
+
 void performApiProbe(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
   state.apiProbeInFlight = true;
   state.lastApiProbeAttemptMs = nowMs;
@@ -78,6 +96,30 @@ void performApiProbe(const RuntimeContext& context, RuntimeState& state, uint32_
   }
 
   state.renderDirty = true;
+}
+
+void performManualRefresh(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
+  Serial.println("[APP] Manual refresh requested");
+  probeConnectivity(context, state, nowMs);
+
+  if (state.connectivity != ConnectivityState::Connected) {
+    state.renderDirty = true;
+    return;
+  }
+
+  if (state.deviceConfig.backendLocator.configured() && context.deviceApiClient.configured() && !state.apiProbeInFlight) {
+    performApiProbe(context, state, nowMs);
+  }
+
+  if (
+      !state.credentials.configured() && !state.activationInFlight && state.deviceConfig.backendLocator.configured() &&
+      state.deviceConfig.bootstrapIdentity.configured() && context.deviceApiClient.configured()) {
+    performActivation(context, state, nowMs);
+  }
+
+  if (state.credentials.configured() && context.deviceApiClient.configured() && !state.syncInFlight) {
+    performSync(context, state, nowMs);
+  }
 }
 
 bool shouldActivate(const RuntimeContext& context, const RuntimeState& state, uint32_t nowMs) {

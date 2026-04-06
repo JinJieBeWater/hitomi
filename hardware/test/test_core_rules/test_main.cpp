@@ -405,6 +405,17 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
           .updatedAt = 1,
       },
   };
+  status.snapshots.enrollmentTasks = {
+      EnrollmentTaskSnapshot{
+          .taskId = "fp_001",
+          .employeeId = "emp_001",
+          .employeeCode = "20230001",
+          .employeeName = "张三",
+          .status = "pending",
+          .createdAt = 2,
+          .updatedAt = 3,
+      },
+  };
   status.apiConfigured = true;
   status.apiProbeSucceeded = true;
   status.bootstrapConfigured = true;
@@ -422,7 +433,10 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   expect(view.storageLine.find("templates=2") != std::string::npos, "view should surface template count");
   expect(view.activationLine.find("waiting for claim") != std::string::npos, "view should show activation state");
   expect(view.wifiLine.find("Lab-WiFi") != std::string::npos, "view should show connected SSID");
-  expect(view.apiLine.find("reachable") != std::string::npos, "view should surface API success");
+  expect(view.apiLine.find("Reachable") != std::string::npos, "view should surface API success");
+  expect(view.enrollmentTasks.size() == 1, "view should surface enrollment tasks");
+  expect(view.enrollmentTasks.front().title == "20230001 张三", "task card should show employee code before name");
+  expect(view.enrollmentTasks.front().meta == "Status: pending", "task card should show only task status");
   expect(view.footer == "fw-tag", "view footer should use firmware tag");
 }
 

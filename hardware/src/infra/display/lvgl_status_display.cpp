@@ -40,6 +40,7 @@ constexpr lv_coord_t kEnrollTaskGap = 8;
 constexpr lv_coord_t kEnrollTaskListHeight = 132;
 constexpr lv_coord_t kEnrollActionY = 184;
 constexpr lv_coord_t kEnrollActionHeight = 34;
+constexpr lv_coord_t kEnrollActionGap = 10;
 constexpr lv_coord_t kEnrollStatusY = 228;
 
 constexpr lv_coord_t kSystemRowHeight = 34;
@@ -56,6 +57,7 @@ constexpr uint32_t kNavButtonHex = 0x145A32;
 constexpr uint32_t kNavButtonActiveHex = 0xF0F3BD;
 constexpr uint32_t kNavButtonActiveTextHex = 0x0D3B2A;
 constexpr uint32_t kAccentHex = 0xF4A261;
+constexpr std::size_t kDisplayCommandQueueCapacity = 4;
 
 enum class SidebarPage : std::size_t {
   Home = 0,
@@ -105,6 +107,7 @@ struct LvglStatusDisplayData {
 
   lv_obj_t* enrollSummaryLabel = nullptr;
   lv_obj_t* enrollTaskList = nullptr;
+  lv_obj_t* enrollRefreshButton = nullptr;
   lv_obj_t* enrollStartButton = nullptr;
   lv_obj_t* enrollStatusLabel = nullptr;
 
@@ -115,10 +118,15 @@ struct LvglStatusDisplayData {
   SidebarPage currentPage = SidebarPage::Home;
   bool hasViewModel = false;
   std::string selectedEnrollmentTaskId;
-  bool enrollmentStarted = false;
+  bool enrollmentRequestQueued = false;
+  std::array<DisplayCommand, kDisplayCommandQueueCapacity> commandQueue = {};
+  std::size_t commandHead = 0;
+  std::size_t queuedCommandCount = 0;
 };
 
 void enrollTaskButtonEventCallback(lv_event_t* event);
+void enrollRefreshButtonEventCallback(lv_event_t* event);
+bool enqueueCommand(LvglStatusDisplayData& data, DisplayCommand command);
 
 constexpr std::size_t toIndex(SidebarPage page) {
   return static_cast<std::size_t>(page);
@@ -239,6 +247,18 @@ void setSystemRowValue(const StatusRow& row, const std::string& value) {
   }
 }
 
+bool enqueueCommand(LvglStatusDisplayData& data, DisplayCommand command) {
+  if (data.queuedCommandCount >= data.commandQueue.size()) {
+    Serial.println("[DISPLAY] command queue full; dropping UI command");
+    return false;
+  }
+
+  const std::size_t tail = (data.commandHead + data.queuedCommandCount) % data.commandQueue.size();
+  data.commandQueue[tail] = std::move(command);
+  data.queuedCommandCount += 1;
+  return true;
+}
+
 void refreshNavButtons(const LvglStatusDisplayData& data) {
   for (std::size_t index = 0; index < data.navButtons.size(); index += 1) {
     if (data.navButtons[index] != nullptr) {
@@ -291,7 +311,7 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
   const bool hasTask = taskCount > 0;
   if (!hasTask || selectedEnrollmentTask(data) == nullptr) {
     data.selectedEnrollmentTaskId.clear();
-    data.enrollmentStarted = false;
+    data.enrollmentRequestQueued = false;
   }
 
   lv_label_set_text(data.enrollSummaryLabel, data.lastViewModel.enrollmentTaskSummaryLine.c_str());
@@ -309,11 +329,7 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
       lv_obj_set_style_pad_right(button, 10, 0);
       lv_obj_set_style_pad_top(button, 6, 0);
       lv_obj_set_style_pad_bottom(button, 6, 0);
-      lv_obj_add_event_cb(
-          button,
-          enrollTaskButtonEventCallback,
-          LV_EVENT_CLICKED,
-          reinterpret_cast<void*>(static_cast<lv_uintptr_t>(index)));
+      lv_obj_add_event_cb(button, enrollTaskButtonEventCallback, LV_EVENT_CLICKED, &data);
       applyTaskButtonStyle(button, data.selectedEnrollmentTaskId == task.taskId, true);
 
       lv_obj_t* titleLabel = lv_label_create(button);
@@ -330,18 +346,19 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
     }
   }
 
+  applyActionButtonStyle(data.enrollRefreshButton, true);
   applyActionButtonStyle(data.enrollStartButton, hasTask && selectedEnrollmentTask(data) != nullptr);
 
   std::string statusText;
   if (!hasTask) {
-    statusText = "No enrollment tasks for this device";
-  } else if (data.enrollmentStarted) {
+    statusText = "No enrollment tasks. Tap Refresh to sync now.";
+  } else if (data.enrollmentRequestQueued) {
     const auto* task = selectedEnrollmentTask(data);
-    statusText = task == nullptr ? "Please reselect a task" : "Starting enrollment for " + task->title;
+    statusText = task == nullptr ? "Please reselect a task" : "Enrollment requested for " + task->title;
   } else if (selectedEnrollmentTask(data) != nullptr) {
-    statusText = "Task selected. Tap Start to enroll.";
+    statusText = "Task selected. Tap Start to request enrollment, or Refresh to sync now.";
   } else {
-    statusText = "Tap a task card to select it";
+    statusText = "Tap a task card to select it, or Refresh to sync now.";
   }
   lv_label_set_text(data.enrollStatusLabel, statusText.c_str());
 }
@@ -404,15 +421,50 @@ void enrollTaskButtonEventCallback(lv_event_t* event) {
     return;
   }
 
-  const std::size_t index = static_cast<std::size_t>(reinterpret_cast<lv_uintptr_t>(lv_event_get_user_data(event)));
+  lv_obj_t* button = static_cast<lv_obj_t*>(lv_event_get_target(event));
+  if (button == nullptr) {
+    return;
+  }
+
+  const int buttonIndex = lv_obj_get_index(button);
+  if (buttonIndex < 0) {
+    return;
+  }
+
+  const std::size_t index = static_cast<std::size_t>(buttonIndex);
   if (index >= data->lastViewModel.enrollmentTasks.size()) {
     return;
   }
 
   const auto& task = data->lastViewModel.enrollmentTasks[index];
   data->selectedEnrollmentTaskId = data->selectedEnrollmentTaskId == task.taskId ? "" : task.taskId;
-  data->enrollmentStarted = false;
+  data->enrollmentRequestQueued = false;
   refreshEnrollPage(*data);
+}
+
+void enrollRefreshButtonEventCallback(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+    return;
+  }
+
+  auto* data = static_cast<LvglStatusDisplayData*>(lv_event_get_user_data(event));
+  if (data == nullptr) {
+    return;
+  }
+
+  if (!enqueueCommand(*data, DisplayCommand{
+                               .type = DisplayCommandType::RefreshData,
+                           })) {
+    if (data->enrollStatusLabel != nullptr) {
+      lv_label_set_text(data->enrollStatusLabel, "Refresh is busy. Try again.");
+    }
+    return;
+  }
+
+  data->enrollmentRequestQueued = false;
+  if (data->enrollStatusLabel != nullptr) {
+    lv_label_set_text(data->enrollStatusLabel, "Refreshing enrollment tasks...");
+  }
 }
 
 void enrollStartButtonEventCallback(lv_event_t* event) {
@@ -425,7 +477,22 @@ void enrollStartButtonEventCallback(lv_event_t* event) {
     return;
   }
 
-  data->enrollmentStarted = true;
+  const auto* task = selectedEnrollmentTask(*data);
+  if (task == nullptr) {
+    return;
+  }
+
+  if (!enqueueCommand(*data, DisplayCommand{
+                               .type = DisplayCommandType::StartEnrollmentTask,
+                               .targetId = task->taskId,
+                           })) {
+    if (data->enrollStatusLabel != nullptr) {
+      lv_label_set_text(data->enrollStatusLabel, "Enrollment action is busy. Try again.");
+    }
+    return;
+  }
+
+  data->enrollmentRequestQueued = true;
   refreshEnrollPage(*data);
 }
 
@@ -511,9 +578,22 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_scroll_dir(data.enrollTaskList, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(data.enrollTaskList, LV_SCROLLBAR_MODE_AUTO);
 
+  const lv_coord_t actionButtonWidth = (kPageWidth - kEnrollActionGap) / 2;
+
+  data.enrollRefreshButton = lv_button_create(parent);
+  lv_obj_set_size(data.enrollRefreshButton, actionButtonWidth, kEnrollActionHeight);
+  lv_obj_align(data.enrollRefreshButton, LV_ALIGN_TOP_LEFT, 0, kEnrollActionY);
+  lv_obj_add_event_cb(data.enrollRefreshButton, enrollRefreshButtonEventCallback, LV_EVENT_CLICKED, &data);
+  lv_obj_set_style_border_width(data.enrollRefreshButton, 0, 0);
+  lv_obj_set_style_radius(data.enrollRefreshButton, 14, 0);
+  lv_obj_t* refreshLabel = lv_label_create(data.enrollRefreshButton);
+  applyLabelStyle(refreshLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  lv_label_set_text(refreshLabel, "Refresh");
+  lv_obj_center(refreshLabel);
+
   data.enrollStartButton = lv_button_create(parent);
-  lv_obj_set_size(data.enrollStartButton, kPageWidth, kEnrollActionHeight);
-  lv_obj_align(data.enrollStartButton, LV_ALIGN_TOP_LEFT, 0, kEnrollActionY);
+  lv_obj_set_size(data.enrollStartButton, actionButtonWidth, kEnrollActionHeight);
+  lv_obj_align(data.enrollStartButton, LV_ALIGN_TOP_LEFT, actionButtonWidth + kEnrollActionGap, kEnrollActionY);
   lv_obj_add_event_cb(data.enrollStartButton, enrollStartButtonEventCallback, LV_EVENT_CLICKED, &data);
   lv_obj_set_style_border_width(data.enrollStartButton, 0, 0);
   lv_obj_set_style_radius(data.enrollStartButton, 14, 0);
@@ -623,6 +703,21 @@ void LvglStatusDisplay::tick(uint32_t nowMs) {
   lv_tick_inc(nowMs - impl_->lastLvglTickMs);
   impl_->lastLvglTickMs = nowMs;
   lv_timer_handler_run_in_period(board::kLvglHandlerPeriodMs);
+}
+
+std::optional<DisplayCommand> LvglStatusDisplay::consumeCommand() {
+  if (!ready()) {
+    return std::nullopt;
+  }
+
+  if (impl_->queuedCommandCount == 0) {
+    return std::nullopt;
+  }
+
+  DisplayCommand command = std::move(impl_->commandQueue[impl_->commandHead]);
+  impl_->commandHead = (impl_->commandHead + 1) % impl_->commandQueue.size();
+  impl_->queuedCommandCount -= 1;
+  return command;
 }
 
 }  // namespace infra
