@@ -366,7 +366,12 @@ try {
   await clickRefresh(page);
   await page.locator("tr").filter({ hasText: deviceName }).waitFor();
 
-  await clickNav(page, "/attendance-config", "考勤配置");
+  await clickNav(page, "/dashboard", "概览");
+  await page.getByRole("heading", { name: "考勤配置", exact: true }).waitFor();
+  await page.getByTestId("attendance-work-start-input").waitFor();
+  await page.getByTestId("attendance-work-end-input").waitFor();
+  await page.getByTestId("attendance-off-start-input").waitFor();
+  await page.getByTestId("attendance-off-end-input").waitFor();
 
   const createdEmployee =
     (await db.query.employee.findFirst({

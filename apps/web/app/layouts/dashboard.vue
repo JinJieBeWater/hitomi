@@ -21,7 +21,6 @@ const mainLinks = [
   createLink("概览", "i-lucide-layout-dashboard", "/dashboard"),
   createLink("员工管理", "i-lucide-users", "/employees"),
   createLink("设备管理", "i-lucide-monitor-smartphone", "/devices"),
-  createLink("考勤配置", "i-lucide-settings-2", "/attendance-config"),
   createLink("录脸记录", "i-lucide-scan-face", "/face-profiles"),
   createLink("考勤记录", "i-lucide-clipboard-check", "/attendance-records"),
 ];

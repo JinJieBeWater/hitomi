@@ -45,7 +45,6 @@ const metrics = computed(() => {
 const shortcuts = [
   { label: "员工管理", to: "/employees", icon: "i-lucide-users" },
   { label: "设备管理", to: "/devices", icon: "i-lucide-monitor-smartphone" },
-  { label: "考勤配置", to: "/attendance-config", icon: "i-lucide-settings-2" },
   { label: "录脸记录", to: "/face-profiles", icon: "i-lucide-scan-face" },
   { label: "考勤记录", to: "/attendance-records", icon: "i-lucide-clipboard-check" },
 ];
@@ -82,8 +81,10 @@ const shortcuts = [
           :description="summary.error.value?.message || '无法加载统计信息'"
         />
 
+        <AttendanceConfigEditor />
+
         <DataSurface title="快捷操作">
-          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <UButton
               v-for="item in shortcuts"
               :key="item.to"
