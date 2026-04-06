@@ -111,18 +111,17 @@ type AdminBusinessError = {
 
 ## 公共业务错误码
 
-| businessCode | 含义 | 推荐错误类型 |
-| --- | --- | --- |
-| `EMPLOYEE_NOT_FOUND` | 员工不存在 | `NOT_FOUND` |
-| `EMPLOYEE_CODE_CONFLICT` | 员工编号重复 | `CONFLICT` |
-| `DEVICE_NOT_FOUND` | 设备不存在 | `NOT_FOUND` |
-| `DEVICE_DISABLED` | 设备已禁用 | `CONFLICT` |
-| `ATTENDANCE_CONFIG_INVALID_MINUTE` | 分钟值不在 `0-1439` 范围内 | `BAD_REQUEST` |
-| `ATTENDANCE_CONFIG_INVALID_RANGE` | 时间段开始结束关系不合法 | `BAD_REQUEST` |
-| `ATTENDANCE_CONFIG_OVERLAPPED` | 上下班时间段重叠或相互包含 | `BAD_REQUEST` |
-| `FACE_PROFILE_NOT_FOUND` | 录脸任务不存在 | `NOT_FOUND` |
-| `FACE_PROFILE_NOT_PENDING` | 当前录脸任务不是 `pending` 状态 | `CONFLICT` |
-| `DEVICE_PENDING_TASK_EXISTS` | 该设备已有其他待处理录脸任务 | `CONFLICT` |
+| businessCode                       | 含义                            | 推荐错误类型  |
+| ---------------------------------- | ------------------------------- | ------------- |
+| `EMPLOYEE_NOT_FOUND`               | 员工不存在                      | `NOT_FOUND`   |
+| `EMPLOYEE_CODE_CONFLICT`           | 员工编号重复                    | `CONFLICT`    |
+| `DEVICE_NOT_FOUND`                 | 设备不存在                      | `NOT_FOUND`   |
+| `DEVICE_DISABLED`                  | 设备已禁用                      | `CONFLICT`    |
+| `ATTENDANCE_CONFIG_INVALID_MINUTE` | 分钟值不在 `0-1439` 范围内      | `BAD_REQUEST` |
+| `ATTENDANCE_CONFIG_INVALID_RANGE`  | 时间段开始结束关系不合法        | `BAD_REQUEST` |
+| `ATTENDANCE_CONFIG_OVERLAPPED`     | 上下班时间段重叠或相互包含      | `BAD_REQUEST` |
+| `FACE_PROFILE_NOT_FOUND`           | 录脸任务不存在                  | `NOT_FOUND`   |
+| `FACE_PROFILE_NOT_PENDING`         | 当前录脸任务不是 `pending` 状态 | `CONFLICT`    |
 
 ---
 
@@ -279,12 +278,12 @@ type AdminBusinessError = {
 
 ### 字段说明
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `page` | `number` | 否 | 默认 `1` |
-| `pageSize` | `number` | 否 | 默认 `20`，最大 `100` |
-| `keyword` | `string` | 否 | 按员工编号或姓名模糊搜索 |
-| `faceProfileState` | `string` | 否 | `pending`、`success`、`failed`、`cancelled`、`none` |
+| 字段               | 类型     | 必填 | 说明                                                |
+| ------------------ | -------- | ---- | --------------------------------------------------- |
+| `page`             | `number` | 否   | 默认 `1`                                            |
+| `pageSize`         | `number` | 否   | 默认 `20`，最大 `100`                               |
+| `keyword`          | `string` | 否   | 按员工编号或姓名模糊搜索                            |
+| `faceProfileState` | `string` | 否   | `pending`、`success`、`failed`、`cancelled`、`none` |
 
 ### 输出
 
@@ -401,12 +400,12 @@ type AdminBusinessError = {
 
 ### 字段说明
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `page` | `number` | 否 | 默认 `1` |
-| `pageSize` | `number` | 否 | 默认 `20` |
-| `keyword` | `string` | 否 | 按设备名称或设备码模糊搜索 |
-| `status` | `string` | 否 | `active` 或 `disabled` |
+| 字段       | 类型     | 必填 | 说明                       |
+| ---------- | -------- | ---- | -------------------------- |
+| `page`     | `number` | 否   | 默认 `1`                   |
+| `pageSize` | `number` | 否   | 默认 `20`                  |
+| `keyword`  | `string` | 否   | 按设备名称或设备码模糊搜索 |
+| `status`   | `string` | 否   | `active` 或 `disabled`     |
 
 ### 输出
 
@@ -443,7 +442,7 @@ type AdminBusinessError = {
 
 ### 作用
 
-创建设备并生成初始化密钥。
+创建设备、生成初始化密钥，并生成设备首配所需的 bootstrap 凭据。
 
 ### 输入
 
@@ -458,7 +457,10 @@ type AdminBusinessError = {
 - `name` 必填，去除首尾空格后不能为空
 - 服务端自动生成唯一 `deviceCode`
 - 服务端自动生成明文 `apiKey`
-- 数据库仅保存 `apiKeyHash`
+- 服务端自动生成 `bootstrapSerial`
+- 服务端自动生成 `bootstrapSecret`
+- 数据库保存 `apiKeyHash`
+- MVP 激活阶段允许服务端在设备成功领取前暂存待领取的运行时密钥
 
 ### 输出
 
@@ -473,13 +475,16 @@ type AdminBusinessError = {
     "createdAt": 1743158400000,
     "updatedAt": 1743158400000
   },
-  "initialApiKey": "plain-api-key"
+  "initialApiKey": "plain-api-key",
+  "bootstrapSerial": "BOOT-001",
+  "bootstrapSecret": "bootstrap-secret"
 }
 ```
 
 ### 输出规则
 
 - `initialApiKey` 只在本次创建设备成功时返回
+- `bootstrapSerial` 与 `bootstrapSecret` 只在本次创建设备成功时返回
 - 列表接口和更新接口都不再返回明文 `apiKey`
 
 ---
@@ -621,13 +626,13 @@ type AdminBusinessError = {
 
 ### 字段说明
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `page` | `number` | 否 | 默认 `1` |
-| `pageSize` | `number` | 否 | 默认 `20` |
-| `status` | `string` | 否 | `pending`、`success`、`failed`、`cancelled` |
-| `employeeId` | `string` | 否 | 按员工筛选 |
-| `deviceId` | `string` | 否 | 按设备筛选 |
+| 字段         | 类型     | 必填 | 说明                                        |
+| ------------ | -------- | ---- | ------------------------------------------- |
+| `page`       | `number` | 否   | 默认 `1`                                    |
+| `pageSize`   | `number` | 否   | 默认 `20`                                   |
+| `status`     | `string` | 否   | `pending`、`success`、`failed`、`cancelled` |
+| `employeeId` | `string` | 否   | 按员工筛选                                  |
+| `deviceId`   | `string` | 否   | 按设备筛选                                  |
 
 ### 输出
 
@@ -765,14 +770,14 @@ type AdminBusinessError = {
 
 ### 字段说明
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `page` | `number` | 否 | 默认 `1` |
-| `pageSize` | `number` | 否 | 默认 `20` |
-| `localDate` | `string` | 否 | 按单日筛选，格式 `YYYY-MM-DD` |
-| `employeeId` | `string` | 否 | 按员工筛选 |
-| `deviceId` | `string` | 否 | 按设备筛选 |
-| `type` | `string` | 否 | `clock_in` 或 `clock_out` |
+| 字段         | 类型     | 必填 | 说明                          |
+| ------------ | -------- | ---- | ----------------------------- |
+| `page`       | `number` | 否   | 默认 `1`                      |
+| `pageSize`   | `number` | 否   | 默认 `20`                     |
+| `localDate`  | `string` | 否   | 按单日筛选，格式 `YYYY-MM-DD` |
+| `employeeId` | `string` | 否   | 按员工筛选                    |
+| `deviceId`   | `string` | 否   | 按设备筛选                    |
+| `type`       | `string` | 否   | `clock_in` 或 `clock_out`     |
 
 ### 输出
 
@@ -818,14 +823,14 @@ type AdminBusinessError = {
 
 ## 页面与接口对应关系
 
-| 页面 | 主要接口 |
-| --- | --- |
-| Dashboard | `dashboard.summary` |
-| 员工管理页 | `employee.list`、`employee.create`、`employee.update` |
-| 设备管理页 | `device.list`、`device.create`、`device.update` |
-| 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save` |
+| 页面       | 主要接口                                                        |
+| ---------- | --------------------------------------------------------------- |
+| Dashboard  | `dashboard.summary`                                             |
+| 员工管理页 | `employee.list`、`employee.create`、`employee.update`           |
+| 设备管理页 | `device.list`、`device.create`、`device.update`                 |
+| 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save`                 |
 | 录脸记录页 | `faceProfile.list`、`faceProfile.enqueue`、`faceProfile.cancel` |
-| 考勤记录页 | `attendanceRecord.list` |
+| 考勤记录页 | `attendanceRecord.list`                                         |
 
 ---
 

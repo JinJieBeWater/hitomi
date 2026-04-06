@@ -11,7 +11,11 @@ class HttpDeviceApiClient final : public DeviceApiClient {
   explicit HttpDeviceApiClient(std::string baseUrl);
 
   bool configured() const override;
+  void setBaseUrl(const std::string& baseUrl) override;
   ApiResult<ServerProbeResponse> probeServer() override;
+  ApiResult<BootstrapActivationResponse> bootstrapHello(const BootstrapHelloRequest& request) override;
+  ApiResult<BootstrapActivationResponse> pollActivation(
+      const core::BootstrapIdentity& identity, const std::string& registrationId) override;
   ApiResult<core::SyncPayload> sync(const core::DeviceCredentials& credentials) override;
   ApiResult<EnrollmentReportResponse> reportEnrollment(
       const core::DeviceCredentials& credentials, const EnrollmentReportRequest& request) override;

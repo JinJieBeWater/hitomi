@@ -23,6 +23,7 @@ using core::AttendanceConfigSnapshot;
 using core::AttendanceRecordType;
 using core::AttendanceUploadItemResult;
 using core::AttendanceUploadStatus;
+using core::DeviceActivationState;
 using core::DeviceCredentials;
 using core::EmployeeSnapshot;
 using core::EnrollmentTaskSnapshot;
@@ -30,6 +31,7 @@ using core::FailureLogEntry;
 using core::PendingAttendanceRecord;
 using core::SnapshotBundle;
 using core::SyncPayload;
+using core::WifiProfile;
 using infra::StorageAuxState;
 using infra::TemplateLibrarySummary;
 using infra::TemplateManifest;
@@ -89,14 +91,25 @@ void testApplySyncSnapshotReplacesRemoteSnapshots() {
           .updatedAt = 50,
       },
   };
-  payload.enrollmentTask = EnrollmentTaskSnapshot{
-      .taskId = "fp_001",
-      .employeeId = "emp_001",
-      .employeeCode = "20230001",
-      .employeeName = "张三",
-      .status = "pending",
-      .createdAt = 60,
-      .updatedAt = 70,
+  payload.enrollmentTasks = {
+      EnrollmentTaskSnapshot{
+          .taskId = "fp_001",
+          .employeeId = "emp_001",
+          .employeeCode = "20230001",
+          .employeeName = "张三",
+          .status = "pending",
+          .createdAt = 60,
+          .updatedAt = 70,
+      },
+      EnrollmentTaskSnapshot{
+          .taskId = "fp_002",
+          .employeeId = "emp_002",
+          .employeeCode = "20230002",
+          .employeeName = "李四",
+          .status = "pending",
+          .createdAt = 61,
+          .updatedAt = 71,
+      },
   };
 
   SnapshotBundle applied = core::applySyncSnapshot(existing, payload, 999);
@@ -110,8 +123,8 @@ void testApplySyncSnapshotReplacesRemoteSnapshots() {
   expect(applied.attendanceConfig->workStartMinute == 540, "attendance config should be replaced");
   expect(applied.employees.size() == 2, "employees should be replaced");
   expect(applied.employees.front().id == "emp_001", "employee order should match payload");
-  expect(applied.enrollmentTask.has_value(), "enrollment task should exist");
-  expect(applied.enrollmentTask->taskId == "fp_001", "task should update");
+  expect(applied.enrollmentTasks.size() == 2, "enrollment task list should update");
+  expect(applied.enrollmentTasks.front().taskId == "fp_001", "task order should match payload");
 }
 
 void testClassifyAttendanceTypeUsesShanghaiWindows() {
@@ -255,6 +268,60 @@ void testFailureLogHelpersCapRetention() {
   expect(logs.front().occurredAt == 102, "oldest retained log should be the third inserted one");
 }
 
+void testChooseWifiProfilePrefersPriorityThenRecentSuccess() {
+  std::vector<core::WifiProfile> profiles = {
+      core::WifiProfile{
+          .ssid = "lab",
+          .password = "labpass",
+          .priority = 10,
+          .lastSuccessAt = 5,
+          .disabled = false,
+      },
+      core::WifiProfile{
+          .ssid = "phone",
+          .password = "phonepass",
+          .priority = 20,
+          .lastSuccessAt = 1,
+          .disabled = false,
+      },
+      core::WifiProfile{
+          .ssid = "home",
+          .password = "homepass",
+          .priority = 20,
+          .lastSuccessAt = 10,
+          .disabled = false,
+      },
+  };
+
+  auto chosen = core::chooseWifiProfile(profiles, {"lab", "home", "phone"});
+  expect(chosen.has_value(), "wifi chooser should pick an available profile");
+  expect(chosen.value() == 2, "wifi chooser should prefer highest priority then most recent success");
+}
+
+void testUpsertWifiProfileReplacesBySsidAndRespectsLimit() {
+  std::vector<core::WifiProfile> profiles = {
+      core::WifiProfile{.ssid = "a", .password = "1", .priority = 1, .lastSuccessAt = 1, .disabled = false},
+      core::WifiProfile{.ssid = "b", .password = "2", .priority = 2, .lastSuccessAt = 2, .disabled = false},
+  };
+
+  core::upsertWifiProfile(
+      profiles,
+      core::WifiProfile{.ssid = "b", .password = "new", .priority = 9, .lastSuccessAt = 9, .disabled = false},
+      3);
+  core::upsertWifiProfile(
+      profiles,
+      core::WifiProfile{.ssid = "c", .password = "3", .priority = 3, .lastSuccessAt = 3, .disabled = false},
+      3);
+  core::upsertWifiProfile(
+      profiles,
+      core::WifiProfile{.ssid = "d", .password = "4", .priority = 4, .lastSuccessAt = 4, .disabled = false},
+      3);
+
+  expect(profiles.size() == 3, "wifi profiles should respect configured limit");
+  expect(profiles.front().ssid == "b", "updated wifi profile should be re-sorted to the front");
+  expect(profiles.front().password == "new", "wifi profile should replace matching ssid");
+}
+
 void testDecodeStorageAuxStateFallsBackToDefaultsOnInvalidPayload() {
   auto decoded = infra::decodeStorageAuxState("{not-json}");
   expect(!decoded.has_value(), "invalid JSON should fail to decode");
@@ -340,9 +407,12 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   };
   status.apiConfigured = true;
   status.apiProbeSucceeded = true;
+  status.bootstrapConfigured = true;
+  status.activationState = DeviceActivationState::PendingActivation;
   status.firmwareTag = "fw-tag";
   status.templateStoreStatusCode = infra::kTemplateStoreMountedReady;
   status.templateCount = 2;
+  status.activeWifiSsid = std::optional<std::string>("Lab-WiFi");
 
   const app::RuntimeDiagnostics diagnostics = app::buildRuntimeDiagnostics(status);
   const AppViewModel view = ui::StatusScreenPresenter::build(status);
@@ -350,8 +420,31 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   expect(diagnostics.credentialsLine.find("DEV-001") != std::string::npos, "diagnostics should surface device code");
   expect(diagnostics.snapshotLine.find("employees=1") != std::string::npos, "diagnostics should describe snapshots");
   expect(view.storageLine.find("templates=2") != std::string::npos, "view should surface template count");
+  expect(view.activationLine.find("waiting for claim") != std::string::npos, "view should show activation state");
+  expect(view.wifiLine.find("Lab-WiFi") != std::string::npos, "view should show connected SSID");
   expect(view.apiLine.find("reachable") != std::string::npos, "view should surface API success");
   expect(view.footer == "fw-tag", "view footer should use firmware tag");
+}
+
+void testChooseWifiProfilePrefersAvailableHighPriorityNetwork() {
+  std::vector<WifiProfile> profiles = {
+      WifiProfile{.ssid = "Dorm", .password = "pw1", .priority = 1, .lastSuccessAt = 10, .disabled = false},
+      WifiProfile{.ssid = "Lab", .password = "pw2", .priority = 5, .lastSuccessAt = 5, .disabled = false},
+      WifiProfile{.ssid = "Phone", .password = "pw3", .priority = 3, .lastSuccessAt = 100, .disabled = false},
+  };
+
+  auto selected = core::chooseWifiProfile(profiles, {"Phone", "Lab"});
+  expect(selected.has_value(), "wifi profile should be selected");
+  expect(profiles[selected.value()].ssid == "Lab", "highest priority available profile should win");
+}
+
+void testMarkWifiProfileSuccessUpdatesLastSuccessAt() {
+  std::vector<WifiProfile> profiles = {
+      WifiProfile{.ssid = "Lab", .password = "pw2", .priority = 5, .lastSuccessAt = 5, .disabled = false},
+  };
+
+  core::markWifiProfileSuccess(profiles, "Lab", 99);
+  expect(profiles.front().lastSuccessAt == 99, "wifi profile should record success timestamp");
 }
 
 }  // namespace
@@ -364,11 +457,15 @@ int main() {
     testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected();
     testBuildShanghaiLocalDateUsesUtcPlusEight();
     testFailureLogHelpersCapRetention();
+    testChooseWifiProfilePrefersPriorityThenRecentSuccess();
+    testUpsertWifiProfileReplacesBySsidAndRespectsLimit();
     testDecodeStorageAuxStateFallsBackToDefaultsOnInvalidPayload();
     testEncodeDecodeStorageAuxStateRoundTrips();
     testDecodeTemplateManifestRejectsMissingSchemaVersion();
     testEncodeDecodeTemplateManifestRoundTrips();
     testRuntimeDiagnosticsAndPresenterExposeStatusLines();
+    testChooseWifiProfilePrefersAvailableHighPriorityNetwork();
+    testMarkWifiProfileSuccessUpdatesLastSuccessAt();
     std::cout << "[PASS] core rules" << '\n';
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

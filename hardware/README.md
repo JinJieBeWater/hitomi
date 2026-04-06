@@ -73,9 +73,57 @@ If `platformio` is not on `PATH`, the same `python3 -m platformio ...` invocatio
 
 ## Current Scope
 
-- Loads device credentials, snapshots, queue, and failure logs from local storage
+- Loads device config, snapshots, queue, and failure logs from local storage
+- Supports USB-C serial provisioning for Wi-Fi profiles, backend origin, and bootstrap identity
+- Automatically reconnects to known Wi-Fi profiles based on configured priority / prior success
+- Supports bootstrap activation against the local backend before switching to runtime device credentials
 - Renders a single LVGL status screen
+- Registers FT6336 touch as an LVGL pointer input on the shared I2C bus
 - Periodically probes Wi-Fi state
 - Syncs `/api/device/sync` on startup / reconnect / interval when configured
 - Uploads pending attendance records in batches when configured
 - Leaves camera / enrollment / recognition implementations as abstract ports
+
+## Touchscreen
+
+The SZPI ESP32-S3 runtime now probes the onboard FT6336 touch controller on the existing I2C bus and registers it as an LVGL pointer device.
+
+- Touch reads are polled from the LVGL indev callback.
+- The touch path uses a short read timeout to reduce the chance that controller failures visibly stall the UI loop.
+- The status screen exposes a diagnostic `Touch 0` counter when touch initialization succeeds. The counter increments on each detected touch-release cycle.
+- The status screen also renders five labeled touch probes: `TL`, `TR`, `C`, `BL`, and `BR`. When a probe is hit, the screen updates `Last: ...` and logs the clicked control id to serial. This is the primary control-hit verification path for later interactive UI work.
+- BOOT-key recovery remains the fallback path if touch is unavailable or miscalibrated.
+
+## USB Provisioning
+
+The firmware now accepts newline-delimited JSON commands on the USB CDC serial port. This remains the protocol contract for first-run provisioning. The recommended operator experience is to trigger these commands from the web admin's Web Serial activation wizard, with PlatformIO / serial-monitor tools kept as fallback.
+
+Supported commands:
+
+```json
+{"type":"get_config"}
+{"type":"set_wifi_profiles","profiles":[{"ssid":"Lab","password":"secret","priority":5}]}
+{"type":"set_backend_origin","origin":"http://192.168.1.10:3000"}
+{"type":"set_bootstrap_identity","deviceSerial":"BOOT-001","bootstrapSecret":"secret"}
+{"type":"clear_runtime_credentials"}
+{"type":"clear_wifi_profiles"}
+{"type":"reset_device_config"}
+```
+
+Responses are JSON summaries that intentionally omit secrets such as the runtime `apiKey`.
+
+## Demo Flow
+
+Suggested demo flow:
+
+1. Flash firmware and open the admin backend in a Chromium browser.
+2. Create a device and keep the bootstrap credentials available.
+3. Open the USB activation wizard from the device page or creation result modal.
+4. Connect the device over Web Serial and write `set_wifi_profiles`, `set_backend_origin`, and `set_bootstrap_identity`.
+5. Let the device auto-connect to a known Wi-Fi profile.
+6. Issue activation from the same wizard flow.
+7. Device receives runtime `deviceCode/apiKey` and continues with normal `/api/device/sync`.
+
+Fallback path:
+
+- If Web Serial is unavailable, use PlatformIO / a serial monitor to send the same JSON commands manually.

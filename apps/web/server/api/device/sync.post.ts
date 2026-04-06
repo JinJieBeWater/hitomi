@@ -1,6 +1,13 @@
 import { defineEventHandler } from "h3";
 
-import { authenticateDevice, deviceInternalError, deviceSuccess, getSyncPayload, parseDeviceBody, syncBodySchema } from "../../utils/device";
+import {
+  authenticateDevice,
+  deviceInternalError,
+  deviceSuccess,
+  getSyncPayload,
+  parseDeviceBody,
+  syncBodySchema,
+} from "../../utils/device";
 
 export default defineEventHandler(async (event) => {
   try {
@@ -28,7 +35,7 @@ export default defineEventHandler(async (event) => {
       },
       attendanceConfig: payload.attendanceConfig,
       employees: payload.employees,
-      enrollmentTask: payload.enrollmentTask,
+      enrollmentTasks: payload.enrollmentTasks,
     });
   } catch (error) {
     return deviceInternalError(event, error);

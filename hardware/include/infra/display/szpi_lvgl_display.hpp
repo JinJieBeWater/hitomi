@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "infra/display/touch_transform.hpp"
+
 struct _lv_display_t;
 using lv_display_t = _lv_display_t;
 
@@ -22,6 +24,10 @@ class SzpiLvglDisplay {
 
   bool init();
   lv_display_t* display() const;
+  bool touchReady() const;
+  uint32_t touchTapCount() const;
+  infra::TouchPoint lastTouchPoint() const;
+  bool touchPressed() const;
 
  private:
   struct Impl;

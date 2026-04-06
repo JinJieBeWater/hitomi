@@ -29,7 +29,10 @@ const currentConfig = computed(() => configQuery.data.value?.config ?? null);
 const metrics = computed(() => [
   {
     label: "上班窗口",
-    value: formatTimeRange(currentConfig.value?.workStartMinute, currentConfig.value?.workEndMinute),
+    value: formatTimeRange(
+      currentConfig.value?.workStartMinute,
+      currentConfig.value?.workEndMinute,
+    ),
     icon: "i-lucide-sunrise",
     color: "warning" as const,
   },
@@ -127,7 +130,9 @@ async function handleSubmit() {
     <template #header>
       <PageHeader title="考勤配置" :badges="headerBadges">
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="configQuery.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="configQuery.refetch()"
+            >刷新</UButton
+          >
         </template>
       </PageHeader>
     </template>
@@ -145,7 +150,10 @@ async function handleSubmit() {
         />
 
         <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-          <DataSurface :title="currentConfig ? '时间窗口' : '首次创建配置'" class="workspace-form-surface">
+          <DataSurface
+            :title="currentConfig ? '时间窗口' : '首次创建配置'"
+            class="workspace-form-surface"
+          >
             <form class="space-y-5" @submit.prevent="handleSubmit">
               <div class="grid gap-4 xl:grid-cols-2">
                 <div class="workspace-mobile-card">
@@ -233,18 +241,30 @@ async function handleSubmit() {
           <DataSurface title="规则">
             <div class="divide-y divide-neutral-200/70 text-sm dark:divide-neutral-800/80">
               <div class="py-3 first:pt-0">
-                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">唯一记录</div>
-                <div class="mt-1 font-medium text-highlighted">每位员工每天每种类型仅保留一条最终记录</div>
+                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                  唯一记录
+                </div>
+                <div class="mt-1 font-medium text-highlighted">
+                  每位员工每天每种类型仅保留一条最终记录
+                </div>
               </div>
 
               <div class="py-3">
-                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">日期切分</div>
-                <div class="mt-1 font-medium text-highlighted">管理端与设备端统一按上海时区处理</div>
+                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                  日期切分
+                </div>
+                <div class="mt-1 font-medium text-highlighted">
+                  管理端与设备端统一按上海时区处理
+                </div>
               </div>
 
               <div class="py-3 last:pb-0">
-                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">生效方式</div>
-                <div class="mt-1 font-medium text-highlighted">保存后新的上报会立即按新窗口归类</div>
+                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                  生效方式
+                </div>
+                <div class="mt-1 font-medium text-highlighted">
+                  保存后新的上报会立即按新窗口归类
+                </div>
               </div>
             </div>
           </DataSurface>

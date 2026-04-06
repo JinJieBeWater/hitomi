@@ -56,16 +56,16 @@
 
 推荐使用统一中文文案：
 
-| 状态值 | 展示文案 |
-| --- | --- |
-| `active` | 启用 |
-| `disabled` | 禁用 |
-| `pending` | 待录入 |
-| `success` | 录入成功 |
-| `failed` | 录入失败 |
-| `cancelled` | 已取消 |
-| `clock_in` | 上班 |
-| `clock_out` | 下班 |
+| 状态值      | 展示文案 |
+| ----------- | -------- |
+| `active`    | 启用     |
+| `disabled`  | 禁用     |
+| `pending`   | 待录入   |
+| `success`   | 录入成功 |
+| `failed`    | 录入失败 |
+| `cancelled` | 已取消   |
+| `clock_in`  | 上班     |
+| `clock_out` | 下班     |
 
 ---
 
@@ -90,11 +90,11 @@
 
 ### 展示字段
 
-| 卡片 | 字段 |
-| --- | --- |
-| 员工总数 | `employeeCount` |
-| 设备总数 | `deviceCount` |
-| 今日上班打卡数 | `todayClockInCount` |
+| 卡片           | 字段                 |
+| -------------- | -------------------- |
+| 员工总数       | `employeeCount`      |
+| 设备总数       | `deviceCount`        |
+| 今日上班打卡数 | `todayClockInCount`  |
 | 今日下班打卡数 | `todayClockOutCount` |
 
 ### 交互动作
@@ -129,9 +129,9 @@
 
 ### 筛选字段
 
-| 字段 | 说明 |
-| --- | --- |
-| `keyword` | 按员工编号或姓名搜索 |
+| 字段               | 说明                                                |
+| ------------------ | --------------------------------------------------- |
+| `keyword`          | 按员工编号或姓名搜索                                |
 | `faceProfileState` | `pending`、`success`、`failed`、`cancelled`、`none` |
 
 ### 列表字段
@@ -147,14 +147,14 @@
 
 ### 表格字段映射
 
-| 列名 | 数据来源 |
-| --- | --- |
-| 员工编号 | `code` |
-| 员工姓名 | `name` |
-| 当前录脸状态 | `faceProfile.status` 或空 |
+| 列名             | 数据来源                      |
+| ---------------- | ----------------------------- |
+| 员工编号         | `code`                        |
+| 员工姓名         | `name`                        |
+| 当前录脸状态     | `faceProfile.status` 或空     |
 | 当前录脸设备名称 | `faceProfile.deviceName` 或空 |
-| 更新时间 | `updatedAt` |
-| 操作 | 编辑 |
+| 更新时间         | `updatedAt`                   |
+| 操作             | 编辑                          |
 
 ### 主要动作
 
@@ -208,10 +208,10 @@
 
 ### 筛选字段
 
-| 字段 | 说明 |
-| --- | --- |
+| 字段      | 说明                   |
+| --------- | ---------------------- |
 | `keyword` | 按设备名称或设备码搜索 |
-| `status` | `active` 或 `disabled` |
+| `status`  | `active` 或 `disabled` |
 
 ### 列表字段
 
@@ -226,14 +226,14 @@
 
 ### 表格字段映射
 
-| 列名 | 数据来源 |
-| --- | --- |
-| 设备名称 | `name` |
-| 设备码 | `deviceCode` |
-| 状态 | `status` |
-| 最近在线时间 | `lastSeenAt` |
-| 创建时间 | `createdAt` |
-| 操作 | 编辑、启用/禁用 |
+| 列名         | 数据来源        |
+| ------------ | --------------- |
+| 设备名称     | `name`          |
+| 设备码       | `deviceCode`    |
+| 状态         | `status`        |
+| 最近在线时间 | `lastSeenAt`    |
+| 创建时间     | `createdAt`     |
+| 操作         | 编辑、启用/禁用 |
 
 ### 主要动作
 
@@ -255,11 +255,14 @@
 - 设备名称
 - `deviceCode`
 - `initialApiKey`
+- `bootstrapSerial`
+- `bootstrapSecret`
 
 页面要求：
 
-- 明确提示 `initialApiKey` 只展示一次
+- 明确提示首配需要 `bootstrapSerial` 与 `bootstrapSecret`
 - 关闭结果弹窗或离开页面后，不再通过列表接口显示明文 `apiKey`
+- 允许从结果弹窗直接进入设备激活向导
 
 ### 编辑设备表单
 
@@ -276,6 +279,9 @@
 
 - 不提供删除设备功能
 - 不提供 `apiKey` 重置功能
+- 设备管理页提供“待激活设备”区块
+- 设备管理页提供基于 Web Serial 的 USB 激活向导入口
+- 浏览器不支持 Web Serial 时，页面必须给出回退到串口工具的明确指引
 
 ---
 
@@ -301,12 +307,12 @@
 
 ### 表单字段
 
-| 字段 | 说明 |
-| --- | --- |
+| 字段              | 说明           |
+| ----------------- | -------------- |
 | `workStartMinute` | 上班开始分钟数 |
-| `workEndMinute` | 上班结束分钟数 |
-| `offStartMinute` | 下班开始分钟数 |
-| `offEndMinute` | 下班结束分钟数 |
+| `workEndMinute`   | 上班结束分钟数 |
+| `offStartMinute`  | 下班开始分钟数 |
+| `offEndMinute`    | 下班结束分钟数 |
 
 ### 前端展示建议
 
@@ -365,11 +371,11 @@
 
 ### 筛选字段
 
-| 字段 | 说明 |
-| --- | --- |
-| `status` | `pending`、`success`、`failed`、`cancelled` |
-| `employeeId` | 员工筛选 |
-| `deviceId` | 设备筛选 |
+| 字段         | 说明                                        |
+| ------------ | ------------------------------------------- |
+| `status`     | `pending`、`success`、`failed`、`cancelled` |
+| `employeeId` | 员工筛选                                    |
+| `deviceId`   | 设备筛选                                    |
 
 ### 列表字段
 
@@ -386,16 +392,16 @@
 
 ### 表格字段映射
 
-| 列名 | 数据来源 |
-| --- | --- |
-| 员工编号 | `employee.code` |
-| 员工姓名 | `employee.name` |
-| 设备名称 | `device.name` |
-| 设备码 | `device.deviceCode` |
-| 状态 | `status` |
-| 创建时间 | `createdAt` |
-| 更新时间 | `updatedAt` |
-| 操作 | 创建任务、重新发起、取消 |
+| 列名     | 数据来源                 |
+| -------- | ------------------------ |
+| 员工编号 | `employee.code`          |
+| 员工姓名 | `employee.name`          |
+| 设备名称 | `device.name`            |
+| 设备码   | `device.deviceCode`      |
+| 状态     | `status`                 |
+| 创建时间 | `createdAt`              |
+| 更新时间 | `updatedAt`              |
+| 操作     | 创建任务、重新发起、取消 |
 
 ### 主要动作
 
@@ -452,12 +458,12 @@
 
 ### 筛选字段
 
-| 字段 | 说明 |
-| --- | --- |
-| `localDate` | 单日筛选，格式 `YYYY-MM-DD` |
-| `employeeId` | 员工筛选 |
-| `deviceId` | 设备筛选 |
-| `type` | `clock_in` 或 `clock_out` |
+| 字段         | 说明                        |
+| ------------ | --------------------------- |
+| `localDate`  | 单日筛选，格式 `YYYY-MM-DD` |
+| `employeeId` | 员工筛选                    |
+| `deviceId`   | 设备筛选                    |
+| `type`       | `clock_in` 或 `clock_out`   |
 
 ### 列表字段
 
@@ -472,14 +478,14 @@
 
 ### 表格字段映射
 
-| 列名 | 数据来源 |
-| --- | --- |
-| 日期 | `localDate` |
-| 打卡时间 | `recognizedAt` |
-| 打卡类型 | `type` |
+| 列名     | 数据来源        |
+| -------- | --------------- |
+| 日期     | `localDate`     |
+| 打卡时间 | `recognizedAt`  |
+| 打卡类型 | `type`          |
 | 员工编号 | `employee.code` |
 | 员工姓名 | `employee.name` |
-| 设备名称 | `device.name` |
+| 设备名称 | `device.name`   |
 
 ### 页面动作
 
@@ -495,14 +501,14 @@
 
 ## 页面与接口对应关系
 
-| 页面 | 接口 |
-| --- | --- |
-| Dashboard | `dashboard.summary` |
-| 员工管理页 | `employee.list`、`employee.create`、`employee.update` |
-| 设备管理页 | `device.list`、`device.create`、`device.update` |
-| 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save` |
+| 页面       | 接口                                                            |
+| ---------- | --------------------------------------------------------------- |
+| Dashboard  | `dashboard.summary`                                             |
+| 员工管理页 | `employee.list`、`employee.create`、`employee.update`           |
+| 设备管理页 | `device.list`、`device.create`、`device.update`                 |
+| 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save`                 |
 | 录脸记录页 | `faceProfile.list`、`faceProfile.enqueue`、`faceProfile.cancel` |
-| 考勤记录页 | `attendanceRecord.list` |
+| 考勤记录页 | `attendanceRecord.list`                                         |
 
 ---
 

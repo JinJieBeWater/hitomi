@@ -21,6 +21,7 @@ constexpr char kSnapshotsPath[] = "/snapshots.json";
 constexpr char kAttendanceQueuePath[] = "/attendance_queue.json";
 constexpr char kFailureLogsPath[] = "/failure_logs.json";
 constexpr char kStorageAuxPath[] = "/storage_aux.json";
+constexpr char kDeviceConfigKey[] = "deviceConfig";
 
 std::string loadPreferenceString(Preferences& preferences, const char* key) {
   if (!preferences.isKey(key)) {
@@ -122,6 +123,91 @@ core::EnrollmentTaskSnapshot parseEnrollmentTask(JsonVariantConst value) {
   };
 }
 
+const char* backendLocatorModeToStorageValue(core::BackendLocatorMode mode) {
+  switch (mode) {
+    case core::BackendLocatorMode::FixedOrigin:
+    default:
+      return "fixed_origin";
+  }
+}
+
+core::BackendLocatorMode backendLocatorModeFromStorageValue(const char* value) {
+  if (value == nullptr) {
+    return core::BackendLocatorMode::FixedOrigin;
+  }
+  return std::string(value) == "fixed_origin" ? core::BackendLocatorMode::FixedOrigin
+                                               : core::BackendLocatorMode::FixedOrigin;
+}
+
+std::string encodeDeviceConfig(const core::DeviceConfig& config) {
+  DynamicJsonDocument doc(16 * 1024);
+  doc["schemaVersion"] = config.schemaVersion;
+  doc["diagnosticsEnabled"] = config.diagnosticsEnabled;
+
+  JsonObject backendLocator = doc.createNestedObject("backendLocator");
+  backendLocator["mode"] = backendLocatorModeToStorageValue(config.backendLocator.mode);
+  backendLocator["origin"] = config.backendLocator.origin;
+
+  JsonObject bootstrapIdentity = doc.createNestedObject("bootstrapIdentity");
+  bootstrapIdentity["deviceSerial"] = config.bootstrapIdentity.deviceSerial;
+  bootstrapIdentity["bootstrapSecret"] = config.bootstrapIdentity.bootstrapSecret;
+
+  JsonObject runtimeCredentials = doc.createNestedObject("runtimeCredentials");
+  runtimeCredentials["deviceCode"] = config.runtimeCredentials.deviceCode;
+  runtimeCredentials["apiKey"] = config.runtimeCredentials.apiKey;
+
+  JsonArray wifiProfiles = doc.createNestedArray("wifiProfiles");
+  for (const auto& profile : config.wifiProfiles) {
+    JsonObject item = wifiProfiles.createNestedObject();
+    item["ssid"] = profile.ssid;
+    item["password"] = profile.password;
+    item["priority"] = profile.priority;
+    item["lastSuccessAt"] = profile.lastSuccessAt;
+    item["disabled"] = profile.disabled;
+  }
+
+  std::string output;
+  serializeJson(doc, output);
+  return output;
+}
+
+std::optional<core::DeviceConfig> decodeDeviceConfig(const std::string& payload) {
+  DynamicJsonDocument doc(16 * 1024);
+  const auto error = deserializeJson(doc, payload);
+  if (error) {
+    return std::nullopt;
+  }
+
+  core::DeviceConfig config = {};
+  config.schemaVersion = doc["schemaVersion"] | 1U;
+  config.diagnosticsEnabled = doc["diagnosticsEnabled"] | false;
+
+  JsonVariantConst backendLocator = doc["backendLocator"];
+  config.backendLocator.mode = backendLocatorModeFromStorageValue(backendLocator["mode"] | "fixed_origin");
+  config.backendLocator.origin = backendLocator["origin"] | "";
+
+  JsonVariantConst bootstrapIdentity = doc["bootstrapIdentity"];
+  config.bootstrapIdentity.deviceSerial = bootstrapIdentity["deviceSerial"] | "";
+  config.bootstrapIdentity.bootstrapSecret = bootstrapIdentity["bootstrapSecret"] | "";
+
+  JsonVariantConst runtimeCredentials = doc["runtimeCredentials"];
+  config.runtimeCredentials.deviceCode = runtimeCredentials["deviceCode"] | "";
+  config.runtimeCredentials.apiKey = runtimeCredentials["apiKey"] | "";
+
+  JsonArrayConst wifiProfiles = doc["wifiProfiles"].as<JsonArrayConst>();
+  for (JsonVariantConst item : wifiProfiles) {
+    config.wifiProfiles.push_back(core::WifiProfile{
+        .ssid = item["ssid"] | "",
+        .password = item["password"] | "",
+        .priority = item["priority"] | 0,
+        .lastSuccessAt = item["lastSuccessAt"] | 0ULL,
+        .disabled = item["disabled"] | false,
+    });
+  }
+
+  return config;
+}
+
 class CredentialsStore {
  public:
   bool begin() {
@@ -138,6 +224,36 @@ class CredentialsStore {
   bool save(const core::DeviceCredentials& credentials) {
     return preferences_.putString("deviceCode", credentials.deviceCode.c_str()) > 0 &&
            preferences_.putString("apiKey", credentials.apiKey.c_str()) > 0;
+  }
+
+ private:
+  Preferences preferences_;
+};
+
+class DeviceConfigStore {
+ public:
+  bool begin() {
+    return preferences_.begin("hitomi-device", false);
+  }
+
+  core::DeviceConfig load() {
+    if (!preferences_.isKey(kDeviceConfigKey)) {
+      return {};
+    }
+
+    auto decoded = decodeDeviceConfig(preferences_.getString(kDeviceConfigKey, "").c_str());
+    return decoded.value_or(core::DeviceConfig{});
+  }
+
+  bool save(const core::DeviceConfig& config) {
+    return preferences_.putString(kDeviceConfigKey, encodeDeviceConfig(config).c_str()) > 0;
+  }
+
+  bool clear() {
+    preferences_.remove(kDeviceConfigKey);
+    preferences_.remove("deviceCode");
+    preferences_.remove("apiKey");
+    return true;
   }
 
  private:
@@ -166,8 +282,12 @@ class SnapshotStore {
     if (!doc["attendanceConfig"].isNull()) {
       snapshots.attendanceConfig = parseAttendanceConfig(doc["attendanceConfig"]);
     }
-    if (!doc["enrollmentTask"].isNull()) {
-      snapshots.enrollmentTask = parseEnrollmentTask(doc["enrollmentTask"]);
+    JsonArrayConst enrollmentTasks = doc["enrollmentTasks"].as<JsonArrayConst>();
+    for (JsonVariantConst item : enrollmentTasks) {
+      snapshots.enrollmentTasks.push_back(parseEnrollmentTask(item));
+    }
+    if (snapshots.enrollmentTasks.empty() && !doc["enrollmentTask"].isNull()) {
+      snapshots.enrollmentTasks.push_back(parseEnrollmentTask(doc["enrollmentTask"]));
     }
 
     JsonArrayConst employees = doc["employees"].as<JsonArrayConst>();
@@ -216,17 +336,16 @@ class SnapshotStore {
       item["updatedAt"] = employee.updatedAt;
     }
 
-    if (snapshots.enrollmentTask.has_value()) {
-      JsonObject task = doc.createNestedObject("enrollmentTask");
-      task["taskId"] = snapshots.enrollmentTask->taskId;
-      task["employeeId"] = snapshots.enrollmentTask->employeeId;
-      task["employeeCode"] = snapshots.enrollmentTask->employeeCode;
-      task["employeeName"] = snapshots.enrollmentTask->employeeName;
-      task["status"] = snapshots.enrollmentTask->status;
-      task["createdAt"] = snapshots.enrollmentTask->createdAt;
-      task["updatedAt"] = snapshots.enrollmentTask->updatedAt;
-    } else {
-      doc["enrollmentTask"] = nullptr;
+    JsonArray enrollmentTasks = doc.createNestedArray("enrollmentTasks");
+    for (const auto& taskItem : snapshots.enrollmentTasks) {
+      JsonObject task = enrollmentTasks.createNestedObject();
+      task["taskId"] = taskItem.taskId;
+      task["employeeId"] = taskItem.employeeId;
+      task["employeeCode"] = taskItem.employeeCode;
+      task["employeeName"] = taskItem.employeeName;
+      task["status"] = taskItem.status;
+      task["createdAt"] = taskItem.createdAt;
+      task["updatedAt"] = taskItem.updatedAt;
     }
 
     return writeJsonFile(kSnapshotsPath, doc);
@@ -363,6 +482,7 @@ class StorageAuxStore {
 }  // namespace
 
 struct JsonLocalStore::Impl {
+  DeviceConfigStore deviceConfigStore;
   CredentialsStore credentialsStore;
   SnapshotStore snapshotStore;
   AttendanceQueueStore attendanceQueueStore;
@@ -380,7 +500,7 @@ JsonLocalStore::JsonLocalStore(JsonLocalStore&&) noexcept = default;
 JsonLocalStore& JsonLocalStore::operator=(JsonLocalStore&&) noexcept = default;
 
 LocalStoreInitStatus JsonLocalStore::begin() {
-  impl_->initStatus.credentialsReady = impl_->credentialsStore.begin();
+  impl_->initStatus.credentialsReady = impl_->credentialsStore.begin() && impl_->deviceConfigStore.begin();
   impl_->initStatus.filesystemReady = LittleFS.begin(false);
   return impl_->initStatus;
 }
@@ -388,7 +508,14 @@ LocalStoreInitStatus JsonLocalStore::begin() {
 StoredRuntimeState JsonLocalStore::load() {
   StoredRuntimeState state = {};
   if (impl_->initStatus.credentialsReady) {
-    state.credentials = impl_->credentialsStore.load();
+    state.deviceConfig = impl_->deviceConfigStore.load();
+    state.credentials = state.deviceConfig.runtimeCredentials;
+    if (!state.credentials.configured()) {
+      state.credentials = impl_->credentialsStore.load();
+      if (state.credentials.configured()) {
+        state.deviceConfig.runtimeCredentials = state.credentials;
+      }
+    }
   }
   if (impl_->initStatus.filesystemReady) {
     state.snapshots = impl_->snapshotStore.load();
@@ -399,11 +526,27 @@ StoredRuntimeState JsonLocalStore::load() {
   return state;
 }
 
+bool JsonLocalStore::saveDeviceConfig(const core::DeviceConfig& config) {
+  if (!impl_->initStatus.credentialsReady) {
+    return false;
+  }
+  return impl_->deviceConfigStore.save(config);
+}
+
+bool JsonLocalStore::clearDeviceConfig() {
+  if (!impl_->initStatus.credentialsReady) {
+    return false;
+  }
+  return impl_->deviceConfigStore.clear();
+}
+
 bool JsonLocalStore::saveCredentials(const core::DeviceCredentials& credentials) {
   if (!impl_->initStatus.credentialsReady) {
     return false;
   }
-  return impl_->credentialsStore.save(credentials);
+  core::DeviceConfig config = impl_->deviceConfigStore.load();
+  config.runtimeCredentials = credentials;
+  return impl_->credentialsStore.save(credentials) && impl_->deviceConfigStore.save(config);
 }
 
 bool JsonLocalStore::saveSnapshots(const core::SnapshotBundle& snapshots) {

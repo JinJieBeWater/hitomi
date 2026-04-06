@@ -54,7 +54,16 @@ const [{ eq }, { chromium }, dbModule] = await Promise.all([
   import("@hitomi/db"),
 ]);
 
-const { attendanceConfig, attendanceRecord, db, device, employee, faceProfile, user, verification } = dbModule;
+const {
+  attendanceConfig,
+  attendanceRecord,
+  db,
+  device,
+  employee,
+  faceProfile,
+  user,
+  verification,
+} = dbModule;
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -189,14 +198,12 @@ async function cleanupData(input: {
   email: string;
   employeeCode: string;
   deviceName: string;
-  initialConfig:
-    | null
-    | {
-        workStartMinute: number;
-        workEndMinute: number;
-        offStartMinute: number;
-        offEndMinute: number;
-      };
+  initialConfig: null | {
+    workStartMinute: number;
+    workEndMinute: number;
+    offStartMinute: number;
+    offEndMinute: number;
+  };
 }) {
   const currentEmployee =
     (await db.query.employee.findFirst({
@@ -287,9 +294,13 @@ const initialConfig =
   })) ?? null;
 
 let browser: Awaited<ReturnType<typeof launchBrowser>> | null = null;
-let context: Awaited<ReturnType<Awaited<ReturnType<typeof launchBrowser>>["newContext"]>> | null = null;
-let page: Awaited<ReturnType<Awaited<ReturnType<Awaited<ReturnType<typeof launchBrowser>>["newContext"]>>["newPage"]>> | null =
+let context: Awaited<ReturnType<Awaited<ReturnType<typeof launchBrowser>>["newContext"]>> | null =
   null;
+let page: Awaited<
+  ReturnType<
+    Awaited<ReturnType<Awaited<ReturnType<typeof launchBrowser>>["newContext"]>>["newPage"]
+  >
+> | null = null;
 
 await mkdir(artifactsDir, { recursive: true });
 

@@ -92,7 +92,9 @@ function resetFilters() {
     <template #header>
       <PageHeader title="录脸记录">
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="faceProfilesQuery.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="faceProfilesQuery.refetch()"
+            >刷新</UButton
+          >
         </template>
       </PageHeader>
     </template>
@@ -102,7 +104,12 @@ function resetFilters() {
         <DataSurface title="录脸记录列表">
           <template #actions>
             <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <USelect v-model="status" :items="statusOptions" placeholder="全部状态" class="w-full sm:min-w-40" />
+              <USelect
+                v-model="status"
+                :items="statusOptions"
+                placeholder="全部状态"
+                class="w-full sm:min-w-40"
+              />
               <UButton
                 variant="ghost"
                 color="neutral"
@@ -133,7 +140,6 @@ function resetFilters() {
             v-else-if="rows.length === 0"
             title="暂无录脸记录"
             description="暂无匹配的录脸记录。"
-            icon="i-lucide-scan-face"
           />
 
           <template v-else>
@@ -146,15 +152,21 @@ function resetFilters() {
               >
                 <template #employee-cell="{ row }">
                   <div class="space-y-1">
-                    <div class="font-medium text-highlighted">{{ row.original.employee?.name || "-" }}</div>
+                    <div class="font-medium text-highlighted">
+                      {{ row.original.employee?.name || "-" }}
+                    </div>
                     <div class="text-xs text-toned">{{ row.original.employee?.code || "-" }}</div>
                   </div>
                 </template>
 
                 <template #device-cell="{ row }">
                   <div class="space-y-1">
-                    <div class="font-medium text-highlighted">{{ row.original.device?.name || "-" }}</div>
-                    <div class="text-xs text-toned">{{ row.original.device?.deviceCode || "-" }}</div>
+                    <div class="font-medium text-highlighted">
+                      {{ row.original.device?.name || "-" }}
+                    </div>
+                    <div class="text-xs text-toned">
+                      {{ row.original.device?.deviceCode || "-" }}
+                    </div>
                   </div>
                 </template>
 
@@ -173,7 +185,12 @@ function resetFilters() {
 
                 <template #actions-cell="{ row }">
                   <div class="flex flex-wrap gap-2">
-                    <UButton size="xs" variant="outline" icon="i-lucide-arrow-up-right" @click="goToEmployee(row.original)">
+                    <UButton
+                      size="xs"
+                      variant="outline"
+                      icon="i-lucide-arrow-up-right"
+                      @click="goToEmployee(row.original)"
+                    >
                       查看员工
                     </UButton>
 
@@ -196,7 +213,9 @@ function resetFilters() {
               <div v-for="item in rows" :key="item.id" class="workspace-mobile-card">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 space-y-1">
-                    <div class="truncate text-base font-semibold text-highlighted">{{ item.employee?.name || "-" }}</div>
+                    <div class="truncate text-base font-semibold text-highlighted">
+                      {{ item.employee?.name || "-" }}
+                    </div>
                     <div class="text-sm text-toned">{{ item.employee?.code || "-" }}</div>
                   </div>
 
@@ -210,19 +229,28 @@ function resetFilters() {
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">设备</div>
+                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                      设备
+                    </div>
                     <div class="mt-1 text-highlighted">{{ item.device?.name || "-" }}</div>
                     <div class="text-xs text-toned">{{ item.device?.deviceCode || "-" }}</div>
                   </div>
 
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">更新时间</div>
+                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                      更新时间
+                    </div>
                     <div class="mt-1 text-highlighted">{{ formatDateTime(item.updatedAt) }}</div>
                   </div>
                 </div>
 
                 <div class="mt-4 flex flex-wrap justify-end gap-2">
-                  <UButton size="sm" variant="outline" icon="i-lucide-arrow-up-right" @click="goToEmployee(item)">
+                  <UButton
+                    size="sm"
+                    variant="outline"
+                    icon="i-lucide-arrow-up-right"
+                    @click="goToEmployee(item)"
+                  >
                     查看员工
                   </UButton>
 
@@ -242,7 +270,12 @@ function resetFilters() {
           </template>
 
           <template #footer>
-            <ListPagination :page="page" :page-size="pageSize" :total="total" @update:page="page = $event" />
+            <ListPagination
+              :page="page"
+              :page-size="pageSize"
+              :total="total"
+              @update:page="page = $event"
+            />
           </template>
         </DataSurface>
       </div>

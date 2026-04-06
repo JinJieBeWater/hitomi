@@ -5,12 +5,17 @@ const props = defineProps<{
     name: string;
     deviceCode: string;
     initialApiKey: string;
+    bootstrapSerial: string;
+    bootstrapSecret: string;
   } | null;
 }>();
 
 const emit = defineEmits<{
   "copy:code": [];
   "copy:key": [];
+  "copy:bootstrap-serial": [];
+  "copy:bootstrap-secret": [];
+  "start-activation": [];
   "update:open": [value: boolean];
 }>();
 
@@ -35,6 +40,16 @@ const items = computed(() => {
       value: props.device.initialApiKey,
       mono: true,
     },
+    {
+      label: "Bootstrap 序列号",
+      value: props.device.bootstrapSerial,
+      mono: true,
+    },
+    {
+      label: "Bootstrap 密钥",
+      value: props.device.bootstrapSecret,
+      mono: true,
+    },
   ];
 });
 </script>
@@ -45,7 +60,7 @@ const items = computed(() => {
     :dismissible="false"
     :close="false"
     title="设备创建成功"
-    description="请立即保存设备码和初始化密钥。初始化密钥只会显示这一次。"
+    description="请立即保存设备码、初始化密钥和 bootstrap 凭据。设备首配使用 bootstrap 凭据，初始化密钥会在激活阶段下发给设备。"
     :ui="{ content: 'sm:max-w-xl' }"
     @update:open="emit('update:open', $event)"
   >
@@ -88,11 +103,31 @@ const items = computed(() => {
             >
               复制密钥
             </UButton>
+
+            <UButton
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-copy"
+              @click="emit('copy:bootstrap-serial')"
+            >
+              复制序列号
+            </UButton>
+
+            <UButton
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-copy"
+              @click="emit('copy:bootstrap-secret')"
+            >
+              复制 Bootstrap 密钥
+            </UButton>
+
+            <UButton color="primary" icon="i-lucide-usb" @click="emit('start-activation')">
+              开始激活
+            </UButton>
           </div>
 
-          <UButton icon="i-lucide-check" @click="close()">
-            完成
-          </UButton>
+          <UButton icon="i-lucide-check" @click="close()"> 完成 </UButton>
         </div>
       </div>
     </template>

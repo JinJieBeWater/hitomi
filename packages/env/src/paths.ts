@@ -2,15 +2,10 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const workspaceMarkers = [
-  "package.json",
-  "bun.lock",
-  "turbo.json",
-  "apps/web/package.json",
-];
+const workspaceMarkers = ["package.json", "bun.lock", "turbo.json", "apps/web/package.json"];
 
 function hasWorkspaceMarkers(dir: string) {
-  return workspaceMarkers.every(marker => existsSync(resolve(dir, marker)));
+  return workspaceMarkers.every((marker) => existsSync(resolve(dir, marker)));
 }
 
 function findWorkspaceRoot(start: string) {

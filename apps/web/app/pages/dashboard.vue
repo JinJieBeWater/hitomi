@@ -56,10 +56,16 @@ const shortcuts = [
     <template #header>
       <PageHeader
         title="概览"
-        :badges="summaryData?.todayLocalDate ? [{ label: summaryData.todayLocalDate, color: 'neutral' }] : []"
+        :badges="
+          summaryData?.todayLocalDate
+            ? [{ label: summaryData.todayLocalDate, color: 'neutral' }]
+            : []
+        "
       >
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="summary.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="summary.refetch()"
+            >刷新</UButton
+          >
         </template>
       </PageHeader>
     </template>

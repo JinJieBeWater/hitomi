@@ -36,7 +36,10 @@ export default defineEventHandler(async (event) => {
     }
 
     if (task.deviceId !== auth.device.id) {
-      return deviceFailure("ENROLLMENT_TASK_MISMATCH", "enrollment task does not belong to current device");
+      return deviceFailure(
+        "ENROLLMENT_TASK_MISMATCH",
+        "enrollment task does not belong to current device",
+      );
     }
 
     if (task.status === "cancelled") {

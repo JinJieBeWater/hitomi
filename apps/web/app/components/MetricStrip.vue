@@ -33,7 +33,9 @@ function shouldShowCaption(caption?: string): boolean {
       <div class="min-w-0 flex-1 space-y-1">
         <div class="workspace-metric-label">{{ item.label }}</div>
         <div class="workspace-metric-value">{{ item.value }}</div>
-        <div v-if="shouldShowCaption(item.caption)" class="workspace-metric-meta">{{ item.caption }}</div>
+        <div v-if="shouldShowCaption(item.caption)" class="workspace-metric-meta">
+          {{ item.caption }}
+        </div>
       </div>
 
       <div

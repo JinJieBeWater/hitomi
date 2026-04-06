@@ -7,14 +7,16 @@ withDefaults(
   }>(),
   {
     description: "",
-    icon: "i-lucide-inbox",
   },
 );
 </script>
 
 <template>
   <div class="workspace-empty-state">
-    <div class="flex size-12 items-center justify-center rounded-2xl bg-neutral-900/5 text-neutral-500 ring-1 ring-inset ring-neutral-900/10">
+    <div
+      v-if="icon"
+      class="flex size-12 items-center justify-center rounded-2xl bg-neutral-900/5 text-neutral-500 ring-1 ring-inset ring-neutral-900/10"
+    >
       <UIcon :name="icon" class="size-6" />
     </div>
 

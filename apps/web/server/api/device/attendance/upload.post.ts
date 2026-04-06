@@ -148,7 +148,12 @@ export default defineEventHandler(async (event) => {
             deviceId: auth.device.id,
             recognizedAt,
           })
-          .where(and(eq(attendanceRecord.id, existing.id), gt(attendanceRecord.recognizedAt, recognizedAt)));
+          .where(
+            and(
+              eq(attendanceRecord.id, existing.id),
+              gt(attendanceRecord.recognizedAt, recognizedAt),
+            ),
+          );
 
         if (updateResult.rowsAffected > 0) {
           results.push({

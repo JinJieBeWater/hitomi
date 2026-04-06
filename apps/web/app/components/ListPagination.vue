@@ -17,14 +17,14 @@ const emit = defineEmits<{
 
 const pageCount = computed(() => Math.max(1, Math.ceil(props.total / props.pageSize)));
 const start = computed(() => (props.total === 0 ? 0 : (props.page - 1) * props.pageSize + 1));
-const end = computed(() => (props.total === 0 ? 0 : Math.min(props.page * props.pageSize, props.total)));
+const end = computed(() =>
+  props.total === 0 ? 0 : Math.min(props.page * props.pageSize, props.total),
+);
 </script>
 
 <template>
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-    <div class="text-sm text-toned">
-      显示 {{ start }} - {{ end }}，共 {{ props.total }} 条
-    </div>
+    <div class="text-sm text-toned">显示 {{ start }} - {{ end }}，共 {{ props.total }} 条</div>
 
     <UPagination
       v-if="pageCount > 1"

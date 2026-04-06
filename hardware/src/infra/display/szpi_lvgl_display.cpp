@@ -17,10 +17,12 @@
 #include <utility>
 
 #include "board/pins.hpp"
+#include "infra/display/touch_transform.hpp"
 
 namespace {
 
 constexpr TickType_t kI2cTimeout = pdMS_TO_TICKS(1000);
+constexpr TickType_t kTouchI2cTimeout = pdMS_TO_TICKS(20);
 
 constexpr uint8_t kPca9557Address = 0x19;
 constexpr uint8_t kPca9557OutputReg = 0x01;
@@ -29,11 +31,35 @@ constexpr uint8_t kPca9557DefaultOutput = 0x05;
 constexpr uint8_t kPca9557DefaultConfig = 0xF8;
 constexpr uint8_t kLcdCsBit = 1u << 0;
 
+constexpr uint8_t kFt6336Address = 0x38;
+constexpr uint8_t kFt6336TouchStatusReg = 0x02;
+constexpr size_t kFt6336PointPayloadSize = 5;
+constexpr uint8_t kFt6336TouchCountMask = 0x0F;
+constexpr uint8_t kFt6336CoordHighMask = 0x0F;
+
+constexpr infra::TouchTransformConfig kTouchTransform = infra::makeTouchTransform(
+    static_cast<int16_t>(SzpiLvglDisplay::kHorizontalResolution),
+    static_cast<int16_t>(SzpiLvglDisplay::kVerticalResolution),
+    infra::kSzpiTouchOrientation);
+
+struct Ft6336Sample {
+  bool pressed = false;
+  uint16_t rawX = 0;
+  uint16_t rawY = 0;
+};
+
 struct SzpiLvglDisplayImpl {
   esp_lcd_panel_io_handle_t io = nullptr;
   esp_lcd_panel_handle_t panel = nullptr;
   lv_display_t* display = nullptr;
+  lv_indev_t* touchIndev = nullptr;
   uint16_t* drawBuffer = nullptr;
+  infra::TouchReadState touchState = {};
+  uint32_t touchTapCount = 0;
+  uint32_t lastTouchErrorLogMs = 0;
+  bool i2cInstalled = false;
+  bool spiInitialized = false;
+  bool touchReady = false;
   bool ready = false;
 };
 
@@ -44,6 +70,10 @@ bool logEspError(esp_err_t err, const char* action) {
 
   Serial.printf("[SZPI.ESP_LCD] %s failed: %s\n", action, esp_err_to_name(err));
   return false;
+}
+
+lv_point_t toLvPoint(const infra::TouchPoint& point) {
+  return lv_point_t{point.x, point.y};
 }
 
 void flushCallback(lv_display_t* display, const lv_area_t* area, uint8_t* pxMap) {
@@ -87,6 +117,41 @@ bool writePca9557Register(uint8_t reg, uint8_t value) {
     return false;
   }
 
+  return true;
+}
+
+bool readI2cRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, size_t length, TickType_t timeout) {
+  esp_err_t err = i2c_master_write_read_device(board::kI2cPort, address, &startReg, sizeof(startReg), buffer, length, timeout);
+  return err == ESP_OK;
+}
+
+bool probeFt6336() {
+  uint8_t touchStatus = 0;
+  return readI2cRegisters(kFt6336Address, kFt6336TouchStatusReg, &touchStatus, sizeof(touchStatus), kTouchI2cTimeout);
+}
+
+bool readFt6336Sample(Ft6336Sample& sample) {
+  uint8_t payload[kFt6336PointPayloadSize] = {};
+  if (!readI2cRegisters(
+          kFt6336Address,
+          kFt6336TouchStatusReg,
+          payload,
+          sizeof(payload),
+          kTouchI2cTimeout)) {
+    return false;
+  }
+
+  const uint8_t touchCount = payload[0] & kFt6336TouchCountMask;
+  if (touchCount == 0) {
+    sample.pressed = false;
+    sample.rawX = 0;
+    sample.rawY = 0;
+    return true;
+  }
+
+  sample.pressed = true;
+  sample.rawX = static_cast<uint16_t>(((payload[1] & kFt6336CoordHighMask) << 8) | payload[2]);
+  sample.rawY = static_cast<uint16_t>(((payload[3] & kFt6336CoordHighMask) << 8) | payload[4]);
   return true;
 }
 
@@ -188,6 +253,7 @@ bool initPanel(SzpiLvglDisplayImpl& impl) {
     logEspError(err, "spi_bus_initialize");
     return false;
   }
+  impl.spiInitialized = true;
 
   esp_lcd_panel_io_spi_config_t ioCfg = {};
   ioCfg.dc_gpio_num = board::kLcdDcPin;
@@ -227,10 +293,17 @@ bool initPanel(SzpiLvglDisplayImpl& impl) {
   if (!logEspError(esp_lcd_panel_invert_color(impl.panel, true), "esp_lcd_panel_invert_color")) {
     return false;
   }
-  if (!logEspError(esp_lcd_panel_swap_xy(impl.panel, true), "esp_lcd_panel_swap_xy")) {
+  if (!logEspError(
+          esp_lcd_panel_swap_xy(impl.panel, infra::kSzpiPanelOrientation.swapXY),
+          "esp_lcd_panel_swap_xy")) {
     return false;
   }
-  if (!logEspError(esp_lcd_panel_mirror(impl.panel, true, false), "esp_lcd_panel_mirror")) {
+  if (!logEspError(
+          esp_lcd_panel_mirror(
+              impl.panel,
+              infra::kSzpiPanelOrientation.mirrorX,
+              infra::kSzpiPanelOrientation.mirrorY),
+          "esp_lcd_panel_mirror")) {
     return false;
   }
   return logEspError(esp_lcd_panel_disp_on_off(impl.panel, true), "esp_lcd_panel_disp_on_off");
@@ -264,13 +337,126 @@ bool initLvglDisplay(SzpiLvglDisplayImpl& impl) {
   return true;
 }
 
+void applyTouchReadResult(SzpiLvglDisplayImpl& impl, const infra::TouchReadResult& result, lv_indev_data_t* data) {
+  impl.touchState = result.nextState;
+  data->state = result.pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+  data->point = toLvPoint(result.point);
+}
+
+void touchReadCallback(lv_indev_t* indev, lv_indev_data_t* data) {
+  auto* impl = static_cast<SzpiLvglDisplayImpl*>(lv_indev_get_driver_data(indev));
+  if (impl == nullptr) {
+    data->state = LV_INDEV_STATE_RELEASED;
+    data->point = toLvPoint(infra::TouchPoint{});
+    return;
+  }
+
+  Ft6336Sample sample = {};
+  const bool wasPressed = impl->touchState.pressed;
+  if (!readFt6336Sample(sample)) {
+    const uint32_t nowMs = millis();
+    if (nowMs - impl->lastTouchErrorLogMs >= 1000U) {
+      Serial.println("[SZPI.TOUCH] FT6336 read failed; preserving previous touch state");
+      impl->lastTouchErrorLogMs = nowMs;
+    }
+    const infra::TouchReadResult resolved = infra::resolveTouchReadState(
+        impl->touchState,
+        false,
+        false,
+        infra::TouchPoint{});
+    applyTouchReadResult(*impl, resolved, data);
+    return;
+  }
+
+  const infra::TouchPoint transformedPoint = infra::applyTouchTransform(sample.rawX, sample.rawY, kTouchTransform);
+  const infra::TouchReadResult resolved = infra::resolveTouchReadState(
+      impl->touchState,
+      true,
+      sample.pressed,
+      transformedPoint);
+  impl->touchState = resolved.nextState;
+  if (wasPressed && !resolved.nextState.pressed) {
+    impl->touchTapCount += 1;
+  }
+  impl->lastTouchErrorLogMs = 0;
+
+  applyTouchReadResult(*impl, resolved, data);
+}
+
+bool initTouchInput(SzpiLvglDisplayImpl& impl) {
+  if (impl.display == nullptr) {
+    return false;
+  }
+
+  if (!probeFt6336()) {
+    Serial.println("[SZPI.TOUCH] FT6336 probe failed; touch input disabled");
+    return false;
+  }
+
+  impl.touchIndev = lv_indev_create();
+  if (impl.touchIndev == nullptr) {
+    Serial.println("[SZPI.TOUCH] lv_indev_create failed");
+    return false;
+  }
+
+  lv_indev_set_type(impl.touchIndev, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_display(impl.touchIndev, impl.display);
+  lv_indev_set_driver_data(impl.touchIndev, &impl);
+  lv_indev_set_read_cb(impl.touchIndev, touchReadCallback);
+  impl.touchReady = true;
+  Serial.println("[SZPI.TOUCH] FT6336 touch input ready");
+  return true;
+}
+
+void releaseDisplayResources(SzpiLvglDisplayImpl& impl) {
+  if (impl.touchIndev != nullptr) {
+    lv_indev_delete(impl.touchIndev);
+    impl.touchIndev = nullptr;
+  }
+
+  if (impl.display != nullptr) {
+    lv_display_delete(impl.display);
+    impl.display = nullptr;
+  }
+
+  if (impl.drawBuffer != nullptr) {
+    heap_caps_free(impl.drawBuffer);
+    impl.drawBuffer = nullptr;
+  }
+
+  if (impl.panel != nullptr) {
+    esp_lcd_panel_del(impl.panel);
+    impl.panel = nullptr;
+  }
+
+  if (impl.io != nullptr) {
+    esp_lcd_panel_io_del(impl.io);
+    impl.io = nullptr;
+  }
+
+  if (impl.spiInitialized) {
+    spi_bus_free(board::kLcdSpiHost);
+    impl.spiInitialized = false;
+  }
+
+  if (impl.i2cInstalled) {
+    i2c_driver_delete(board::kI2cPort);
+    impl.i2cInstalled = false;
+  }
+}
+
 }  // namespace
 
 struct SzpiLvglDisplay::Impl : SzpiLvglDisplayImpl {};
 
 SzpiLvglDisplay::SzpiLvglDisplay() : impl_(std::make_unique<Impl>()) {}
 
-SzpiLvglDisplay::~SzpiLvglDisplay() = default;
+SzpiLvglDisplay::~SzpiLvglDisplay() {
+  if (impl_ == nullptr) {
+    return;
+  }
+  releaseDisplayResources(*impl_);
+}
 
 SzpiLvglDisplay::SzpiLvglDisplay(SzpiLvglDisplay&&) noexcept = default;
 
@@ -285,6 +471,7 @@ bool SzpiLvglDisplay::init() {
     Serial.println("[SZPI.ESP_LCD] PCA9557 init failed");
     return false;
   }
+  impl_->i2cInstalled = true;
   if (!initBacklightPwm()) {
     Serial.println("[SZPI.ESP_LCD] Backlight PWM init failed");
     return false;
@@ -297,6 +484,7 @@ bool SzpiLvglDisplay::init() {
     Serial.println("[SZPI.ESP_LCD] LVGL display init failed");
     return false;
   }
+  initTouchInput(*impl_);
   if (!setBacklightPercent(100)) {
     Serial.println("[SZPI.ESP_LCD] Failed to enable backlight");
     return false;
@@ -308,4 +496,23 @@ bool SzpiLvglDisplay::init() {
 
 lv_display_t* SzpiLvglDisplay::display() const {
   return impl_->display;
+}
+
+bool SzpiLvglDisplay::touchReady() const {
+  return impl_->touchReady;
+}
+
+uint32_t SzpiLvglDisplay::touchTapCount() const {
+  return impl_->touchTapCount;
+}
+
+infra::TouchPoint SzpiLvglDisplay::lastTouchPoint() const {
+  return infra::TouchPoint{
+      .x = impl_->touchState.lastPoint.x,
+      .y = impl_->touchState.lastPoint.y,
+  };
+}
+
+bool SzpiLvglDisplay::touchPressed() const {
+  return impl_->touchState.pressed;
 }

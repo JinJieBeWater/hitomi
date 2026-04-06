@@ -47,14 +47,7 @@ process.env.DATABASE_URL = normalizeDatabaseUrl(process.env.DATABASE_URL);
 
 const [{ and, eq }, dbModule] = await Promise.all([import("drizzle-orm"), import("@hitomi/db")]);
 
-const {
-  attendanceConfig,
-  attendanceRecord,
-  db,
-  device,
-  employee,
-  faceProfile,
-} = dbModule;
+const { attendanceConfig, attendanceRecord, db, device, employee, faceProfile } = dbModule;
 
 type DeviceFailure = {
   success: false;
@@ -94,7 +87,7 @@ type SyncResponseData = {
     name: string;
     updatedAt: number;
   }>;
-  enrollmentTask: {
+  enrollmentTasks: Array<{
     taskId: string;
     employeeId: string;
     employeeCode: string;
@@ -102,7 +95,7 @@ type SyncResponseData = {
     status: string;
     createdAt: number;
     updatedAt: number;
-  } | null;
+  }>;
 };
 
 type EnrollmentReportResponseData = {
@@ -129,6 +122,13 @@ type AttendanceUploadResponseData = {
     ignoredDuplicate: number;
     rejected: number;
   };
+};
+
+type BootstrapResponseData = {
+  registrationId: string;
+  state: string;
+  deviceCode: string | null;
+  apiKey: string | null;
 };
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -229,11 +229,7 @@ async function startServerIfNeeded(preferredBaseUrl: string) {
 
   const host = "127.0.0.1";
   const port = await findAvailablePort(host);
-  const baseUrl = resolveAppOrigin({
-    ...process.env,
-    HOST: host,
-    PORT: `${port}`,
-  });
+  const baseUrl = `http://${host}:${port}`;
   const child = spawn("bun", ["run", "dev", "--", "--port", `${port}`, "--host", host], {
     cwd: appRoot,
     env: {
@@ -254,16 +250,23 @@ async function startServerIfNeeded(preferredBaseUrl: string) {
 
 async function cleanup(ids: {
   employeeId: string;
+  secondEmployeeId: string;
   deviceId: string;
   secondDeviceId: string;
+  bootstrapDeviceId: string;
   faceProfileId: string;
+  secondFaceProfileId: string;
   createdTempConfig: boolean;
 }) {
   await db.delete(attendanceRecord).where(eq(attendanceRecord.employeeId, ids.employeeId));
+  await db.delete(attendanceRecord).where(eq(attendanceRecord.employeeId, ids.secondEmployeeId));
   await db.delete(faceProfile).where(eq(faceProfile.id, ids.faceProfileId));
+  await db.delete(faceProfile).where(eq(faceProfile.id, ids.secondFaceProfileId));
   await db.delete(device).where(eq(device.id, ids.secondDeviceId));
+  await db.delete(device).where(eq(device.id, ids.bootstrapDeviceId));
   await db.delete(device).where(eq(device.id, ids.deviceId));
   await db.delete(employee).where(eq(employee.id, ids.employeeId));
+  await db.delete(employee).where(eq(employee.id, ids.secondEmployeeId));
 
   if (ids.createdTempConfig) {
     await db.delete(attendanceConfig).where(eq(attendanceConfig.id, "default"));
@@ -274,14 +277,22 @@ const preferredBaseUrl = resolveAppOrigin(process.env);
 const { baseUrl, server } = await startServerIfNeeded(preferredBaseUrl);
 
 const employeeId = createId("smoke_emp");
+const secondEmployeeId = createId("smoke_emp");
 const deviceId = createId("smoke_dev");
 const secondDeviceId = createId("smoke_dev");
+const bootstrapDeviceId = createId("smoke_dev");
 const faceProfileId = createId("smoke_fp");
+const secondFaceProfileId = createId("smoke_fp");
 const smokeSuffix = Date.now().toString(36);
 const deviceCode = `DEV-SMOKE-A-${smokeSuffix}`;
 const secondDeviceCode = `DEV-SMOKE-B-${smokeSuffix}`;
+const bootstrapDeviceCode = `DEV-SMOKE-C-${smokeSuffix}`;
 const apiKey = `smoke_api_key_a_${smokeSuffix}`;
 const secondApiKey = `smoke_api_key_b_${smokeSuffix}`;
+const bootstrapApiKey = `smoke_api_key_c_${smokeSuffix}`;
+const issuedBootstrapApiKey = `smoke_api_key_c_issued_${smokeSuffix}`;
+const bootstrapSerial = `BOOT-SMOKE-${smokeSuffix}`;
+const bootstrapSecret = `bootstrap_secret_${smokeSuffix}`;
 
 let createdTempConfig = false;
 
@@ -316,6 +327,12 @@ try {
     name: "Smoke Employee",
   });
 
+  await db.insert(employee).values({
+    id: secondEmployeeId,
+    code: `SMOKE${(Date.now() + 1).toString().slice(-6)}`,
+    name: "Smoke Employee B",
+  });
+
   await db.insert(device).values({
     id: deviceId,
     deviceCode,
@@ -332,12 +349,31 @@ try {
     status: "active",
   });
 
-  await db.insert(faceProfile).values({
-    id: faceProfileId,
-    employeeId,
-    deviceId,
-    status: "pending",
+  await db.insert(device).values({
+    id: bootstrapDeviceId,
+    deviceCode: bootstrapDeviceCode,
+    name: "Smoke Bootstrap Device",
+    apiKeyHash: await sha256Hex(bootstrapApiKey),
+    status: "active",
+    bootstrapSerial,
+    bootstrapSecretHash: await sha256Hex(bootstrapSecret),
+    activationStatus: "pending",
   });
+
+  await db.insert(faceProfile).values([
+    {
+      id: faceProfileId,
+      employeeId,
+      deviceId,
+      status: "pending",
+    },
+    {
+      id: secondFaceProfileId,
+      employeeId: secondEmployeeId,
+      deviceId,
+      status: "pending",
+    },
+  ]);
 
   const syncResponse = await fetch(`${baseUrl}/api/device/sync`, {
     method: "POST",
@@ -357,7 +393,137 @@ try {
     syncJson.data.employees.some((item: { id: string }) => item.id === employeeId),
     "device sync should include smoke employee",
   );
-  assert(syncJson.data.enrollmentTask?.taskId === faceProfileId, "device sync should include pending task");
+  assert(
+    syncJson.data.enrollmentTasks.length === 2,
+    "device sync should include both pending tasks",
+  );
+  assert(
+    syncJson.data.enrollmentTasks.some((item) => item.taskId === faceProfileId),
+    "device sync should include first pending task",
+  );
+  assert(
+    syncJson.data.enrollmentTasks.some((item) => item.taskId === secondFaceProfileId),
+    "device sync should include second pending task",
+  );
+
+  const bootstrapHelloResponse = await fetch(`${baseUrl}/api/device/bootstrap/hello`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      deviceSerial: bootstrapSerial,
+      bootstrapSecret,
+      firmwareTag: "smoke-fw",
+      wifiSsid: "smoke-lab",
+    }),
+  });
+  const bootstrapHelloJson =
+    await readJson<DeviceResponse<BootstrapResponseData>>(bootstrapHelloResponse);
+  assert(bootstrapHelloJson.success === true, "bootstrap hello should succeed");
+  assert(
+    bootstrapHelloJson.data.state === "pending",
+    "bootstrap hello should remain pending before claim",
+  );
+
+  await db
+    .update(device)
+    .set({
+      apiKeyHash: await sha256Hex(issuedBootstrapApiKey),
+      activationStatus: "issued",
+      pendingApiKey: issuedBootstrapApiKey,
+    })
+    .where(eq(device.id, bootstrapDeviceId));
+
+  const activationStatusResponse = await fetch(`${baseUrl}/api/device/bootstrap/claim-status`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      deviceSerial: bootstrapSerial,
+      bootstrapSecret,
+      registrationId: bootstrapHelloJson.data.registrationId,
+    }),
+  });
+  const activationStatusJson =
+    await readJson<DeviceResponse<BootstrapResponseData>>(activationStatusResponse);
+  assert(activationStatusJson.success === true, "activation status should succeed");
+  assert(
+    activationStatusJson.data.state === "activated",
+    "activation status should issue device credentials",
+  );
+  assert(
+    activationStatusJson.data.deviceCode === bootstrapDeviceCode,
+    "activation status should return bootstrap device code",
+  );
+  assert(
+    activationStatusJson.data.apiKey === issuedBootstrapApiKey,
+    "activation status should return the newly issued api key",
+  );
+
+  const activationRetryResponse = await fetch(`${baseUrl}/api/device/bootstrap/claim-status`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      deviceSerial: bootstrapSerial,
+      bootstrapSecret,
+      registrationId: bootstrapHelloJson.data.registrationId,
+    }),
+  });
+  const activationRetryJson =
+    await readJson<DeviceResponse<BootstrapResponseData>>(activationRetryResponse);
+  assert(activationRetryJson.success === true, "activation retry should still succeed");
+  assert(activationRetryJson.data.state === "activated", "activation retry should stay activated");
+  assert(
+    activationRetryJson.data.apiKey === issuedBootstrapApiKey,
+    "activation retry should still return the pending api key before device ack",
+  );
+
+  const bootstrapSyncResponse = await fetch(`${baseUrl}/api/device/sync`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      deviceCode: bootstrapDeviceCode,
+      apiKey: issuedBootstrapApiKey,
+    }),
+  });
+  const bootstrapSyncJson = await readJson<DeviceResponse<SyncResponseData>>(bootstrapSyncResponse);
+  assert(
+    bootstrapSyncJson.success === true,
+    "bootstrap device should sync after receiving runtime credentials",
+  );
+
+  const activationAfterAckResponse = await fetch(`${baseUrl}/api/device/bootstrap/claim-status`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      deviceSerial: bootstrapSerial,
+      bootstrapSecret,
+      registrationId: bootstrapHelloJson.data.registrationId,
+    }),
+  });
+  const activationAfterAckJson = await readJson<DeviceResponse<BootstrapResponseData>>(
+    activationAfterAckResponse,
+  );
+  assert(
+    activationAfterAckJson.success === true,
+    "activation status after device ack should succeed",
+  );
+  assert(
+    activationAfterAckJson.data.state === "activated",
+    "activation status after ack should remain activated",
+  );
+  assert(
+    activationAfterAckJson.data.apiKey === null,
+    "activation status after ack should not leak api key",
+  );
 
   await db
     .update(faceProfile)
@@ -382,9 +548,13 @@ try {
       failureReason: null,
     }),
   });
-  const staleEnrollmentJson = await readJson<DeviceResponse<EnrollmentReportResponseData>>(staleEnrollmentResponse);
+  const staleEnrollmentJson =
+    await readJson<DeviceResponse<EnrollmentReportResponseData>>(staleEnrollmentResponse);
 
-  assert(staleEnrollmentJson.success === false, "stale device should not be able to finish reassigned task");
+  assert(
+    staleEnrollmentJson.success === false,
+    "stale device should not be able to finish reassigned task",
+  );
   assert(
     staleEnrollmentJson.error.code === "ENROLLMENT_TASK_MISMATCH",
     "stale device should receive enrollment task mismatch",
@@ -396,7 +566,10 @@ try {
     })) ?? null;
 
   assert(pendingFaceProfile?.status === "pending", "reassigned face profile should remain pending");
-  assert(pendingFaceProfile.deviceId === secondDeviceId, "reassigned face profile should stay on the new device");
+  assert(
+    pendingFaceProfile.deviceId === secondDeviceId,
+    "reassigned face profile should stay on the new device",
+  );
 
   const secondSyncResponse = await fetch(`${baseUrl}/api/device/sync`, {
     method: "POST",
@@ -411,7 +584,10 @@ try {
   const secondSyncJson = await readJson<DeviceResponse<SyncResponseData>>(secondSyncResponse);
 
   assert(secondSyncJson.success === true, "second sync should succeed");
-  assert(secondSyncJson.data.enrollmentTask?.taskId === faceProfileId, "reassigned device should receive pending task");
+  assert(
+    secondSyncJson.data.enrollmentTasks.some((item) => item.taskId === faceProfileId),
+    "reassigned device should receive pending task",
+  );
 
   const enrollmentResponse = await fetch(`${baseUrl}/api/device/enrollment/report`, {
     method: "POST",
@@ -428,7 +604,8 @@ try {
       failureReason: null,
     }),
   });
-  const enrollmentJson = await readJson<DeviceResponse<EnrollmentReportResponseData>>(enrollmentResponse);
+  const enrollmentJson =
+    await readJson<DeviceResponse<EnrollmentReportResponseData>>(enrollmentResponse);
 
   assert(enrollmentJson.success === true, "enrollment report should succeed on current device");
   assert(enrollmentJson.data.status === "success", "enrollment status should become success");
@@ -453,7 +630,10 @@ try {
   const thirdSyncJson = await readJson<DeviceResponse<SyncResponseData>>(thirdSyncResponse);
 
   assert(thirdSyncJson.success === true, "third sync should succeed");
-  assert(thirdSyncJson.data.enrollmentTask === null, "completed task should no longer be returned");
+  assert(
+    !thirdSyncJson.data.enrollmentTasks.some((item) => item.taskId === faceProfileId),
+    "completed task should no longer be returned",
+  );
 
   const windowSize = configRow.workEndMinute - configRow.workStartMinute;
   const baseMinute = windowSize > 2 ? configRow.workStartMinute + 2 : configRow.workStartMinute;
@@ -478,7 +658,8 @@ try {
       ],
     }),
   });
-  const firstUploadJson = await readJson<DeviceResponse<AttendanceUploadResponseData>>(firstUploadResponse);
+  const firstUploadJson =
+    await readJson<DeviceResponse<AttendanceUploadResponseData>>(firstUploadResponse);
 
   assert(firstUploadJson.success === true, "first attendance upload should succeed");
   const firstUploadResult = firstUploadJson.data.results[0];
@@ -514,9 +695,13 @@ try {
       ],
     }),
   });
-  const duplicateUploadJson = await readJson<DeviceResponse<AttendanceUploadResponseData>>(duplicateUploadResponse);
+  const duplicateUploadJson =
+    await readJson<DeviceResponse<AttendanceUploadResponseData>>(duplicateUploadResponse);
 
-  assert(duplicateUploadJson.success === true, "duplicate attendance upload should still be handled");
+  assert(
+    duplicateUploadJson.success === true,
+    "duplicate attendance upload should still be handled",
+  );
   const duplicateUploadResult = duplicateUploadJson.data.results[0];
 
   assert(duplicateUploadResult, "duplicate attendance upload should return one result");
@@ -545,7 +730,8 @@ try {
         ],
       }),
     });
-    const earlierUploadJson = await readJson<DeviceResponse<AttendanceUploadResponseData>>(earlierUploadResponse);
+    const earlierUploadJson =
+      await readJson<DeviceResponse<AttendanceUploadResponseData>>(earlierUploadResponse);
 
     assert(earlierUploadJson.success === true, "earlier attendance upload should be handled");
     const earlierUploadResult = earlierUploadJson.data.results[0];
@@ -608,9 +794,12 @@ try {
     }),
   ]);
   const concurrentJsons = await Promise.all(
-    concurrentResponses.map((response) => readJson<DeviceResponse<AttendanceUploadResponseData>>(response)),
+    concurrentResponses.map((response) =>
+      readJson<DeviceResponse<AttendanceUploadResponseData>>(response),
+    ),
   );
-  const successfulConcurrentJsons: Array<{ success: true; data: AttendanceUploadResponseData }> = [];
+  const successfulConcurrentJsons: Array<{ success: true; data: AttendanceUploadResponseData }> =
+    [];
 
   for (const item of concurrentJsons) {
     assert(item.success === true, "concurrent attendance uploads should still succeed");
@@ -630,9 +819,12 @@ try {
 } finally {
   await cleanup({
     employeeId,
+    secondEmployeeId,
     deviceId,
     secondDeviceId,
+    bootstrapDeviceId,
     faceProfileId,
+    secondFaceProfileId,
     createdTempConfig,
   });
 

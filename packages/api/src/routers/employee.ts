@@ -37,7 +37,9 @@ export const employeeRouter = {
   list: protectedProcedure.input(listInput).handler(async ({ input }) => {
     const pageInput = normalizePageInput(input);
     const where = and(
-      input.keyword ? or(like(employee.code, `%${input.keyword}%`), like(employee.name, `%${input.keyword}%`)) : undefined,
+      input.keyword
+        ? or(like(employee.code, `%${input.keyword}%`), like(employee.name, `%${input.keyword}%`))
+        : undefined,
       input.faceProfileState === "none"
         ? isNull(faceProfile.id)
         : input.faceProfileState

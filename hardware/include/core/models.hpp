@@ -25,12 +25,80 @@ enum class QueueMutationAction {
   IgnoredLaterOrEqual,
 };
 
+enum class BackendLocatorMode {
+  FixedOrigin,
+};
+
+enum class DeviceActivationState {
+  Unconfigured,
+  PendingActivation,
+  Activated,
+};
+
 struct DeviceCredentials {
   std::string deviceCode;
   std::string apiKey;
 
   bool configured() const {
     return !deviceCode.empty() && !apiKey.empty();
+  }
+};
+
+struct WifiProfile {
+  std::string ssid;
+  std::string password;
+  int priority = 0;
+  uint64_t lastSuccessAt = 0;
+  bool disabled = false;
+
+  bool configured() const {
+    return !ssid.empty() && !password.empty() && !disabled;
+  }
+};
+
+struct BackendLocator {
+  BackendLocatorMode mode = BackendLocatorMode::FixedOrigin;
+  std::string origin;
+
+  bool configured() const {
+    return !origin.empty();
+  }
+};
+
+struct BootstrapIdentity {
+  std::string deviceSerial;
+  std::string bootstrapSecret;
+
+  bool configured() const {
+    return !deviceSerial.empty() && !bootstrapSecret.empty();
+  }
+};
+
+struct DeviceConfig {
+  uint32_t schemaVersion = 1;
+  std::vector<WifiProfile> wifiProfiles;
+  BackendLocator backendLocator;
+  BootstrapIdentity bootstrapIdentity;
+  DeviceCredentials runtimeCredentials;
+  bool diagnosticsEnabled = false;
+
+  bool wifiConfigured() const {
+    for (const auto& profile : wifiProfiles) {
+      if (profile.configured()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  DeviceActivationState activationState() const {
+    if (runtimeCredentials.configured()) {
+      return DeviceActivationState::Activated;
+    }
+    if (wifiConfigured() && backendLocator.configured() && bootstrapIdentity.configured()) {
+      return DeviceActivationState::PendingActivation;
+    }
+    return DeviceActivationState::Unconfigured;
   }
 };
 
@@ -101,7 +169,7 @@ struct SyncPayload {
   std::string deviceStatus;
   std::optional<AttendanceConfigSnapshot> attendanceConfig;
   std::vector<EmployeeSnapshot> employees;
-  std::optional<EnrollmentTaskSnapshot> enrollmentTask;
+  std::vector<EnrollmentTaskSnapshot> enrollmentTasks;
 };
 
 struct SnapshotBundle {
@@ -113,7 +181,7 @@ struct SnapshotBundle {
   uint64_t attendanceConfigSyncedAt = 0;
   std::vector<EmployeeSnapshot> employees;
   uint64_t employeesSyncedAt = 0;
-  std::optional<EnrollmentTaskSnapshot> enrollmentTask;
+  std::vector<EnrollmentTaskSnapshot> enrollmentTasks;
   uint64_t enrollmentTaskSyncedAt = 0;
   uint64_t lastSyncAt = 0;
   uint64_t lastServerTime = 0;

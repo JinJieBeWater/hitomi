@@ -29,9 +29,14 @@ struct RuntimeStatus {
   uint64_t sdTotalBytes = 0;
   uint64_t sdUsedBytes = 0;
   bool wifiConfigured = false;
+  std::optional<std::string> activeWifiSsid;
+  core::DeviceActivationState activationState = core::DeviceActivationState::Unconfigured;
+  bool bootstrapConfigured = false;
+  std::optional<std::string> activationRegistrationId;
   bool apiConfigured = false;
   bool apiProbeInFlight = false;
   bool apiProbeSucceeded = false;
+  bool activationInFlight = false;
   std::optional<std::string> apiProbeStatusCode;
   bool syncInFlight = false;
   bool uploadInFlight = false;

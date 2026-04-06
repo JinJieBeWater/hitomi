@@ -45,7 +45,11 @@ export const faceProfileRouter = {
       db.select({ value: count() }).from(faceProfile).where(where).get(),
     ]);
 
-    return createPageResult(items.map(serializeFaceProfileSummary), totalRow?.value ?? 0, pageInput);
+    return createPageResult(
+      items.map(serializeFaceProfileSummary),
+      totalRow?.value ?? 0,
+      pageInput,
+    );
   }),
   enqueue: protectedProcedure
     .input(
@@ -70,18 +74,6 @@ export const faceProfileRouter = {
 
       if (targetDevice.status === "disabled") {
         throw adminError("CONFLICT", "DEVICE_DISABLED", "Device is disabled");
-      }
-
-      const pendingOnDevice = await db.query.faceProfile.findFirst({
-        where: and(eq(faceProfile.deviceId, input.deviceId), eq(faceProfile.status, "pending")),
-      });
-
-      if (pendingOnDevice && pendingOnDevice.employeeId !== input.employeeId) {
-        throw adminError(
-          "CONFLICT",
-          "DEVICE_PENDING_TASK_EXISTS",
-          "Device already has another pending face profile task",
-        );
       }
 
       const current = await db.query.faceProfile.findFirst({

@@ -31,6 +31,16 @@ bool sameQueueKey(const PendingAttendanceRecord& left, const PendingAttendanceRe
          left.type == right.type;
 }
 
+bool compareWifiProfiles(const WifiProfile& left, const WifiProfile& right) {
+  if (left.priority != right.priority) {
+    return left.priority > right.priority;
+  }
+  if (left.lastSuccessAt != right.lastSuccessAt) {
+    return left.lastSuccessAt > right.lastSuccessAt;
+  }
+  return left.ssid < right.ssid;
+}
+
 FailureLogEntry buildUploadFailureLog(
     uint64_t occurredAt, std::size_t ordinal, const AttendanceUploadItemResult& result) {
   FailureLogEntry entry = {};
@@ -56,7 +66,7 @@ SnapshotBundle applySyncSnapshot(
   next.attendanceConfigSyncedAt = syncedAt;
   next.employees = payload.employees;
   next.employeesSyncedAt = syncedAt;
-  next.enrollmentTask = payload.enrollmentTask;
+  next.enrollmentTasks = payload.enrollmentTasks;
   next.enrollmentTaskSyncedAt = syncedAt;
   next.lastSyncAt = syncedAt;
   next.lastServerTime = payload.serverTime;
@@ -199,6 +209,53 @@ std::optional<AttendanceUploadStatus> attendanceUploadStatusFromApiValue(const s
     return AttendanceUploadStatus::Rejected;
   }
   return std::nullopt;
+}
+
+std::optional<std::size_t> chooseWifiProfile(
+    const std::vector<WifiProfile>& profiles, const std::vector<std::string>& availableSsids) {
+  std::optional<std::size_t> bestIndex;
+  for (std::size_t index = 0; index < profiles.size(); ++index) {
+    const auto& profile = profiles[index];
+    if (!profile.configured()) {
+      continue;
+    }
+    if (std::find(availableSsids.begin(), availableSsids.end(), profile.ssid) == availableSsids.end()) {
+      continue;
+    }
+    if (!bestIndex.has_value() || compareWifiProfiles(profile, profiles[bestIndex.value()])) {
+      bestIndex = index;
+    }
+  }
+  return bestIndex;
+}
+
+void markWifiProfileSuccess(std::vector<WifiProfile>& profiles, const std::string& ssid, uint64_t connectedAt) {
+  for (auto& profile : profiles) {
+    if (profile.ssid == ssid) {
+      profile.lastSuccessAt = connectedAt;
+      profile.disabled = false;
+      return;
+    }
+  }
+}
+
+void upsertWifiProfile(std::vector<WifiProfile>& profiles, const WifiProfile& profile, std::size_t limit) {
+  if (profile.ssid.empty()) {
+    return;
+  }
+
+  auto existing = std::find_if(
+      profiles.begin(), profiles.end(), [&](const WifiProfile& item) { return item.ssid == profile.ssid; });
+  if (existing != profiles.end()) {
+    *existing = profile;
+  } else {
+    profiles.push_back(profile);
+  }
+
+  std::sort(profiles.begin(), profiles.end(), compareWifiProfiles);
+  if (profiles.size() > limit) {
+    profiles.resize(limit);
+  }
 }
 
 std::string buildShanghaiLocalDate(uint64_t epochMs) {

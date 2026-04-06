@@ -14,7 +14,9 @@ const colorMode = useColorMode();
 
 const nextPreference = computed(() => (colorMode.value === "dark" ? "light" : "dark"));
 const actionLabel = computed(() => (nextPreference.value === "dark" ? "切换到深色" : "切换到浅色"));
-const actionIcon = computed(() => (nextPreference.value === "dark" ? "i-lucide-moon" : "i-lucide-sun-medium"));
+const actionIcon = computed(() =>
+  nextPreference.value === "dark" ? "i-lucide-moon" : "i-lucide-sun-medium",
+);
 const showLabel = computed(() => !props.collapsed && !props.compact);
 
 function toggleTheme() {

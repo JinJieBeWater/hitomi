@@ -125,7 +125,10 @@ try {
   });
 
   assert(savedConfig.config?.id === defaultAttendanceConfigId, "attendance config should be saved");
-  assert(savedConfig.config.workStartMinute === 540, "attendance config should persist work start minute");
+  assert(
+    savedConfig.config.workStartMinute === 540,
+    "attendance config should persist work start minute",
+  );
 
   await expectBusinessError(
     () =>
@@ -155,7 +158,10 @@ try {
   });
 
   assert(updatedEmployee1.code.endsWith("_UPD"), "employee update should update code");
-  assert(updatedEmployee1.name === "Admin Smoke Employee A Updated", "employee update should update name");
+  assert(
+    updatedEmployee1.name === "Admin Smoke Employee A Updated",
+    "employee update should update name",
+  );
 
   await expectBusinessError(
     () =>
@@ -211,8 +217,14 @@ try {
     status: "disabled",
   });
 
-  assert(disabledDevices.items.some((item) => item.id === deviceId2), "device list should support status filter");
-  assert(employeeId1 && employeeId2 && deviceId1 && deviceId2, "created ids should exist before face profile flow");
+  assert(
+    disabledDevices.items.some((item) => item.id === deviceId2),
+    "device list should support status filter",
+  );
+  assert(
+    employeeId1 && employeeId2 && deviceId1 && deviceId2,
+    "created ids should exist before face profile flow",
+  );
 
   const employeeId1Value = employeeId1;
   const employeeId2Value = employeeId2;
@@ -226,16 +238,40 @@ try {
 
   faceProfileId = pendingFaceProfile.id;
 
-  assert(pendingFaceProfile.status === "pending", "face profile should be pending after assignment");
-  assert(pendingFaceProfile.deviceId === deviceId1Value, "face profile should point to assigned device");
+  assert(
+    pendingFaceProfile.status === "pending",
+    "face profile should be pending after assignment",
+  );
+  assert(
+    pendingFaceProfile.deviceId === deviceId1Value,
+    "face profile should point to assigned device",
+  );
 
-  await expectBusinessError(
-    () =>
-      client.faceProfile.enqueue({
-        employeeId: employeeId2Value,
-        deviceId: deviceId1Value,
-      }),
-    "DEVICE_PENDING_TASK_EXISTS",
+  const secondPendingFaceProfile = await client.faceProfile.enqueue({
+    employeeId: employeeId2Value,
+    deviceId: deviceId1Value,
+  });
+  faceProfileId2 = secondPendingFaceProfile.id;
+
+  assert(
+    secondPendingFaceProfile.status === "pending",
+    "second face profile should also become pending",
+  );
+  assert(
+    secondPendingFaceProfile.deviceId === deviceId1Value,
+    "second face profile should stay on the same device",
+  );
+
+  const pendingOnDevice = await client.faceProfile.list({
+    page: 1,
+    pageSize: 100,
+    status: "pending",
+    deviceId: deviceId1Value,
+  });
+
+  assert(
+    pendingOnDevice.items.length === 2,
+    "same device should support multiple pending face profiles",
   );
 
   const cancelledFaceProfile = await client.faceProfile.cancel({
@@ -266,8 +302,14 @@ try {
 
   faceProfileId = reassignedFaceProfile.id;
 
-  assert(reassignedFaceProfile.status === "pending", "face profile should become pending after reassign");
-  assert(reassignedFaceProfile.deviceId === deviceId2Value, "face profile should switch to new device");
+  assert(
+    reassignedFaceProfile.status === "pending",
+    "face profile should become pending after reassign",
+  );
+  assert(
+    reassignedFaceProfile.deviceId === deviceId2Value,
+    "face profile should switch to new device",
+  );
 
   const pendingFaceProfiles = await client.faceProfile.list({
     page: 1,
@@ -309,8 +351,14 @@ try {
 
   const finalSummary = await client.dashboard.summary();
 
-  assert(finalSummary.employeeCount === initialSummary.employeeCount + 2, "dashboard employee count should increase");
-  assert(finalSummary.deviceCount === initialSummary.deviceCount + 2, "dashboard device count should increase");
+  assert(
+    finalSummary.employeeCount === initialSummary.employeeCount + 2,
+    "dashboard employee count should increase",
+  );
+  assert(
+    finalSummary.deviceCount === initialSummary.deviceCount + 2,
+    "dashboard device count should increase",
+  );
   assert(
     finalSummary.todayClockInCount === initialSummary.todayClockInCount + 1,
     "dashboard clock-in count should increase",
@@ -320,9 +368,18 @@ try {
     id: employeeId1Value,
   });
 
-  assert(employeeDeleteImpact.code === updatedEmployee1.code, "employee delete impact should return latest employee code");
-  assert(employeeDeleteImpact.faceProfileCount === 1, "employee delete impact should count linked face profile");
-  assert(employeeDeleteImpact.attendanceRecordCount === 1, "employee delete impact should count linked attendance record");
+  assert(
+    employeeDeleteImpact.code === updatedEmployee1.code,
+    "employee delete impact should return latest employee code",
+  );
+  assert(
+    employeeDeleteImpact.faceProfileCount === 1,
+    "employee delete impact should count linked face profile",
+  );
+  assert(
+    employeeDeleteImpact.attendanceRecordCount === 1,
+    "employee delete impact should count linked attendance record",
+  );
 
   await expectBusinessError(
     () =>
@@ -338,8 +395,14 @@ try {
     confirmText: updatedEmployee1.code,
   });
 
-  assert(removedEmployee.deletedFaceProfileCount === 1, "employee remove should delete linked face profile");
-  assert(removedEmployee.deletedAttendanceRecordCount === 1, "employee remove should delete linked attendance record");
+  assert(
+    removedEmployee.deletedFaceProfileCount === 1,
+    "employee remove should delete linked face profile",
+  );
+  assert(
+    removedEmployee.deletedAttendanceRecordCount === 1,
+    "employee remove should delete linked attendance record",
+  );
 
   employeeId1 = null;
   faceProfileId = null;
@@ -361,7 +424,10 @@ try {
 
   assert(!deletedEmployee, "employee remove should delete employee");
   assert(employeeFaceProfiles.length === 0, "employee remove should cascade face profiles");
-  assert(employeeAttendanceRecords.length === 0, "employee remove should cascade attendance records");
+  assert(
+    employeeAttendanceRecords.length === 0,
+    "employee remove should cascade attendance records",
+  );
   assert(remainingDevice2, "employee remove should not delete unrelated device");
 
   await expectBusinessError(
@@ -412,8 +478,14 @@ try {
     deviceDeleteImpact.deviceCode === createdDevice3.device.deviceCode,
     "device delete impact should return device code",
   );
-  assert(deviceDeleteImpact.faceProfileCount === 1, "device delete impact should count linked face profile");
-  assert(deviceDeleteImpact.attendanceRecordCount === 1, "device delete impact should count linked attendance record");
+  assert(
+    deviceDeleteImpact.faceProfileCount === 1,
+    "device delete impact should count linked face profile",
+  );
+  assert(
+    deviceDeleteImpact.attendanceRecordCount === 1,
+    "device delete impact should count linked attendance record",
+  );
 
   await expectBusinessError(
     () =>
@@ -429,8 +501,14 @@ try {
     confirmText: createdDevice3.device.deviceCode,
   });
 
-  assert(removedDevice.deletedFaceProfileCount === 1, "device remove should delete linked face profile");
-  assert(removedDevice.deletedAttendanceRecordCount === 1, "device remove should delete linked attendance record");
+  assert(
+    removedDevice.deletedFaceProfileCount === 1,
+    "device remove should delete linked face profile",
+  );
+  assert(
+    removedDevice.deletedAttendanceRecordCount === 1,
+    "device remove should delete linked attendance record",
+  );
 
   deviceId3 = null;
   faceProfileId2 = null;
@@ -468,6 +546,15 @@ try {
 } finally {
   await db.delete(attendanceRecord).where(eq(attendanceRecord.id, attendanceRecordId));
   await db.delete(attendanceRecord).where(eq(attendanceRecord.id, attendanceRecordId2));
+  if (deviceId1) {
+    await db.delete(attendanceRecord).where(eq(attendanceRecord.deviceId, deviceId1));
+  }
+  if (deviceId2) {
+    await db.delete(attendanceRecord).where(eq(attendanceRecord.deviceId, deviceId2));
+  }
+  if (deviceId3) {
+    await db.delete(attendanceRecord).where(eq(attendanceRecord.deviceId, deviceId3));
+  }
 
   if (faceProfileId) {
     await db.delete(faceProfile).where(eq(faceProfile.id, faceProfileId));
@@ -475,6 +562,15 @@ try {
 
   if (faceProfileId2) {
     await db.delete(faceProfile).where(eq(faceProfile.id, faceProfileId2));
+  }
+  if (deviceId1) {
+    await db.delete(faceProfile).where(eq(faceProfile.deviceId, deviceId1));
+  }
+  if (deviceId2) {
+    await db.delete(faceProfile).where(eq(faceProfile.deviceId, deviceId2));
+  }
+  if (deviceId3) {
+    await db.delete(faceProfile).where(eq(faceProfile.deviceId, deviceId3));
   }
 
   if (deviceId1) {

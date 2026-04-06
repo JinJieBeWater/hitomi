@@ -150,17 +150,20 @@ const headerBadges = computed(() => {
   }
 
   if (type.value) {
-    const label = attendanceTypeOptions.find((item) => item.value === type.value)?.label || type.value;
+    const label =
+      attendanceTypeOptions.find((item) => item.value === type.value)?.label || type.value;
     list.push({ label: `类型: ${label}`, color: "warning" });
   }
 
   if (employeeId.value) {
-    const label = employeeOptions.value.find((item) => item.value === employeeId.value)?.label || "员工";
+    const label =
+      employeeOptions.value.find((item) => item.value === employeeId.value)?.label || "员工";
     list.push({ label: `员工: ${label}`, color: "primary" });
   }
 
   if (deviceId.value) {
-    const label = deviceOptions.value.find((item) => item.value === deviceId.value)?.label || "设备";
+    const label =
+      deviceOptions.value.find((item) => item.value === deviceId.value)?.label || "设备";
     list.push({ label: `设备: ${label}`, color: "success" });
   }
 
@@ -181,7 +184,9 @@ function resetFilters() {
     <template #header>
       <PageHeader title="考勤记录" :badges="headerBadges">
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="recordsQuery.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="recordsQuery.refetch()"
+            >刷新</UButton
+          >
         </template>
       </PageHeader>
     </template>
@@ -233,7 +238,13 @@ function resetFilters() {
           </div>
 
           <template #actions>
-            <UButton variant="ghost" color="neutral" icon="i-lucide-rotate-ccw" @click="resetFilters()">清空筛选</UButton>
+            <UButton
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-rotate-ccw"
+              @click="resetFilters()"
+              >清空筛选</UButton
+            >
           </template>
         </FilterBar>
 
@@ -256,7 +267,6 @@ function resetFilters() {
             v-else-if="rows.length === 0"
             title="暂无考勤记录"
             description="当前筛选条件下没有可显示的考勤记录。"
-            icon="i-lucide-clipboard-check"
           />
 
           <template v-else>
@@ -268,7 +278,9 @@ function resetFilters() {
                 :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[760px]' }"
               >
                 <template #recognizedAt-cell="{ row }">
-                  <div class="text-sm text-toned">{{ formatDateTime(row.original.recognizedAt) }}</div>
+                  <div class="text-sm text-toned">
+                    {{ formatDateTime(row.original.recognizedAt) }}
+                  </div>
                 </template>
 
                 <template #type-cell="{ row }">
@@ -282,15 +294,21 @@ function resetFilters() {
 
                 <template #employee-cell="{ row }">
                   <div class="space-y-1">
-                    <div class="font-medium text-highlighted">{{ row.original.employee?.name || "-" }}</div>
+                    <div class="font-medium text-highlighted">
+                      {{ row.original.employee?.name || "-" }}
+                    </div>
                     <div class="text-xs text-toned">{{ row.original.employee?.code || "-" }}</div>
                   </div>
                 </template>
 
                 <template #device-cell="{ row }">
                   <div class="space-y-1">
-                    <div class="font-medium text-highlighted">{{ row.original.device?.name || "-" }}</div>
-                    <div class="text-xs text-toned">{{ row.original.device?.deviceCode || "-" }}</div>
+                    <div class="font-medium text-highlighted">
+                      {{ row.original.device?.name || "-" }}
+                    </div>
+                    <div class="text-xs text-toned">
+                      {{ row.original.device?.deviceCode || "-" }}
+                    </div>
                   </div>
                 </template>
               </UTable>
@@ -301,7 +319,9 @@ function resetFilters() {
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 space-y-1">
                     <div class="text-sm font-medium text-toned">{{ item.localDate }}</div>
-                    <div class="truncate text-base font-semibold text-highlighted">{{ item.employee?.name || "-" }}</div>
+                    <div class="truncate text-base font-semibold text-highlighted">
+                      {{ item.employee?.name || "-" }}
+                    </div>
                     <div class="text-sm text-toned">{{ item.employee?.code || "-" }}</div>
                   </div>
 
@@ -315,12 +335,16 @@ function resetFilters() {
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">打卡时间</div>
+                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                      打卡时间
+                    </div>
                     <div class="mt-1 text-highlighted">{{ formatDateTime(item.recognizedAt) }}</div>
                   </div>
 
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">设备</div>
+                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                      设备
+                    </div>
                     <div class="mt-1 text-highlighted">{{ item.device?.name || "-" }}</div>
                     <div class="text-xs text-toned">{{ item.device?.deviceCode || "-" }}</div>
                   </div>
@@ -330,7 +354,12 @@ function resetFilters() {
           </template>
 
           <template #footer>
-            <ListPagination :page="page" :page-size="pageSize" :total="total" @update:page="page = $event" />
+            <ListPagination
+              :page="page"
+              :page-size="pageSize"
+              :total="total"
+              @update:page="page = $event"
+            />
           </template>
         </DataSurface>
       </div>

@@ -18,6 +18,8 @@ class JsonLocalStore final : public LocalStore {
 
   LocalStoreInitStatus begin() override;
   StoredRuntimeState load() override;
+  bool saveDeviceConfig(const core::DeviceConfig& config) override;
+  bool clearDeviceConfig() override;
   bool saveCredentials(const core::DeviceCredentials& credentials) override;
   bool saveSnapshots(const core::SnapshotBundle& snapshots) override;
   bool savePendingAttendanceRecords(

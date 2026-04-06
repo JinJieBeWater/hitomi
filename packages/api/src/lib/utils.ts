@@ -1,4 +1,8 @@
-import type { AttendanceRecordType, DeviceStatus, FaceProfileStatus } from "@hitomi/db/schema/business";
+import type {
+  AttendanceRecordType,
+  DeviceStatus,
+  FaceProfileStatus,
+} from "@hitomi/db/schema/business";
 import { and, count, eq } from "drizzle-orm";
 
 import { attendanceConfig, attendanceRecord, db, device, employee, faceProfile } from "@hitomi/db";
@@ -130,7 +134,10 @@ export function isAttendanceConfigOverlapped(input: {
   offStartMinute: number;
   offEndMinute: number;
 }) {
-  return Math.max(input.workStartMinute, input.offStartMinute) < Math.min(input.workEndMinute, input.offEndMinute);
+  return (
+    Math.max(input.workStartMinute, input.offStartMinute) <
+    Math.min(input.workEndMinute, input.offEndMinute)
+  );
 }
 
 export function createId(prefix: string) {
@@ -142,6 +149,14 @@ export function createDeviceCode() {
 }
 
 export function createApiKey() {
+  return crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
+}
+
+export function createBootstrapSerial() {
+  return `BOOT-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
+}
+
+export function createBootstrapSecret() {
   return crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "");
 }
 
@@ -170,15 +185,13 @@ export function serializeEmployeeSummary(record: {
   name: string;
   createdAt: Date;
   updatedAt: Date;
-  faceProfile:
-    | null
-    | {
-        id: string;
-        status: FaceProfileStatus;
-        deviceId: string;
-        updatedAt: Date;
-        device: { name: string } | null;
-      };
+  faceProfile: null | {
+    id: string;
+    status: FaceProfileStatus;
+    deviceId: string;
+    updatedAt: Date;
+    device: { name: string } | null;
+  };
 }) {
   return {
     id: record.id,
@@ -290,12 +303,16 @@ export async function getDashboardSummary(database: typeof db) {
   const todayClockInCountRow = await database
     .select({ value: count() })
     .from(attendanceRecord)
-    .where(and(eq(attendanceRecord.localDate, todayLocalDate), eq(attendanceRecord.type, "clock_in")))
+    .where(
+      and(eq(attendanceRecord.localDate, todayLocalDate), eq(attendanceRecord.type, "clock_in")),
+    )
     .get();
   const todayClockOutCountRow = await database
     .select({ value: count() })
     .from(attendanceRecord)
-    .where(and(eq(attendanceRecord.localDate, todayLocalDate), eq(attendanceRecord.type, "clock_out")))
+    .where(
+      and(eq(attendanceRecord.localDate, todayLocalDate), eq(attendanceRecord.type, "clock_out")),
+    )
     .get();
 
   return {

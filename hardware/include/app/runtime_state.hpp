@@ -12,6 +12,7 @@
 namespace app {
 
 struct RuntimeState {
+  core::DeviceConfig deviceConfig;
   core::DeviceCredentials credentials;
   core::SnapshotBundle snapshots;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
@@ -29,14 +30,21 @@ struct RuntimeState {
   bool uploadInFlight = false;
   bool renderDirty = true;
   bool lastButtonPressed = false;
+  bool activationInFlight = false;
+  bool wifiScanInProgress = false;
   uint32_t lastButtonPollMs = 0;
   uint32_t lastApiProbeAttemptMs = 0;
   uint32_t lastNetworkProbeMs = 0;
   uint32_t lastTemplateStoreProbeMs = 0;
+  uint32_t lastWifiConnectAttemptMs = 0;
   uint32_t lastSyncAttemptMs = 0;
   uint32_t lastUploadAttemptMs = 0;
+  uint32_t lastActivationAttemptMs = 0;
   std::optional<std::string> apiProbeStatusCode;
   std::optional<std::string> lastErrorCode;
+  std::optional<std::string> activeWifiSsid;
+  std::optional<std::string> activationRegistrationId;
+  std::string serialCommandBuffer;
 };
 
 bool facePortsReady(const RuntimeContext& context);

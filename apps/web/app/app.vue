@@ -13,9 +13,7 @@ useHead({
       content: computed(() => (colorMode.value === "dark" ? "#0a0a0a" : "#ffffff")),
     },
   ],
-  link: [
-    { rel: "icon", href: "/favicon.ico" },
-  ],
+  link: [{ rel: "icon", href: "/favicon.ico" }],
   htmlAttrs: {
     lang: "zh-CN",
   },

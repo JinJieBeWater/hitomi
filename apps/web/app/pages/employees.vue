@@ -114,7 +114,8 @@ const headerBadges = computed(() => {
 
   if (faceProfileState.value) {
     const label =
-      faceProfileStateOptions.find((item) => item.value === faceProfileState.value)?.label || faceProfileState.value;
+      faceProfileStateOptions.find((item) => item.value === faceProfileState.value)?.label ||
+      faceProfileState.value;
     list.push({ label: `状态: ${label}`, color: "warning" as const });
   }
 
@@ -129,9 +130,15 @@ const activeDeviceOptions = computed(() =>
   })),
 );
 
-const currentFaceEmployee = computed(() => rows.value.find((item) => item.id === faceTaskEmployeeId.value) ?? null);
-const currentEditingEmployee = computed(() => rows.value.find((item) => item.id === editingId.value) ?? null);
-const isSavingEmployee = computed(() => createEmployee.isPending.value || updateEmployee.isPending.value);
+const currentFaceEmployee = computed(
+  () => rows.value.find((item) => item.id === faceTaskEmployeeId.value) ?? null,
+);
+const currentEditingEmployee = computed(
+  () => rows.value.find((item) => item.id === editingId.value) ?? null,
+);
+const isSavingEmployee = computed(
+  () => createEmployee.isPending.value || updateEmployee.isPending.value,
+);
 
 const faceTaskActionLabel = computed(() => {
   const status = currentFaceEmployee.value?.faceProfile?.status;
@@ -426,7 +433,9 @@ async function handleDeleteEmployee(confirmText: string) {
     <template #header>
       <PageHeader title="员工管理" :badges="headerBadges">
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="employeesQuery.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="employeesQuery.refetch()"
+            >刷新</UButton
+          >
           <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()">新增员工</UButton>
         </template>
       </PageHeader>
@@ -437,7 +446,12 @@ async function handleDeleteEmployee(confirmText: string) {
         <FilterBar>
           <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
             <UFormField label="关键词">
-              <UInput v-model="keyword" placeholder="编号或姓名" icon="i-lucide-search" class="w-full" />
+              <UInput
+                v-model="keyword"
+                placeholder="编号或姓名"
+                icon="i-lucide-search"
+                class="w-full"
+              />
             </UFormField>
 
             <UFormField label="录脸状态">
@@ -451,7 +465,13 @@ async function handleDeleteEmployee(confirmText: string) {
           </div>
 
           <template #actions>
-            <UButton variant="ghost" color="neutral" icon="i-lucide-rotate-ccw" @click="resetFilters()">清空筛选</UButton>
+            <UButton
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-rotate-ccw"
+              @click="resetFilters()"
+              >清空筛选</UButton
+            >
           </template>
         </FilterBar>
 
@@ -474,10 +494,11 @@ async function handleDeleteEmployee(confirmText: string) {
             v-else-if="rows.length === 0"
             title="暂无员工"
             description="当前筛选条件下没有可显示的员工记录。"
-            icon="i-lucide-users"
           >
             <template #actions>
-              <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()">新增员工</UButton>
+              <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()"
+                >新增员工</UButton
+              >
             </template>
           </EmptyState>
 
@@ -510,8 +531,15 @@ async function handleDeleteEmployee(confirmText: string) {
 
                 <template #actions-cell="{ row }">
                   <div class="flex flex-wrap gap-2">
-                    <UButton size="xs" icon="i-lucide-scan-face" @click="openFaceTask(row.original)">录脸</UButton>
-                    <UButton size="xs" variant="outline" icon="i-lucide-pencil-line" @click="startEdit(row.original)">
+                    <UButton size="xs" icon="i-lucide-scan-face" @click="openFaceTask(row.original)"
+                      >录脸</UButton
+                    >
+                    <UButton
+                      size="xs"
+                      variant="outline"
+                      icon="i-lucide-pencil-line"
+                      @click="startEdit(row.original)"
+                    >
                       编辑
                     </UButton>
                     <UButton
@@ -532,7 +560,9 @@ async function handleDeleteEmployee(confirmText: string) {
               <div v-for="item in rows" :key="item.id" class="workspace-mobile-card">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 space-y-1">
-                    <div class="truncate text-base font-semibold text-highlighted">{{ item.name }}</div>
+                    <div class="truncate text-base font-semibold text-highlighted">
+                      {{ item.name }}
+                    </div>
                     <div class="text-sm text-toned">{{ item.code }}</div>
                   </div>
 
@@ -546,19 +576,32 @@ async function handleDeleteEmployee(confirmText: string) {
 
                 <div class="mt-4 flex items-start justify-between gap-4">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">录脸任务</div>
-                    <div class="mt-1 text-highlighted">{{ item.faceProfile?.deviceName || "未分配设备" }}</div>
+                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                      录脸任务
+                    </div>
+                    <div class="mt-1 text-highlighted">
+                      {{ item.faceProfile?.deviceName || "未分配设备" }}
+                    </div>
                   </div>
 
                   <div class="text-right">
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">更新时间</div>
+                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                      更新时间
+                    </div>
                     <div class="mt-1 text-highlighted">{{ formatDateTime(item.updatedAt) }}</div>
                   </div>
                 </div>
 
                 <div class="mt-4 flex flex-wrap justify-end gap-2">
-                  <UButton size="sm" icon="i-lucide-scan-face" @click="openFaceTask(item)">录脸</UButton>
-                  <UButton size="sm" variant="outline" icon="i-lucide-pencil-line" @click="startEdit(item)">
+                  <UButton size="sm" icon="i-lucide-scan-face" @click="openFaceTask(item)"
+                    >录脸</UButton
+                  >
+                  <UButton
+                    size="sm"
+                    variant="outline"
+                    icon="i-lucide-pencil-line"
+                    @click="startEdit(item)"
+                  >
                     编辑
                   </UButton>
                   <UButton
@@ -576,7 +619,12 @@ async function handleDeleteEmployee(confirmText: string) {
           </template>
 
           <template #footer>
-            <ListPagination :page="page" :page-size="pageSize" :total="total" @update:page="page = $event" />
+            <ListPagination
+              :page="page"
+              :page-size="pageSize"
+              :total="total"
+              @update:page="page = $event"
+            />
           </template>
         </DataSurface>
       </div>
@@ -586,13 +634,17 @@ async function handleDeleteEmployee(confirmText: string) {
           <div v-if="currentFaceEmployee" class="space-y-5">
             <div class="space-y-1">
               <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">员工</div>
-              <div class="text-lg font-semibold tracking-tight text-highlighted">{{ currentFaceEmployee.name }}</div>
+              <div class="text-lg font-semibold tracking-tight text-highlighted">
+                {{ currentFaceEmployee.name }}
+              </div>
               <div class="text-sm text-toned">{{ currentFaceEmployee.code }}</div>
             </div>
 
             <div class="grid gap-4 sm:grid-cols-2">
               <div>
-                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">当前状态</div>
+                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                  当前状态
+                </div>
                 <div class="mt-2">
                   <UBadge
                     :label="labelFaceStatus(currentFaceEmployee.faceProfile?.status)"
@@ -604,7 +656,9 @@ async function handleDeleteEmployee(confirmText: string) {
               </div>
 
               <div>
-                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">当前设备</div>
+                <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
+                  当前设备
+                </div>
                 <div class="mt-2 text-sm font-medium text-highlighted">
                   {{ currentFaceEmployee.faceProfile?.deviceName || "未分配设备" }}
                 </div>
@@ -664,13 +718,24 @@ async function handleDeleteEmployee(confirmText: string) {
                 取消待录入
               </UButton>
 
-              <UButton type="button" variant="ghost" color="neutral" class="w-full" @click="closeFaceTask()">关闭</UButton>
+              <UButton
+                type="button"
+                variant="ghost"
+                color="neutral"
+                class="w-full"
+                @click="closeFaceTask()"
+                >关闭</UButton
+              >
             </div>
           </div>
         </template>
       </USlideover>
 
-      <USlideover v-model:open="editorOpen" :title="editingId ? '编辑员工' : '新增员工'" side="right">
+      <USlideover
+        v-model:open="editorOpen"
+        :title="editingId ? '编辑员工' : '新增员工'"
+        side="right"
+      >
         <template #body>
           <form class="space-y-5" @submit.prevent="handleSubmit">
             <UFormField label="员工编号" required>
@@ -702,20 +767,30 @@ async function handleDeleteEmployee(confirmText: string) {
             />
 
             <div class="flex flex-col gap-3 pt-2">
-                <UButton
-                  type="submit"
-                  data-testid="employee-submit-button"
-                  :loading="isSavingEmployee"
-                  class="w-full rounded-2xl"
-                  icon="i-lucide-save"
-                >
+              <UButton
+                type="submit"
+                data-testid="employee-submit-button"
+                :loading="isSavingEmployee"
+                class="w-full rounded-2xl"
+                icon="i-lucide-save"
+              >
                 {{ editingId ? "保存修改" : "创建员工" }}
               </UButton>
 
-              <UButton type="button" variant="ghost" color="neutral" class="w-full" @click="closeEditor()">取消</UButton>
+              <UButton
+                type="button"
+                variant="ghost"
+                color="neutral"
+                class="w-full"
+                @click="closeEditor()"
+                >取消</UButton
+              >
             </div>
 
-            <div v-if="editingId" class="border-t border-neutral-200/70 pt-5 dark:border-neutral-800/80">
+            <div
+              v-if="editingId"
+              class="border-t border-neutral-200/70 pt-5 dark:border-neutral-800/80"
+            >
               <UButton
                 type="button"
                 color="error"

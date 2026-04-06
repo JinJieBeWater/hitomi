@@ -37,11 +37,21 @@ void initializeTemplateStore(const RuntimeContext& context, RuntimeState& state)
 
 void loadPersistedState(const RuntimeContext& context, RuntimeState& state) {
   infra::StoredRuntimeState stored = context.localStore.load();
-  state.credentials = std::move(stored.credentials);
+  state.deviceConfig = std::move(stored.deviceConfig);
+  state.credentials = state.deviceConfig.runtimeCredentials.configured()
+      ? state.deviceConfig.runtimeCredentials
+      : std::move(stored.credentials);
   state.snapshots = std::move(stored.snapshots);
   state.pendingAttendanceRecords = std::move(stored.pendingAttendanceRecords);
   state.failureLogs = std::move(stored.failureLogs);
   state.storageAux = std::move(stored.storageAux);
+}
+
+void persistDeviceConfig(const RuntimeContext& context, const RuntimeState& state) {
+  if (!state.credentialsReady) {
+    return;
+  }
+  context.localStore.saveDeviceConfig(state.deviceConfig);
 }
 
 void persistSnapshots(const RuntimeContext& context, const RuntimeState& state) {
@@ -124,7 +134,8 @@ void applyTemplateStoreStatus(
   if (replaceSummary) {
     state.storageAux.templateLibrarySummary = status.summary;
   }
-  state.faceModuleEnabled = state.templateStoreReady && facePortsReady(context);
+  state.faceModuleEnabled = state.templateStoreReady && state.credentials.configured() &&
+      facePortsReady(context);
 }
 
 void runTemplateStoreSelfTest(const RuntimeContext& context, RuntimeState& state) {

@@ -3,6 +3,7 @@ import { resolveAppListenHost, resolveAppPort } from "@hitomi/env/app";
 
 export default defineNuxtConfig({
   compatibilityDate: "latest",
+  ssr: false,
   modules: ["@nuxt/ui"],
   devtools: { enabled: true },
   ui: {

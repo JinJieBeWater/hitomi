@@ -5,10 +5,5 @@
     "jsx": "preserve",
     "jsxImportSource": "vue"
   },
-  "include": [
-    "./.nuxt/nuxt.d.ts",
-    "./app/**/*",
-    "./shared/**/*.d.ts",
-    "./*.d.ts"
-  ]
+  "include": ["./.nuxt/nuxt.d.ts", "./app/**/*", "./shared/**/*.d.ts", "./*.d.ts"]
 }

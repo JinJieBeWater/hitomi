@@ -26,7 +26,7 @@ std::string storageLine(const RuntimeStatus& status) {
 bool hasLocalCache(const RuntimeStatus& status) {
   const core::SnapshotBundle& snapshots = status.snapshots;
   return !snapshots.deviceId.empty() || !snapshots.deviceName.empty() || !snapshots.deviceStatus.empty() ||
-      snapshots.attendanceConfig.has_value() || !snapshots.employees.empty() || snapshots.enrollmentTask.has_value() ||
+      snapshots.attendanceConfig.has_value() || !snapshots.employees.empty() || !snapshots.enrollmentTasks.empty() ||
       snapshots.lastSyncAt != 0 || snapshots.lastServerTime != 0;
 }
 

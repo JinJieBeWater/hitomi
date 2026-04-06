@@ -4,6 +4,9 @@ import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqli
 export const deviceStatuses = ["active", "disabled"] as const;
 export type DeviceStatus = (typeof deviceStatuses)[number];
 
+export const deviceActivationStatuses = ["pending", "issued", "activated"] as const;
+export type DeviceActivationStatus = (typeof deviceActivationStatuses)[number];
+
 export const faceProfileStatuses = ["pending", "success", "failed", "cancelled"] as const;
 export type FaceProfileStatus = (typeof faceProfileStatuses)[number];
 
@@ -35,6 +38,15 @@ export const device = sqliteTable(
     name: text("name").notNull(),
     apiKeyHash: text("api_key_hash").notNull(),
     status: text("status").$type<DeviceStatus>().default("active").notNull(),
+    bootstrapSerial: text("bootstrap_serial"),
+    bootstrapSecretHash: text("bootstrap_secret_hash"),
+    activationStatus: text("activation_status")
+      .$type<DeviceActivationStatus>()
+      .default("activated")
+      .notNull(),
+    pendingApiKey: text("pending_api_key"),
+    lastHelloAt: integer("last_hello_at", { mode: "timestamp_ms" }),
+    activatedAt: integer("activated_at", { mode: "timestamp_ms" }),
     lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).default(timestampNow).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" })
@@ -42,7 +54,11 @@ export const device = sqliteTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [uniqueIndex("device_code_unique_idx").on(table.deviceCode)],
+  (table) => [
+    uniqueIndex("device_code_unique_idx").on(table.deviceCode),
+    uniqueIndex("device_bootstrap_serial_unique_idx").on(table.bootstrapSerial),
+    index("device_activation_status_idx").on(table.activationStatus),
+  ],
 );
 
 export const attendanceConfig = sqliteTable("attendance_config", {
@@ -77,9 +93,6 @@ export const faceProfile = sqliteTable(
   (table) => [
     uniqueIndex("face_profile_employee_unique_idx").on(table.employeeId),
     index("face_profile_device_idx").on(table.deviceId),
-    uniqueIndex("face_profile_pending_device_unique_idx")
-      .on(table.deviceId)
-      .where(sql`${table.status} = 'pending'`),
   ],
 );
 

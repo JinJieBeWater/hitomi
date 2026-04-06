@@ -14,8 +14,10 @@
 
 ## 适用范围
 
-本文档仅覆盖以下 3 个接口：
+本文档当前覆盖以下 5 个接口：
 
+- `POST /api/device/bootstrap/hello`
+- `POST /api/device/bootstrap/claim-status`
 - `POST /api/device/sync`
 - `POST /api/device/enrollment/report`
 - `POST /api/device/attendance/upload`
@@ -42,7 +44,8 @@
 
 ### 2. 鉴权方式
 
-所有设备端接口都在请求体根级携带以下字段：
+业务接口 `/api/device/sync`、`/api/device/enrollment/report`、`/api/device/attendance/upload`
+都在请求体根级携带以下字段：
 
 - `deviceCode`: 设备码
 - `apiKey`: 设备密钥明文
@@ -56,7 +59,7 @@
 当前约束：
 
 - 设备端不需要额外传 `deviceId`
-- `apiKey` 仅在创建设备时生成一次
+- `apiKey` 由后台在设备创建时生成，并在 bootstrap 激活阶段下发给设备
 - 设备禁用后，3 个接口都返回 `DEVICE_DISABLED`
 
 ### 3. 时间字段
@@ -116,19 +119,19 @@
 
 以下错误码可在多个设备接口中复用：
 
-| code | 含义 | retryable | 说明 |
-| --- | --- | --- | --- |
-| `DEVICE_AUTH_FAILED` | 设备鉴权失败 | `false` | `deviceCode` 或 `apiKey` 不正确 |
-| `DEVICE_DISABLED` | 设备已禁用 | `false` | 后台已禁用当前设备 |
-| `INVALID_REQUEST` | 请求参数非法 | `false` | 字段缺失、类型错误、枚举值非法 |
-| `ATTENDANCE_CONFIG_MISSING` | 尚未配置考勤时间段 | `false` | 后台还未保存全局考勤配置 |
-| `EMPLOYEE_NOT_FOUND` | 员工不存在 | `false` | 上传的 `employeeId` 无效 |
-| `TASK_CANCELLED` | 录脸任务已取消 | `false` | 后台已取消当前任务 |
-| `ENROLLMENT_TASK_NOT_FOUND` | 录脸任务不存在 | `false` | 指定 `taskId` 无效 |
-| `ENROLLMENT_TASK_MISMATCH` | 录脸任务与员工不匹配 | `false` | `taskId` 与 `employeeId` 不一致 |
-| `ATTENDANCE_NOT_IN_WINDOW` | 不在有效打卡时间段 | `false` | `recognizedAt` 不落在对应时间段内 |
-| `ATTENDANCE_DUPLICATE_LATER_OR_EQUAL` | 已存在更早或相同时间记录 | `false` | 本次记录不应覆盖原记录 |
-| `INTERNAL_ERROR` | 服务端内部错误 | `true` | 设备可稍后重试 |
+| code                                  | 含义                     | retryable | 说明                              |
+| ------------------------------------- | ------------------------ | --------- | --------------------------------- |
+| `DEVICE_AUTH_FAILED`                  | 设备鉴权失败             | `false`   | `deviceCode` 或 `apiKey` 不正确   |
+| `DEVICE_DISABLED`                     | 设备已禁用               | `false`   | 后台已禁用当前设备                |
+| `INVALID_REQUEST`                     | 请求参数非法             | `false`   | 字段缺失、类型错误、枚举值非法    |
+| `ATTENDANCE_CONFIG_MISSING`           | 尚未配置考勤时间段       | `false`   | 后台还未保存全局考勤配置          |
+| `EMPLOYEE_NOT_FOUND`                  | 员工不存在               | `false`   | 上传的 `employeeId` 无效          |
+| `TASK_CANCELLED`                      | 录脸任务已取消           | `false`   | 后台已取消当前任务                |
+| `ENROLLMENT_TASK_NOT_FOUND`           | 录脸任务不存在           | `false`   | 指定 `taskId` 无效                |
+| `ENROLLMENT_TASK_MISMATCH`            | 录脸任务与员工不匹配     | `false`   | `taskId` 与 `employeeId` 不一致   |
+| `ATTENDANCE_NOT_IN_WINDOW`            | 不在有效打卡时间段       | `false`   | `recognizedAt` 不落在对应时间段内 |
+| `ATTENDANCE_DUPLICATE_LATER_OR_EQUAL` | 已存在更早或相同时间记录 | `false`   | 本次记录不应覆盖原记录            |
+| `INTERNAL_ERROR`                      | 服务端内部错误           | `true`    | 设备可稍后重试                    |
 
 ---
 
@@ -181,8 +184,28 @@
 
 说明：
 
-- 当前 MVP 中每台设备最多只会收到 1 个 `pending` 任务
-- 若没有待处理任务，则返回 `null`
+- 这是单条录脸任务的数据结构
+
+### 4. EnrollmentTaskList
+
+```json
+[
+  {
+    "taskId": "fp_001",
+    "employeeId": "emp_001",
+    "employeeCode": "20230001",
+    "employeeName": "张三",
+    "status": "pending",
+    "createdAt": 1743158400000,
+    "updatedAt": 1743158400000
+  }
+]
+```
+
+说明：
+
+- 设备同步接口可返回 0 到多条待处理录脸任务
+- 若没有待处理任务，则返回空数组 `[]`
 
 ---
 
@@ -206,7 +229,7 @@
 - `deviceCode` 必填
 - `apiKey` 必填
 - 当前 MVP 不要求设备传版本号或增量同步游标
-- 当前 MVP 统一返回全量配置、全量员工信息和当前待处理录脸任务
+- 当前 MVP 统一返回全量配置、全量员工信息和当前待处理录脸任务列表
 
 ### 成功响应
 
@@ -237,15 +260,17 @@
         "updatedAt": 1743158400000
       }
     ],
-    "enrollmentTask": {
-      "taskId": "fp_001",
-      "employeeId": "emp_001",
-      "employeeCode": "20230001",
-      "employeeName": "张三",
-      "status": "pending",
-      "createdAt": 1743158400000,
-      "updatedAt": 1743158400000
-    }
+    "enrollmentTasks": [
+      {
+        "taskId": "fp_001",
+        "employeeId": "emp_001",
+        "employeeCode": "20230001",
+        "employeeName": "张三",
+        "status": "pending",
+        "createdAt": 1743158400000,
+        "updatedAt": 1743158400000
+      }
+    ]
   }
 }
 ```
@@ -257,7 +282,7 @@
 - `device.status`: 当前仅有 `active` 或 `disabled`
 - `attendanceConfig`: 若后台尚未保存考勤配置，则返回 `null`
 - `employees`: 当前设备本地识别所需的员工全量列表
-- `enrollmentTask`: 当前待处理录脸任务，没有则返回 `null`
+- `enrollmentTasks`: 当前待处理录脸任务列表，没有则返回空数组 `[]`
 
 ### 失败响应
 
@@ -269,9 +294,9 @@
 
 ### 设备端处理建议
 
-- 调用成功后，设备应覆盖本地配置、员工信息和当前录脸任务
+- 调用成功后，设备应覆盖本地配置、员工信息和当前录脸任务列表
 - 若 `attendanceConfig` 为 `null`，设备不应上传考勤记录
-- 若 `enrollmentTask` 为 `null`，设备应清空当前待录脸任务状态
+- 若 `enrollmentTasks` 为空数组，设备应清空当前待录脸任务列表
 
 ---
 
@@ -297,15 +322,15 @@
 
 ### 请求字段说明
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `deviceCode` | `string` | 是 | 设备码 |
-| `apiKey` | `string` | 是 | 设备密钥 |
-| `taskId` | `string` | 是 | 录脸任务 ID，对应 `face_profile.id` |
-| `employeeId` | `string` | 是 | 当前完成录脸的员工 ID |
-| `result` | `string` | 是 | `success` 或 `failed` |
-| `finishedAt` | `integer` | 是 | 录脸完成时间 |
-| `failureReason` | `string \| null` | 否 | 当 `result = failed` 时建议填写失败原因 |
+| 字段            | 类型             | 必填 | 说明                                    |
+| --------------- | ---------------- | ---- | --------------------------------------- |
+| `deviceCode`    | `string`         | 是   | 设备码                                  |
+| `apiKey`        | `string`         | 是   | 设备密钥                                |
+| `taskId`        | `string`         | 是   | 录脸任务 ID，对应 `face_profile.id`     |
+| `employeeId`    | `string`         | 是   | 当前完成录脸的员工 ID                   |
+| `result`        | `string`         | 是   | `success` 或 `failed`                   |
+| `finishedAt`    | `integer`        | 是   | 录脸完成时间                            |
+| `failureReason` | `string \| null` | 否   | 当 `result = failed` 时建议填写失败原因 |
 
 ### 请求规则
 
@@ -385,20 +410,20 @@
 
 #### 根级字段
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `deviceCode` | `string` | 是 | 设备码 |
-| `apiKey` | `string` | 是 | 设备密钥 |
-| `records` | `array` | 是 | 待上传记录数组，不能为空 |
+| 字段         | 类型     | 必填 | 说明                     |
+| ------------ | -------- | ---- | ------------------------ |
+| `deviceCode` | `string` | 是   | 设备码                   |
+| `apiKey`     | `string` | 是   | 设备密钥                 |
+| `records`    | `array`  | 是   | 待上传记录数组，不能为空 |
 
 #### `records[]` 字段
 
-| 字段 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-| `clientRecordId` | `string` | 是 | 设备本地记录 ID，用于匹配响应结果 |
-| `employeeId` | `string` | 是 | 员工 ID |
-| `recognizedAt` | `integer` | 是 | 识别时间 |
-| `type` | `string` | 是 | `clock_in` 或 `clock_out` |
+| 字段             | 类型      | 必填 | 说明                              |
+| ---------------- | --------- | ---- | --------------------------------- |
+| `clientRecordId` | `string`  | 是   | 设备本地记录 ID，用于匹配响应结果 |
+| `employeeId`     | `string`  | 是   | 员工 ID                           |
+| `recognizedAt`   | `integer` | 是   | 识别时间                          |
+| `type`           | `string`  | 是   | `clock_in` 或 `clock_out`         |
 
 ### 请求规则
 
@@ -434,21 +459,21 @@
 
 ### `results[].status` 枚举
 
-| status | 含义 |
-| --- | --- |
-| `saved` | 新增成功 |
-| `updated_earlier` | 已存在同日同类记录，但本次时间更早，已覆盖原记录 |
-| `ignored_duplicate` | 已存在更早或相同时间记录，本次不入库 |
-| `rejected` | 校验未通过，本次被拒绝 |
+| status              | 含义                                             |
+| ------------------- | ------------------------------------------------ |
+| `saved`             | 新增成功                                         |
+| `updated_earlier`   | 已存在同日同类记录，但本次时间更早，已覆盖原记录 |
+| `ignored_duplicate` | 已存在更早或相同时间记录，本次不入库             |
+| `rejected`          | 校验未通过，本次被拒绝                           |
 
 ### `results[]` 字段说明
 
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `clientRecordId` | `string` | 原样回传 |
-| `status` | `string` | 处理结果 |
-| `attendanceRecordId` | `string \| null` | 新增或更新后对应的记录 ID |
-| `error` | `object \| null` | 当 `status = rejected` 或 `ignored_duplicate` 时返回原因 |
+| 字段                 | 类型             | 说明                                                     |
+| -------------------- | ---------------- | -------------------------------------------------------- |
+| `clientRecordId`     | `string`         | 原样回传                                                 |
+| `status`             | `string`         | 处理结果                                                 |
+| `attendanceRecordId` | `string \| null` | 新增或更新后对应的记录 ID                                |
+| `error`              | `object \| null` | 当 `status = rejected` 或 `ignored_duplicate` 时返回原因 |
 
 ### `results[].error.code` 可能值
 

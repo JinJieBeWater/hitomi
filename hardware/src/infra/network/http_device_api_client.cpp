@@ -110,11 +110,7 @@ std::optional<core::AttendanceConfigSnapshot> parseAttendanceConfig(JsonVariantC
   };
 }
 
-std::optional<core::EnrollmentTaskSnapshot> parseEnrollmentTask(JsonVariantConst value) {
-  if (value.isNull()) {
-    return std::nullopt;
-  }
-
+core::EnrollmentTaskSnapshot parseEnrollmentTask(JsonVariantConst value) {
   return core::EnrollmentTaskSnapshot{
       .taskId = value["taskId"] | "",
       .employeeId = value["employeeId"] | "",
@@ -135,7 +131,6 @@ std::optional<core::SyncPayload> parseSyncPayload(JsonVariantConst data) {
   payload.deviceName = device["name"] | "";
   payload.deviceStatus = device["status"] | "";
   payload.attendanceConfig = parseAttendanceConfig(data["attendanceConfig"]);
-  payload.enrollmentTask = parseEnrollmentTask(data["enrollmentTask"]);
 
   JsonArrayConst employees = data["employees"].as<JsonArrayConst>();
   for (JsonVariantConst item : employees) {
@@ -144,7 +139,16 @@ std::optional<core::SyncPayload> parseSyncPayload(JsonVariantConst data) {
         .code = item["code"] | "",
         .name = item["name"] | "",
         .updatedAt = item["updatedAt"] | 0ULL,
-    });
+      });
+  }
+
+  JsonArrayConst enrollmentTasks = data["enrollmentTasks"].as<JsonArrayConst>();
+  for (JsonVariantConst item : enrollmentTasks) {
+    payload.enrollmentTasks.push_back(parseEnrollmentTask(item));
+  }
+
+  if (payload.enrollmentTasks.empty() && !data["enrollmentTask"].isNull()) {
+    payload.enrollmentTasks.push_back(parseEnrollmentTask(data["enrollmentTask"]));
   }
 
   return payload;
@@ -196,6 +200,19 @@ std::optional<AttendanceUploadResponse> parseAttendanceUploadResponse(JsonVarian
   return response;
 }
 
+std::optional<BootstrapActivationResponse> parseBootstrapActivationResponse(JsonVariantConst data) {
+  return BootstrapActivationResponse{
+      .registrationId = data["registrationId"] | "",
+      .state = data["state"] | "",
+      .deviceCode = data["deviceCode"].isNull()
+          ? std::nullopt
+          : std::optional<std::string>(data["deviceCode"].as<const char*>()),
+      .apiKey = data["apiKey"].isNull()
+          ? std::nullopt
+          : std::optional<std::string>(data["apiKey"].as<const char*>()),
+  };
+}
+
 }  // namespace
 
 HttpDeviceApiClient::HttpDeviceApiClient(std::string baseUrl)
@@ -203,6 +220,10 @@ HttpDeviceApiClient::HttpDeviceApiClient(std::string baseUrl)
 
 bool HttpDeviceApiClient::configured() const {
   return !baseUrl_.empty();
+}
+
+void HttpDeviceApiClient::setBaseUrl(const std::string& baseUrl) {
+  baseUrl_ = baseUrl;
 }
 
 ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
@@ -256,6 +277,31 @@ ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
       .now = 0,
   };
   return result;
+}
+
+ApiResult<BootstrapActivationResponse> HttpDeviceApiClient::bootstrapHello(const BootstrapHelloRequest& request) {
+  DynamicJsonDocument requestDoc(1024);
+  requestDoc["deviceSerial"] = request.deviceSerial;
+  requestDoc["bootstrapSecret"] = request.bootstrapSecret;
+  requestDoc["firmwareTag"] = request.firmwareTag;
+  if (request.wifiSsid.has_value()) {
+    requestDoc["wifiSsid"] = request.wifiSsid.value();
+  } else {
+    requestDoc["wifiSsid"] = nullptr;
+  }
+
+  return postJson<BootstrapActivationResponse>(
+      endpointUrl("/api/device/bootstrap/hello"), requestDoc, parseBootstrapActivationResponse);
+}
+
+ApiResult<BootstrapActivationResponse> HttpDeviceApiClient::pollActivation(
+    const core::BootstrapIdentity& identity, const std::string& registrationId) {
+  DynamicJsonDocument requestDoc(1024);
+  requestDoc["deviceSerial"] = identity.deviceSerial;
+  requestDoc["bootstrapSecret"] = identity.bootstrapSecret;
+  requestDoc["registrationId"] = registrationId;
+  return postJson<BootstrapActivationResponse>(
+      endpointUrl("/api/device/bootstrap/claim-status"), requestDoc, parseBootstrapActivationResponse);
 }
 
 ApiResult<core::SyncPayload> HttpDeviceApiClient::sync(const core::DeviceCredentials& credentials) {

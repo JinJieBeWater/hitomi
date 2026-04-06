@@ -1,4 +1,13 @@
-import { and, attendanceConfig, attendanceRecord, db, device, employee, eq, faceProfile } from "@hitomi/db";
+import {
+  and,
+  attendanceConfig,
+  attendanceRecord,
+  db,
+  device,
+  employee,
+  eq,
+  faceProfile,
+} from "@hitomi/db";
 import { attendanceRecordTypes } from "@hitomi/db/schema/business";
 import type { H3Event } from "h3";
 import { z } from "zod";
@@ -31,8 +40,22 @@ export const attendanceUploadBodySchema = syncBodySchema.extend({
     .min(1),
 });
 
+export const bootstrapHelloBodySchema = z.object({
+  deviceSerial: z.string().min(1),
+  bootstrapSecret: z.string().min(1),
+  firmwareTag: z.string().min(1),
+  wifiSsid: z.string().min(1).nullable().optional(),
+});
+
+export const activationStatusBodySchema = z.object({
+  deviceSerial: z.string().min(1),
+  bootstrapSecret: z.string().min(1),
+  registrationId: z.string().min(1),
+});
+
 export type DeviceErrorCode =
   | "DEVICE_AUTH_FAILED"
+  | "DEVICE_BOOTSTRAP_AUTH_FAILED"
   | "DEVICE_DISABLED"
   | "INVALID_REQUEST"
   | "ATTENDANCE_CONFIG_MISSING"
@@ -96,6 +119,73 @@ async function sha256Hex(value: string) {
   return Buffer.from(digest).toString("hex");
 }
 
+export async function authenticateBootstrapDevice(deviceSerial: string, bootstrapSecret: string) {
+  const current = await db.query.device.findFirst({
+    where: eq(device.bootstrapSerial, deviceSerial),
+  });
+
+  if (!current || !current.bootstrapSecretHash) {
+    return {
+      ok: false as const,
+      response: deviceFailure(
+        "DEVICE_BOOTSTRAP_AUTH_FAILED",
+        "device bootstrap identity is invalid",
+      ),
+    };
+  }
+
+  const bootstrapSecretHash = await sha256Hex(bootstrapSecret);
+  if (bootstrapSecretHash !== current.bootstrapSecretHash) {
+    return {
+      ok: false as const,
+      response: deviceFailure(
+        "DEVICE_BOOTSTRAP_AUTH_FAILED",
+        "device bootstrap identity is invalid",
+      ),
+    };
+  }
+
+  if (current.status === "disabled") {
+    return {
+      ok: false as const,
+      response: deviceFailure("DEVICE_DISABLED", "device is disabled"),
+    };
+  }
+
+  await db
+    .update(device)
+    .set({
+      lastHelloAt: new Date(),
+    })
+    .where(eq(device.id, current.id));
+
+  return {
+    ok: true as const,
+    activation: current,
+  };
+}
+
+export async function buildBootstrapActivationResponse(activation: typeof device.$inferSelect) {
+  // pendingApiKey is populated when admin issues activation. The device treats
+  // receiving credentials as "activated", even though the DB status is still
+  // "issued" until the device first syncs and consumes the key.
+  if (activation.pendingApiKey) {
+    return {
+      registrationId: activation.id,
+      state: "activated",
+      deviceCode: activation.deviceCode,
+      apiKey: activation.pendingApiKey,
+    };
+  }
+
+  return {
+    registrationId: activation.id,
+    state: activation.activationStatus,
+    deviceCode: null,
+    apiKey: null,
+  };
+}
+
 export async function authenticateDevice(deviceCode: string, apiKey: string) {
   const current = await db.query.device.findFirst({
     where: eq(device.deviceCode, deviceCode),
@@ -123,6 +213,9 @@ export async function authenticateDevice(deviceCode: string, apiKey: string) {
     .update(device)
     .set({
       lastSeenAt: now,
+      activationStatus: current.pendingApiKey ? "activated" : current.activationStatus,
+      pendingApiKey: null,
+      activatedAt: current.pendingApiKey ? now : current.activatedAt,
     })
     .where(eq(device.id, current.id));
 
@@ -153,7 +246,9 @@ function getDateParts(value: number | Date) {
     minute: "2-digit",
     hourCycle: "h23",
   });
-  const parts = Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date).map((part) => [part.type, part.value]),
+  );
 
   return {
     year: parts.year,
@@ -208,16 +303,18 @@ export function serializeAttendanceConfig(config: typeof attendanceConfig.$infer
 }
 
 export async function getSyncPayload(deviceId: string) {
-  const [config, employees, task] = await Promise.all([
+  const [config, employees, tasks] = await Promise.all([
     db.query.attendanceConfig.findFirst(),
     db.query.employee.findMany(),
-    db.query.faceProfile.findFirst({
+    db.query.faceProfile.findMany({
       where: and(eq(faceProfile.deviceId, deviceId), eq(faceProfile.status, "pending")),
       with: {
         employee: true,
       },
     }),
   ]);
+
+  tasks.sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
 
   return {
     attendanceConfig: serializeAttendanceConfig(config ?? null),
@@ -227,17 +324,15 @@ export async function getSyncPayload(deviceId: string) {
       name: item.name,
       updatedAt: item.updatedAt.getTime(),
     })),
-    enrollmentTask: task
-      ? {
-          taskId: task.id,
-          employeeId: task.employeeId,
-          employeeCode: task.employee?.code ?? "",
-          employeeName: task.employee?.name ?? "",
-          status: task.status,
-          createdAt: task.createdAt.getTime(),
-          updatedAt: task.updatedAt.getTime(),
-        }
-      : null,
+    enrollmentTasks: tasks.map((task) => ({
+      taskId: task.id,
+      employeeId: task.employeeId,
+      employeeCode: task.employee?.code ?? "",
+      employeeName: task.employee?.name ?? "",
+      status: task.status,
+      createdAt: task.createdAt.getTime(),
+      updatedAt: task.updatedAt.getTime(),
+    })),
   };
 }
 
@@ -250,18 +345,26 @@ export async function getAttendanceConfig() {
 }
 
 export async function getEmployee(id: string) {
-  return (await db.query.employee.findFirst({
-    where: eq(employee.id, id),
-  })) ?? null;
+  return (
+    (await db.query.employee.findFirst({
+      where: eq(employee.id, id),
+    })) ?? null
+  );
 }
 
 export async function getFaceProfile(id: string) {
-  return (await db.query.faceProfile.findFirst({
-    where: eq(faceProfile.id, id),
-  })) ?? null;
+  return (
+    (await db.query.faceProfile.findFirst({
+      where: eq(faceProfile.id, id),
+    })) ?? null
+  );
 }
 
-export async function getAttendanceRecord(employeeId: string, localDate: string, type: "clock_in" | "clock_out") {
+export async function getAttendanceRecord(
+  employeeId: string,
+  localDate: string,
+  type: "clock_in" | "clock_out",
+) {
   return (
     (await db.query.attendanceRecord.findFirst({
       where: and(

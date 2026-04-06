@@ -15,12 +15,17 @@ function resolveRequestHostOrigin(request?: Request) {
     return null;
   }
 
-  const protocol = request?.headers.get("x-forwarded-proto") ?? new URL(env.BETTER_AUTH_URL).protocol.replace(":", "");
+  const protocol =
+    request?.headers.get("x-forwarded-proto") ??
+    new URL(env.BETTER_AUTH_URL).protocol.replace(":", "");
 
   return `${protocol}://${host}`;
 }
 
-const configuredTrustedOrigins = [normalizeOrigin(env.CORS_ORIGIN), normalizeOrigin(env.BETTER_AUTH_URL)];
+const configuredTrustedOrigins = [
+  normalizeOrigin(env.CORS_ORIGIN),
+  normalizeOrigin(env.BETTER_AUTH_URL),
+];
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -31,7 +36,12 @@ export const auth = betterAuth({
   trustedOrigins: async (request) => {
     const requestHostOrigin = resolveRequestHostOrigin(request);
 
-    return [...new Set([...configuredTrustedOrigins, ...(requestHostOrigin ? [normalizeOrigin(requestHostOrigin)] : [])])];
+    return [
+      ...new Set([
+        ...configuredTrustedOrigins,
+        ...(requestHostOrigin ? [normalizeOrigin(requestHostOrigin)] : []),
+      ]),
+    ];
   },
   emailAndPassword: {
     enabled: true,

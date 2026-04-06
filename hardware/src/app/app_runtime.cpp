@@ -6,6 +6,7 @@
 
 #include "app/runtime_lifecycle_service.hpp"
 #include "app/runtime_network_ops.hpp"
+#include "app/runtime_provisioning_ops.hpp"
 #include "app/runtime_state.hpp"
 #include "app/runtime_storage_ops.hpp"
 #include "app/runtime_view_ops.hpp"
@@ -51,6 +52,8 @@ void AppRuntime::setup() {
 
   initializeLocalStore(context, state);
   loadPersistedState(context, state);
+  seedDeviceConfigFromBoardDefaults(context, state);
+  syncDeviceApiClientConfig(context, state);
   initializeTemplateStore(context, state);
   runTemplateStoreSelfTest(context, state);
   initWifi();
@@ -66,7 +69,8 @@ void AppRuntime::setup() {
   state.lastTemplateStoreProbeMs = nowMs;
   state.lastButtonPressed = digitalRead(board::kBootKeyPin) == LOW;
 
-  probeConnectivity(state, nowMs);
+  ensureWifiConnection(context, state, nowMs);
+  probeConnectivity(context, state, nowMs);
   printRuntimeCheck(context, state);
   updateView(context, state);
 }
@@ -76,14 +80,21 @@ void AppRuntime::tick(uint32_t nowMs) {
   RuntimeState& state = *state_;
 
   context.display.tick(nowMs);
+  processUsbProvisioning(context, state, nowMs);
   pollBootButton(state, nowMs);
+  syncDeviceApiClientConfig(context, state);
+  ensureWifiConnection(context, state, nowMs);
 
   if (nowMs - state.lastNetworkProbeMs >= board::kNetworkProbeIntervalMs) {
-    probeConnectivity(state, nowMs);
+    probeConnectivity(context, state, nowMs);
   }
 
   if (shouldProbeApi(context, state, nowMs)) {
     performApiProbe(context, state, nowMs);
+  }
+
+  if (shouldActivate(context, state, nowMs)) {
+    performActivation(context, state, nowMs);
   }
 
   probeTemplateStore(context, state, nowMs);

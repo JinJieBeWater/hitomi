@@ -84,23 +84,35 @@ function handleConfirm() {
         <template v-else-if="props.impact">
           <div class="space-y-4">
             <div class="border-b border-neutral-200/70 pb-4 dark:border-neutral-800/80">
-              <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">{{ props.entityLabel }}</div>
-              <div class="mt-2 text-base font-semibold tracking-tight text-highlighted">{{ props.impact.name }}</div>
+              <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
+                {{ props.entityLabel }}
+              </div>
+              <div class="mt-2 text-base font-semibold tracking-tight text-highlighted">
+                {{ props.impact.name }}
+              </div>
               <div class="mt-1 text-sm text-toned">
                 {{ props.identifierLabel }}: {{ props.impact.identifierValue }}
               </div>
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2">
-              <div class="rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80">
-                <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">录脸任务</div>
+              <div
+                class="rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80"
+              >
+                <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
+                  录脸任务
+                </div>
                 <div class="mt-2 text-2xl font-semibold tracking-tight text-highlighted">
                   {{ props.impact.faceProfileCount }}
                 </div>
               </div>
 
-              <div class="rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80">
-                <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">考勤记录</div>
+              <div
+                class="rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80"
+              >
+                <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
+                  考勤记录
+                </div>
                 <div class="mt-2 text-2xl font-semibold tracking-tight text-highlighted">
                   {{ props.impact.attendanceRecordCount }}
                 </div>
