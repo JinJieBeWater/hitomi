@@ -5,7 +5,6 @@ import { dirname, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { config } from "dotenv";
-import { resolveAppOrigin } from "@hitomi/env/app";
 
 process.env.TZ = "Asia/Shanghai";
 
@@ -14,6 +13,7 @@ const appRoot = fileURLToPath(new URL("../../../apps/web", import.meta.url));
 const envPath = fileURLToPath(new URL("../../../apps/web/.env", import.meta.url));
 const localDbUrl = pathToFileURL(fileURLToPath(new URL("../../../local.db", import.meta.url))).href;
 const artifactsDir = resolve(repoRoot, "output/playwright");
+const devServerTempDir = resolve(repoRoot, "output/tmp/smoke-admin-ui");
 const defaultAttendanceConfigId = "default";
 
 config({
@@ -148,19 +148,114 @@ async function findAvailablePort(host = "127.0.0.1") {
 
 async function startServer(baseUrl: string) {
   const url = new URL(baseUrl);
-  const child = spawn("bun", ["run", "dev", "--", "--port", url.port, "--host", url.hostname], {
+  await mkdir(devServerTempDir, { recursive: true });
+  await runAppCommand(["run", "build"], "Nuxt build", {
+    TMPDIR: devServerTempDir,
+  });
+
+  let stdout = "";
+  let stderr = "";
+  const child = spawn("bun", ["run", "preview", "--", "--port", url.port], {
     cwd: appRoot,
     env: {
       ...process.env,
       HOST: url.hostname,
+      NITRO_HOST: url.hostname,
       PORT: url.port,
+      NITRO_PORT: url.port,
+      TMPDIR: devServerTempDir,
     },
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
-  await waitForServer(baseUrl);
+  child.stdout?.on("data", (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  try {
+    await waitForServer(baseUrl);
+  } catch (error) {
+    child.kill("SIGTERM");
+    await delay(500);
+    const logs = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+    throw new Error(logs ? `${String(error)}\nNuxt server output:\n${logs}` : String(error));
+  }
 
   return child;
+}
+
+async function runAppCommand(args: string[], label: string, envOverrides: Record<string, string>) {
+  await new Promise<void>((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+
+    const child = spawn("bun", args, {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const logs = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+      reject(
+        new Error(
+          logs ? `${label} failed with code ${code}\n${logs}` : `${label} failed with code ${code}`,
+        ),
+      );
+    });
+  });
+}
+
+async function stopServer(server: ReturnType<typeof spawn>) {
+  if (server.exitCode !== null) {
+    return;
+  }
+
+  const waitForExit = (timeoutMs: number) =>
+    new Promise<void>((resolve) => {
+      if (server.exitCode !== null) {
+        resolve();
+        return;
+      }
+
+      const timeout = setTimeout(resolve, timeoutMs);
+      server.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+
+  server.kill("SIGTERM");
+  await waitForExit(2_000);
+
+  if (server.exitCode === null) {
+    server.kill("SIGKILL");
+    await waitForExit(1_000);
+  }
+
+  if (server.exitCode === null) {
+    server.stdout?.destroy();
+    server.stderr?.destroy();
+    server.unref();
+  }
 }
 
 async function launchBrowser() {
@@ -271,11 +366,7 @@ async function cleanupData(input: {
 
 const host = "127.0.0.1";
 const port = await findAvailablePort(host);
-const baseUrl = resolveAppOrigin({
-  ...process.env,
-  HOST: host,
-  PORT: `${port}`,
-});
+const baseUrl = `http://${host}:${port}`;
 const server = await startServer(baseUrl);
 
 const suffix = Date.now().toString(36);
@@ -501,6 +592,5 @@ try {
       : null,
   });
 
-  server.kill("SIGTERM");
-  await delay(500);
+  await stopServer(server);
 }

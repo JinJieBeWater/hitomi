@@ -27,7 +27,6 @@ const deleteDeviceError = ref("");
 const lastCreated = ref<{
   id: string;
   deviceCode: string;
-  initialApiKey: string;
   bootstrapSerial: string;
   bootstrapSecret: string;
   name: string;
@@ -466,7 +465,6 @@ function getRowActions(item: any) {
         v-model:open="createdResultOpen"
         :device="lastCreated"
         @copy:code="lastCreated && copyText('设备码', lastCreated.deviceCode)"
-        @copy:key="lastCreated && copyText('初始化密钥', lastCreated.initialApiKey)"
         @copy:bootstrap-serial="lastCreated && copyText('Bootstrap 序列号', lastCreated.bootstrapSerial)"
         @copy:bootstrap-secret="lastCreated && copyText('Bootstrap 密钥', lastCreated.bootstrapSecret)"
         @start-activation="createdResultOpen = false; usbSlideoverOpen = true"

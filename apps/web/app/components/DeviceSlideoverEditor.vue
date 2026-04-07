@@ -5,7 +5,6 @@ import { ref, watch } from "vue";
 type CreatedResult = {
   id: string;
   deviceCode: string;
-  initialApiKey: string;
   bootstrapSerial: string;
   bootstrapSecret: string;
   name: string;
@@ -81,7 +80,6 @@ async function handleSubmit() {
         id: result.device.id,
         name: result.device.name,
         deviceCode: result.device.deviceCode,
-        initialApiKey: result.initialApiKey,
         bootstrapSerial: result.bootstrapSerial,
         bootstrapSecret: result.bootstrapSecret,
       });

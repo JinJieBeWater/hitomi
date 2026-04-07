@@ -34,7 +34,7 @@ const showProvisionForm = ref(false);
 const showSerialLogs = ref(true);
 
 const summary = ref<DeviceSerialSummary | null>(null);
-const dbDevice = ref<{ id: string; name: string; deviceCode: string; activationStatus: string } | null>(null);
+const dbDevice = ref<{ id: string; name: string; deviceCode: string } | null>(null);
 const createdDevice = ref<{ id: string; bootstrapSerial: string; bootstrapSecret: string } | null>(null);
 
 const newDeviceName = ref("");
@@ -55,8 +55,6 @@ const canWriteConfig = computed(
 );
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-
 function mkId() {
   return globalThis.crypto?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
@@ -139,7 +137,11 @@ async function connect() {
     statusMessage.value = "正在读取设备信息…";
     const s = await refreshSummary();
 
-    if (s?.activationState === "unconfigured") {
+    if (!s) {
+      throw new Error("未能读取设备配置摘要。");
+    }
+
+    if (s.activationState === "unconfigured") {
       // Device has no bootstrapSecret — needs full provisioning
       view.value = "new_device";
       step.value = "create";
@@ -151,9 +153,7 @@ async function connect() {
     const found = await queryClient.fetchQuery(
       $orpc.device.findByBootstrapSerial.queryOptions({ input: { serial: s.deviceSerial } }),
     );
-    dbDevice.value = found
-      ? { id: found.id, name: found.name, deviceCode: found.deviceCode, activationStatus: found.activationStatus }
-      : null;
+    dbDevice.value = found ? { id: found.id, name: found.name, deviceCode: found.deviceCode } : null;
 
     if (s.activationState === "activated") {
       view.value = "device_info";
@@ -186,7 +186,6 @@ async function handleCreateDevice() {
       id: result.device.id,
       name: result.device.name,
       deviceCode: result.device.deviceCode,
-      activationStatus: result.device.activationStatus,
     };
     // Move to config step in whichever view we're in
     step.value = "config";
@@ -242,7 +241,9 @@ async function pollUntilActivated() {
         step.value = "done";
         statusMessage.value = "设备激活成功！";
         toast.add({ title: "设备已激活" });
-        await queryClient.invalidateQueries($orpc.device.list.queryOptions({}));
+        await queryClient.invalidateQueries({
+          queryKey: $orpc.device.list.queryOptions({ input: {} }).queryKey,
+        });
         return;
       }
       await new Promise((r) => setTimeout(r, 2000));

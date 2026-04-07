@@ -201,8 +201,10 @@ try {
   deviceId1 = createdDevice1.device.id;
   deviceId2 = createdDevice2.device.id;
 
-  assert(createdDevice1.initialApiKey.length > 0, "device create should return initial api key");
-  assert(createdDevice2.initialApiKey.length > 0, "device create should return initial api key");
+  assert(createdDevice1.bootstrapSerial.length > 0, "device create should return bootstrap serial");
+  assert(createdDevice1.bootstrapSecret.length > 0, "device create should return bootstrap secret");
+  assert(createdDevice2.bootstrapSerial.length > 0, "device create should return bootstrap serial");
+  assert(createdDevice2.bootstrapSecret.length > 0, "device create should return bootstrap secret");
 
   const updatedDevice2Disabled = await client.device.update({
     id: deviceId2,

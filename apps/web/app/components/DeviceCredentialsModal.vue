@@ -4,7 +4,6 @@ const props = defineProps<{
   device: {
     name: string;
     deviceCode: string;
-    initialApiKey: string;
     bootstrapSerial: string;
     bootstrapSecret: string;
   } | null;
@@ -12,7 +11,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "copy:code": [];
-  "copy:key": [];
   "copy:bootstrap-serial": [];
   "copy:bootstrap-secret": [];
   "start-activation": [];
@@ -36,11 +34,6 @@ const items = computed(() => {
       mono: true,
     },
     {
-      label: "初始化密钥",
-      value: props.device.initialApiKey,
-      mono: true,
-    },
-    {
       label: "Bootstrap 序列号",
       value: props.device.bootstrapSerial,
       mono: true,
@@ -60,7 +53,7 @@ const items = computed(() => {
     :dismissible="false"
     :close="false"
     title="设备创建成功"
-    description="请立即保存设备码、初始化密钥和 bootstrap 凭据。设备首配使用 bootstrap 凭据，初始化密钥会在激活阶段下发给设备。"
+    description="请立即保存设备码和 bootstrap 凭据。设备首配只使用 bootstrap 凭据，运行时 apiKey 会在激活成功后直接下发给设备。"
     :ui="{ content: 'sm:max-w-xl' }"
     @update:open="emit('update:open', $event)"
   >
@@ -94,16 +87,6 @@ const items = computed(() => {
             >
               复制设备码
             </UButton>
-
-            <UButton
-              variant="outline"
-              color="neutral"
-              icon="i-lucide-copy"
-              @click="emit('copy:key')"
-            >
-              复制密钥
-            </UButton>
-
             <UButton
               variant="outline"
               color="neutral"

@@ -64,10 +64,10 @@ export const deviceRouter = {
     .handler(async ({ input }) => {
       const id = createId("dev");
       const deviceCode = createDeviceCode();
-      const initialApiKey = createApiKey();
+      const provisionalApiKey = createApiKey();
       const bootstrapSerial = createBootstrapSerial();
       const bootstrapSecret = createBootstrapSecret();
-      const apiKeyHash = await sha256Hex(initialApiKey);
+      const apiKeyHash = await sha256Hex(provisionalApiKey);
       const bootstrapSecretHash = await sha256Hex(bootstrapSecret);
 
       await db.insert(device).values({
@@ -88,7 +88,6 @@ export const deviceRouter = {
 
       return {
         device: serializeDeviceSummary(created),
-        initialApiKey,
         bootstrapSerial,
         bootstrapSecret,
       };

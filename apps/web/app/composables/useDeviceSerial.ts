@@ -18,12 +18,14 @@ type SerialCommand =
   | { type: "clear_wifi_profiles" }
   | { type: "reset_device_config" };
 
+type DeviceActivationState = "activated" | "pending_activation" | "unconfigured";
+
 export type DeviceSerialSummary = {
   schemaVersion: number;
   wifiProfileCount: number;
   backendOrigin: string;
   deviceSerial: string;
-  activationState: "activated" | "pending_activation" | "unconfigured";
+  activationState: DeviceActivationState;
   deviceCode: string;
   lastErrorCode: string | null;
 };
@@ -60,6 +62,37 @@ function isProvisioningResponse(value: unknown): value is DeviceSerialResponse {
 
   const candidate = value as Record<string, unknown>;
   return typeof candidate.ok === "boolean" && typeof candidate.message === "string";
+}
+
+function normalizeActivationState(value: unknown): DeviceActivationState {
+  if (value === "activated") {
+    return "activated";
+  }
+
+  if (value === "pending" || value === "pending_activation") {
+    return "pending_activation";
+  }
+
+  return "unconfigured";
+}
+
+function normalizeSummary(value: unknown): DeviceSerialSummary | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return {
+    schemaVersion: typeof candidate.schemaVersion === "number" ? candidate.schemaVersion : 1,
+    wifiProfileCount:
+      typeof candidate.wifiProfileCount === "number" ? candidate.wifiProfileCount : 0,
+    backendOrigin: typeof candidate.backendOrigin === "string" ? candidate.backendOrigin : "",
+    deviceSerial: typeof candidate.deviceSerial === "string" ? candidate.deviceSerial : "",
+    activationState: normalizeActivationState(candidate.activationState),
+    deviceCode: typeof candidate.deviceCode === "string" ? candidate.deviceCode : "",
+    lastErrorCode: typeof candidate.lastErrorCode === "string" ? candidate.lastErrorCode : null,
+  };
 }
 
 function timeoutPromise(timeoutMs: number) {
@@ -182,7 +215,10 @@ export function useDeviceSerial() {
       try {
         const parsed = JSON.parse(line);
         if (isProvisioningResponse(parsed)) {
-          return parsed;
+          return {
+            ...parsed,
+            summary: normalizeSummary(parsed.summary),
+          };
         }
       } catch {
         // ignore runtime log lines

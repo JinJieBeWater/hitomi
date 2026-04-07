@@ -442,7 +442,7 @@ type AdminBusinessError = {
 
 ### 作用
 
-创建设备、生成初始化密钥，并生成设备首配所需的 bootstrap 凭据。
+创建设备，并生成设备首配所需的 bootstrap 凭据。
 
 ### 输入
 
@@ -456,11 +456,9 @@ type AdminBusinessError = {
 
 - `name` 必填，去除首尾空格后不能为空
 - 服务端自动生成唯一 `deviceCode`
-- 服务端自动生成明文 `apiKey`
 - 服务端自动生成 `bootstrapSerial`
 - 服务端自动生成 `bootstrapSecret`
-- 数据库保存 `apiKeyHash`
-- MVP 激活阶段允许服务端在设备成功领取前暂存待领取的运行时密钥
+- 数据库预先写入占位 `apiKeyHash`，设备完成 bootstrap 激活后再换发正式运行时凭据
 
 ### 输出
 
@@ -475,7 +473,6 @@ type AdminBusinessError = {
     "createdAt": 1743158400000,
     "updatedAt": 1743158400000
   },
-  "initialApiKey": "plain-api-key",
   "bootstrapSerial": "BOOT-001",
   "bootstrapSecret": "bootstrap-secret"
 }
@@ -483,9 +480,8 @@ type AdminBusinessError = {
 
 ### 输出规则
 
-- `initialApiKey` 只在本次创建设备成功时返回
 - `bootstrapSerial` 与 `bootstrapSecret` 只在本次创建设备成功时返回
-- 列表接口和更新接口都不再返回明文 `apiKey`
+- 正式运行时 `apiKey` 只在设备 bootstrap 激活成功时下发给设备，不在管理端展示
 
 ---
 

@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,9 +10,11 @@ import { resolveAppOrigin } from "@hitomi/env/app";
 
 process.env.TZ = "Asia/Shanghai";
 
+const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const appRoot = fileURLToPath(new URL("../../../apps/web", import.meta.url));
 const envPath = fileURLToPath(new URL("../../../apps/web/.env", import.meta.url));
 const localDbUrl = pathToFileURL(fileURLToPath(new URL("../../../local.db", import.meta.url))).href;
+const devServerTempDir = resolve(repoRoot, "output/tmp/smoke-device");
 
 config({
   path: envPath,
@@ -126,7 +129,7 @@ type AttendanceUploadResponseData = {
 
 type BootstrapResponseData = {
   registrationId: string;
-  state: string;
+  state: "activated";
   deviceCode: string | null;
   apiKey: string | null;
 };
@@ -230,22 +233,116 @@ async function startServerIfNeeded(preferredBaseUrl: string) {
   const host = "127.0.0.1";
   const port = await findAvailablePort(host);
   const baseUrl = `http://${host}:${port}`;
-  const child = spawn("bun", ["run", "dev", "--", "--port", `${port}`, "--host", host], {
+  await mkdir(devServerTempDir, { recursive: true });
+  await runAppCommand(["run", "build"], "Nuxt build", {
+    TMPDIR: devServerTempDir,
+  });
+
+  let stdout = "";
+  let stderr = "";
+  const child = spawn("bun", ["run", "preview", "--", "--port", `${port}`], {
     cwd: appRoot,
     env: {
       ...process.env,
       HOST: host,
+      NITRO_HOST: host,
       PORT: `${port}`,
+      NITRO_PORT: `${port}`,
+      TMPDIR: devServerTempDir,
     },
-    stdio: "ignore",
+    stdio: ["ignore", "pipe", "pipe"],
   });
 
-  await waitForServer(baseUrl);
+  child.stdout?.on("data", (chunk) => {
+    stdout += chunk.toString();
+  });
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  try {
+    await waitForServer(baseUrl);
+  } catch (error) {
+    await stopServer(child);
+    const logs = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+    throw new Error(logs ? `${String(error)}\nNuxt server output:\n${logs}` : String(error));
+  }
 
   return {
     baseUrl,
     server: child,
   };
+}
+
+async function runAppCommand(args: string[], label: string, envOverrides: Record<string, string>) {
+  await new Promise<void>((resolve, reject) => {
+    let stdout = "";
+    let stderr = "";
+
+    const child = spawn("bun", args, {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      const logs = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+      reject(
+        new Error(
+          logs ? `${label} failed with code ${code}\n${logs}` : `${label} failed with code ${code}`,
+        ),
+      );
+    });
+  });
+}
+
+async function stopServer(server: ReturnType<typeof spawn> | null) {
+  if (!server || server.exitCode !== null) {
+    return;
+  }
+
+  const waitForExit = (timeoutMs: number) =>
+    new Promise<void>((resolve) => {
+      if (server.exitCode !== null) {
+        resolve();
+        return;
+      }
+
+      const timeout = setTimeout(resolve, timeoutMs);
+      server.once("exit", () => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+
+  server.kill("SIGTERM");
+  await waitForExit(2_000);
+
+  if (server.exitCode === null) {
+    server.kill("SIGKILL");
+    await waitForExit(1_000);
+  }
+
+  if (server.exitCode === null) {
+    server.stdout?.destroy();
+    server.stderr?.destroy();
+    server.unref();
+  }
 }
 
 async function cleanup(ids: {
@@ -290,7 +387,6 @@ const bootstrapDeviceCode = `DEV-SMOKE-C-${smokeSuffix}`;
 const apiKey = `smoke_api_key_a_${smokeSuffix}`;
 const secondApiKey = `smoke_api_key_b_${smokeSuffix}`;
 const bootstrapApiKey = `smoke_api_key_c_${smokeSuffix}`;
-const issuedBootstrapApiKey = `smoke_api_key_c_issued_${smokeSuffix}`;
 const bootstrapSerial = `BOOT-SMOKE-${smokeSuffix}`;
 const bootstrapSecret = `bootstrap_secret_${smokeSuffix}`;
 
@@ -422,65 +518,30 @@ try {
     await readJson<DeviceResponse<BootstrapResponseData>>(bootstrapHelloResponse);
   assert(bootstrapHelloJson.success === true, "bootstrap hello should succeed");
   assert(
-    bootstrapHelloJson.data.state === "pending",
-    "bootstrap hello should remain pending before claim",
+    bootstrapHelloJson.data.state === "activated",
+    "bootstrap hello should activate the device immediately",
+  );
+  assert(
+    bootstrapHelloJson.data.deviceCode === bootstrapDeviceCode,
+    "bootstrap hello should return bootstrap device code",
+  );
+  assert(
+    typeof bootstrapHelloJson.data.apiKey === "string" && bootstrapHelloJson.data.apiKey.length > 0,
+    "bootstrap hello should return a runtime api key",
   );
 
-  await db
-    .update(device)
-    .set({
-      apiKeyHash: await sha256Hex(issuedBootstrapApiKey),
-      activationStatus: "issued",
-      pendingApiKey: issuedBootstrapApiKey,
-    })
-    .where(eq(device.id, bootstrapDeviceId));
+  const activatedBootstrapDevice =
+    (await db.query.device.findFirst({
+      where: eq(device.id, bootstrapDeviceId),
+    })) ?? null;
 
-  const activationStatusResponse = await fetch(`${baseUrl}/api/device/bootstrap/claim-status`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      deviceSerial: bootstrapSerial,
-      bootstrapSecret,
-      registrationId: bootstrapHelloJson.data.registrationId,
-    }),
-  });
-  const activationStatusJson =
-    await readJson<DeviceResponse<BootstrapResponseData>>(activationStatusResponse);
-  assert(activationStatusJson.success === true, "activation status should succeed");
   assert(
-    activationStatusJson.data.state === "activated",
-    "activation status should issue device credentials",
+    activatedBootstrapDevice?.activationStatus === "activated",
+    "bootstrap hello should persist activated status",
   );
-  assert(
-    activationStatusJson.data.deviceCode === bootstrapDeviceCode,
-    "activation status should return bootstrap device code",
-  );
-  assert(
-    activationStatusJson.data.apiKey === issuedBootstrapApiKey,
-    "activation status should return the newly issued api key",
-  );
+  assert(activatedBootstrapDevice?.activatedAt, "bootstrap hello should persist activatedAt");
 
-  const activationRetryResponse = await fetch(`${baseUrl}/api/device/bootstrap/claim-status`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      deviceSerial: bootstrapSerial,
-      bootstrapSecret,
-      registrationId: bootstrapHelloJson.data.registrationId,
-    }),
-  });
-  const activationRetryJson =
-    await readJson<DeviceResponse<BootstrapResponseData>>(activationRetryResponse);
-  assert(activationRetryJson.success === true, "activation retry should still succeed");
-  assert(activationRetryJson.data.state === "activated", "activation retry should stay activated");
-  assert(
-    activationRetryJson.data.apiKey === issuedBootstrapApiKey,
-    "activation retry should still return the pending api key before device ack",
-  );
+  const bootstrapRuntimeApiKey = bootstrapHelloJson.data.apiKey;
 
   const bootstrapSyncResponse = await fetch(`${baseUrl}/api/device/sync`, {
     method: "POST",
@@ -489,7 +550,7 @@ try {
     },
     body: JSON.stringify({
       deviceCode: bootstrapDeviceCode,
-      apiKey: issuedBootstrapApiKey,
+      apiKey: bootstrapRuntimeApiKey,
     }),
   });
   const bootstrapSyncJson = await readJson<DeviceResponse<SyncResponseData>>(bootstrapSyncResponse);
@@ -497,32 +558,9 @@ try {
     bootstrapSyncJson.success === true,
     "bootstrap device should sync after receiving runtime credentials",
   );
-
-  const activationAfterAckResponse = await fetch(`${baseUrl}/api/device/bootstrap/claim-status`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      deviceSerial: bootstrapSerial,
-      bootstrapSecret,
-      registrationId: bootstrapHelloJson.data.registrationId,
-    }),
-  });
-  const activationAfterAckJson = await readJson<DeviceResponse<BootstrapResponseData>>(
-    activationAfterAckResponse,
-  );
   assert(
-    activationAfterAckJson.success === true,
-    "activation status after device ack should succeed",
-  );
-  assert(
-    activationAfterAckJson.data.state === "activated",
-    "activation status after ack should remain activated",
-  );
-  assert(
-    activationAfterAckJson.data.apiKey === null,
-    "activation status after ack should not leak api key",
+    bootstrapSyncJson.data.device.id === bootstrapDeviceId,
+    "bootstrap device sync should identify the activated device",
   );
 
   await db
@@ -829,7 +867,6 @@ try {
   });
 
   if (server) {
-    server.kill("SIGTERM");
-    await delay(500);
+    await stopServer(server);
   }
 }
