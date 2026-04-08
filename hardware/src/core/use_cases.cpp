@@ -260,7 +260,7 @@ void upsertWifiProfile(std::vector<WifiProfile>& profiles, const WifiProfile& pr
 
 std::string buildShanghaiLocalDate(uint64_t epochMs) {
   std::tm tmValue = toShanghaiTm(epochMs);
-  char buffer[11] = {};
+  char buffer[32] = {};
   std::snprintf(
       buffer,
       sizeof(buffer),

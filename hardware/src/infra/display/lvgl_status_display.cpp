@@ -454,6 +454,7 @@ void enrollRefreshButtonEventCallback(lv_event_t* event) {
 
   if (!enqueueCommand(*data, DisplayCommand{
                                .type = DisplayCommandType::RefreshData,
+                               .targetId = "",
                            })) {
     if (data->enrollStatusLabel != nullptr) {
       lv_label_set_text(data->enrollStatusLabel, "Refresh is busy. Try again.");

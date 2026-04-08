@@ -157,7 +157,7 @@ void printRuntimeCheck(const RuntimeContext& context, const RuntimeState& state)
   Serial.printf("Chip model: %s\n", ESP.getChipModel());
   Serial.printf("Chip revision: %d\n", ESP.getChipRevision());
   Serial.printf("SDK version: %s\n", ESP.getSdkVersion());
-  Serial.printf("CPU frequency: %lu MHz\n", ESP.getCpuFreqMHz());
+  Serial.printf("CPU frequency: %u MHz\n", ESP.getCpuFreqMHz());
   Serial.printf("Flash size: %u MB\n", ESP.getFlashChipSize() / (1024 * 1024));
   Serial.printf("PSRAM detected: %s\n", psramFound() ? "yes" : "no");
   Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
