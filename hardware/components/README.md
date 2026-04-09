@@ -1,13 +1,9 @@
-# Local Components
+# Local Overrides
 
-This directory contains vendored ESP-IDF components used by the current
-`hardware/` runtime.
+`hardware/` now resolves third-party Arduino/ESP-IDF dependencies through
+PlatformIO package installation plus a project-local `.pio/installed/`
+component copy, instead of checking full third-party source trees into the
+repository.
 
-At the moment it hosts:
-
-- `arduino-esp32` `3.3.7`
-- `littlefs` `1.20.4`
-
-These components are checked into the repository so the current
-`ESP-IDF-primary + Arduino as component` build remains reproducible without
-depending on PlatformIO-managed downloads at build time.
+Keep this directory only for project-local component overrides that cannot be
+expressed as managed dependencies.

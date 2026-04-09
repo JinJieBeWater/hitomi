@@ -1,0 +1,9 @@
+{
+  "component_name": "framework-arduinoespressif32",
+  "version": "3.3.7",
+  "url": "https://github.com/espressif/arduino-esp32/archive/refs/tags/3.3.7.tar.gz",
+  "sha256": "f10fbae0a8fc633ae4616cc3c4ac0ff956682699237d078a6aba6673cf6ed365",
+  "dependencies": {
+    "joltwallet/littlefs": "1.20.4"
+  }
+}

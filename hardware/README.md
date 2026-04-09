@@ -33,14 +33,29 @@ The IDF-primary project skeleton now lives in:
 - `sdkconfig.defaults`
 - `components/`
 
-`arduino-esp32` and `littlefs` are vendored under `hardware/components/` so the
-project remains reproducible on the current IDF-primary toolchain.
+Arduino is now installed through PlatformIO package resolution, pinned to
+`arduino-esp32` `3.3.7`, instead of being vendored wholesale under
+`hardware/components/`. The build copies that installed package into the
+project-local `.pio/installed/` area and patches only that local copy before
+CMake resolves components.
+
+LittleFS is resolved at build time through the Arduino component's ESP-IDF
+dependency manifest, so `managed_components/` remains a build artifact rather
+than repository content.
 
 PlatformIO also materializes a per-environment `sdkconfig.<env>` file during the
 first ESP-IDF configure. It is intentionally ignored in git. If you change board
 memory wiring or `sdkconfig.defaults` and the generated firmware still behaves as
 if the old settings were active, remove that `sdkconfig.<env>` once and rebuild so
 the effective config is regenerated from the updated defaults.
+
+`dependencies.lock` is committed so the resolved build-time component graph stays
+stable across machines, while `managed_components/` remains a build artifact.
+
+Maintenance details for this dependency-install flow live in:
+
+- `hardware/docs/dependency-install-mode.md`
+- `hardware/docs/build-system-mechanism.md`
 
 ## Build
 
@@ -79,7 +94,11 @@ If `platformio` is not on `PATH`, the same `python3 -m platformio ...` invocatio
 
 - `CMakeLists.txt` + `src/CMakeLists.txt`: ESP-IDF primary project skeleton
 - `sdkconfig.defaults`: defaults used by the current ESP-IDF-primary build
-- `components/`: local ESP-IDF components, including Arduino 3.3.7 and LittleFS
+- `platformio.ini`: pins the installed Arduino package version used as an
+  ESP-IDF component
+- `arduino-component.lock.json`: source lock for Arduino tarball URL/version/SHA256 and pinned LittleFS version
+- `.pio/installed/`: project-local installed Arduino component copy generated at build time
+- `components/`: reserved for project-local overrides only
 - `include/board`: board constants and runtime defaults
 - `include/core` + `src/core`: pure device models and business rules
 - `include/app` + `src/app`: runtime orchestration
