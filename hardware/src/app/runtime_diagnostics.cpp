@@ -14,6 +14,9 @@ std::string storageLine(const RuntimeStatus& status) {
   if (!status.filesystemReady) {
     return "Storage: LittleFS unavailable";
   }
+  if (infra::templateStoreDisabled(status.templateStoreStatusCode)) {
+    return "Storage: SD disabled";
+  }
   if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
     return "Storage: SD invalid manifest";
   }
@@ -64,6 +67,9 @@ std::string queueLine(const RuntimeStatus& status) {
 }
 
 std::string faceLine(const RuntimeStatus& status) {
+  if (infra::templateStoreDisabled(status.templateStoreStatusCode)) {
+    return "Recognition: disabled (template store disabled)";
+  }
   if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
     return "Recognition: disabled (SD invalid manifest)";
   }

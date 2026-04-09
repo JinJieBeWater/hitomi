@@ -157,13 +157,14 @@ void printRuntimeCheck(const RuntimeContext& context, const RuntimeState& state)
   Serial.printf("Chip model: %s\n", ESP.getChipModel());
   Serial.printf("Chip revision: %d\n", ESP.getChipRevision());
   Serial.printf("SDK version: %s\n", ESP.getSdkVersion());
-  Serial.printf("CPU frequency: %u MHz\n", ESP.getCpuFreqMHz());
-  Serial.printf("Flash size: %u MB\n", ESP.getFlashChipSize() / (1024 * 1024));
+  Serial.printf("CPU frequency: %lu MHz\n", static_cast<unsigned long>(ESP.getCpuFreqMHz()));
+  Serial.printf("Flash size: %lu MB\n", static_cast<unsigned long>(ESP.getFlashChipSize() / (1024 * 1024)));
   Serial.printf("PSRAM detected: %s\n", psramFound() ? "yes" : "no");
-  Serial.printf("Free heap: %u bytes\n", ESP.getFreeHeap());
-  Serial.printf("Free PSRAM: %u bytes\n", ESP.getFreePsram());
+  Serial.printf("Free heap: %lu bytes\n", static_cast<unsigned long>(ESP.getFreeHeap()));
+  Serial.printf("Free PSRAM: %lu bytes\n", static_cast<unsigned long>(ESP.getFreePsram()));
   Serial.printf("Credentials store ready: %s\n", state.credentialsReady ? "yes" : "no");
   Serial.printf("LittleFS ready: %s\n", state.filesystemReady ? "yes" : "no");
+  Serial.printf("Template store enabled: %s\n", board::kEnableTemplateStore ? "yes" : "no");
   Serial.printf("Template store ready: %s\n", state.templateStoreReady ? "yes" : "no");
   Serial.printf("Display ready: %s\n", state.displayReady ? "yes" : "no");
   Serial.printf("WiFi configured: %s\n", state.deviceConfig.wifiConfigured() ? "yes" : "no");
@@ -176,7 +177,7 @@ void printRuntimeCheck(const RuntimeContext& context, const RuntimeState& state)
   Serial.println(diagnostics.faceLine.c_str());
 
   if (partition != nullptr) {
-    Serial.printf("Running partition: %s (%u bytes)\n", partition->label, partition->size);
+    Serial.printf("Running partition: %s (%lu bytes)\n", partition->label, static_cast<unsigned long>(partition->size));
   }
 
   Serial.println("==============================");

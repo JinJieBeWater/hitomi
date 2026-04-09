@@ -267,7 +267,7 @@ bool initPanel(SzpiLvglDisplayImpl& impl) {
   ioCfg.user_ctx = &impl;
 
   err = esp_lcd_new_panel_io_spi(
-      reinterpret_cast<esp_lcd_spi_bus_handle_t>(board::kLcdSpiHost), &ioCfg, &impl.io);
+      static_cast<esp_lcd_spi_bus_handle_t>(board::kLcdSpiHost), &ioCfg, &impl.io);
   if (!logEspError(err, "esp_lcd_new_panel_io_spi")) {
     return false;
   }
@@ -374,7 +374,6 @@ void touchReadCallback(lv_indev_t* indev, lv_indev_data_t* data) {
       true,
       sample.pressed,
       transformedPoint);
-  impl->touchState = resolved.nextState;
   if (wasPressed && !resolved.nextState.pressed) {
     impl->touchTapCount += 1;
   }

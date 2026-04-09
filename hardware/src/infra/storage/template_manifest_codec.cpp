@@ -3,22 +3,14 @@
 #include <ArduinoJson.h>
 
 namespace infra {
-namespace {
-
-std::size_t manifestDocCapacity(std::size_t itemCount) {
-  return 512 + itemCount * 128;
-}
-
-}  // namespace
-
 std::string encodeTemplateManifest(const TemplateManifest& manifest) {
-  DynamicJsonDocument doc(manifestDocCapacity(manifest.items.size()));
+  JsonDocument doc;
   doc["schemaVersion"] = manifest.schemaVersion;
   doc["updatedAt"] = manifest.updatedAt;
 
-  JsonArray items = doc.createNestedArray("items");
+  JsonArray items = doc["items"].to<JsonArray>();
   for (const auto& item : manifest.items) {
-    JsonObject entry = items.createNestedObject();
+    JsonObject entry = items.add<JsonObject>();
     entry["employeeId"] = item.employeeId;
     entry["updatedAt"] = item.updatedAt;
     entry["sizeBytes"] = item.sizeBytes;
@@ -30,7 +22,7 @@ std::string encodeTemplateManifest(const TemplateManifest& manifest) {
 }
 
 std::optional<TemplateManifest> decodeTemplateManifest(const std::string& json) {
-  DynamicJsonDocument doc(16 * 1024);
+  JsonDocument doc;
   const auto error = deserializeJson(doc, json);
   if (error) {
     return std::nullopt;

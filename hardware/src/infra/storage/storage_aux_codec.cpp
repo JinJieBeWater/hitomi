@@ -5,14 +5,14 @@
 namespace infra {
 
 std::string encodeStorageAuxState(const StorageAuxState& storageAux) {
-  DynamicJsonDocument doc(2048);
+  JsonDocument doc;
 
-  JsonObject summary = doc.createNestedObject("templateLibrarySummary");
+  JsonObject summary = doc["templateLibrarySummary"].to<JsonObject>();
   summary["templateCount"] = storageAux.templateLibrarySummary.templateCount;
   summary["manifestUpdatedAt"] = storageAux.templateLibrarySummary.manifestUpdatedAt;
   summary["lastLoadedAt"] = storageAux.templateLibrarySummary.lastLoadedAt;
 
-  JsonObject health = doc.createNestedObject("templateStoreHealth");
+  JsonObject health = doc["templateStoreHealth"].to<JsonObject>();
   health["statusCode"] = storageAux.templateStoreHealth.statusCode;
   health["checkedAt"] = storageAux.templateStoreHealth.checkedAt;
   health["detail"] = storageAux.templateStoreHealth.detail;
@@ -26,7 +26,7 @@ std::string encodeStorageAuxState(const StorageAuxState& storageAux) {
 }
 
 std::optional<StorageAuxState> decodeStorageAuxState(const std::string& json) {
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
   const auto error = deserializeJson(doc, json);
   if (error) {
     return std::nullopt;

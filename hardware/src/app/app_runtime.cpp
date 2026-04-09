@@ -54,8 +54,20 @@ void AppRuntime::setup() {
   loadPersistedState(context, state);
   seedDeviceConfigFromBoardDefaults(context, state);
   syncDeviceApiClientConfig(context, state);
-  initializeTemplateStore(context, state);
-  runTemplateStoreSelfTest(context, state);
+  if (board::kEnableTemplateStore) {
+    initializeTemplateStore(context, state);
+    runTemplateStoreSelfTest(context, state);
+  } else {
+    state.storageAux = {};
+    state.storageAux.templateStoreHealth.statusCode = infra::kTemplateStoreDisabled;
+    state.storageAux.templateStoreHealth.checkedAt = static_cast<uint64_t>(millis());
+    state.storageAux.templateStoreHealth.detail = "disabled by board config";
+    state.templateStoreReady = false;
+    state.faceModuleEnabled = false;
+    persistStorageAux(context, state);
+    state.renderDirty = true;
+    Serial.println("[APP] template store disabled on current runtime");
+  }
   initWifi();
 
   state.displayReady = context.display.init();
@@ -101,7 +113,9 @@ void AppRuntime::tick(uint32_t nowMs) {
     performActivation(context, state, nowMs);
   }
 
-  probeTemplateStore(context, state, nowMs);
+  if (board::kEnableTemplateStore) {
+    probeTemplateStore(context, state, nowMs);
+  }
 
   if (shouldSync(context, state, nowMs)) {
     performSync(context, state, nowMs);

@@ -20,7 +20,7 @@ const char* activationStateValue(core::DeviceActivationState state) {
 }  // namespace
 
 std::optional<UsbProvisioningCommand> parseUsbProvisioningCommand(const std::string& line) {
-  StaticJsonDocument<2048> doc;
+  JsonDocument doc;
   const auto error = deserializeJson(doc, line);
   if (error) {
     return std::nullopt;
@@ -85,11 +85,11 @@ std::optional<UsbProvisioningCommand> parseUsbProvisioningCommand(const std::str
 std::string buildUsbProvisioningResponse(
     bool ok, const std::string& message, const core::DeviceConfig& config,
     const std::optional<std::string>& lastErrorCode) {
-  StaticJsonDocument<512> doc;
+  JsonDocument doc;
   doc["ok"] = ok;
   doc["message"] = message;
 
-  JsonObject summary = doc.createNestedObject("summary");
+  JsonObject summary = doc["summary"].to<JsonObject>();
   summary["schemaVersion"] = config.schemaVersion;
   summary["wifiProfileCount"] = config.wifiProfiles.size();
   summary["backendOrigin"] = config.backendLocator.origin;

@@ -104,6 +104,9 @@ std::string storageLabel(const app::RuntimeStatus& status) {
   if (!status.filesystemReady) {
     return "LittleFS unavailable";
   }
+  if (infra::templateStoreDisabled(status.templateStoreStatusCode)) {
+    return "SD disabled";
+  }
   if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
     return "SD invalid manifest";
   }

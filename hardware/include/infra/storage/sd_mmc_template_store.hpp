@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <sdmmc_cmd.h>
 #include <string>
 
 #include "infra/storage/template_manifest_codec.hpp"
@@ -36,6 +37,7 @@ class SdMmcTemplateStore final : public TemplateStorePort {
   TemplateStoreStatus status_ = {};
   std::optional<TemplateManifest> manifest_;
   bool mounted_ = false;
+  sdmmc_card_t* card_ = nullptr;
 };
 
 }  // namespace infra

@@ -13,6 +13,7 @@ inline constexpr char kTemplateStoreCardMissing[] = "card_missing";
 inline constexpr char kTemplateStoreMountFailed[] = "mount_failed";
 inline constexpr char kTemplateStoreManifestInvalid[] = "manifest_invalid";
 inline constexpr char kTemplateStoreIoError[] = "io_error";
+inline constexpr char kTemplateStoreDisabled[] = "disabled";
 
 struct TemplateBlob {
   std::string employeeId;
@@ -49,6 +50,10 @@ inline bool templateStoreMounted(const std::string& code) {
 
 inline bool templateStoreManifestBroken(const std::string& code) {
   return code == kTemplateStoreManifestInvalid;
+}
+
+inline bool templateStoreDisabled(const std::string& code) {
+  return code == kTemplateStoreDisabled;
 }
 
 class TemplateStorePort {

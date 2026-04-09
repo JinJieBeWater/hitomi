@@ -1,8 +1,16 @@
 #include "infra/storage/sd_mmc_template_store.hpp"
 
 #include <Arduino.h>
-#include <FS.h>
-#include <SD_MMC.h>
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <driver/sdmmc_host.h>
+#include <driver/sdmmc_defs.h>
+#include <esp_vfs_fat.h>
+#include <sdmmc_cmd.h>
 
 #include "board/app_config.hpp"
 #include "board/pins.hpp"
@@ -14,53 +22,64 @@ constexpr char kTemplatesDirPath[] = "/templates";
 constexpr char kManifestPath[] = "/templates/manifest.json";
 constexpr char kManifestTempPath[] = "/templates/manifest.tmp.json";
 
+std::string mountedPath(const std::string& path) {
+  return std::string(board::kSdMountPoint) + path;
+}
+
 uint64_t nowMs() {
   return static_cast<uint64_t>(millis());
 }
 
 std::optional<std::string> readTextFile(const char* path) {
-  if (!SD_MMC.exists(path)) {
+  const std::string mounted = mountedPath(path);
+  struct stat fileInfo = {};
+  if (::stat(mounted.c_str(), &fileInfo) != 0) {
     return std::nullopt;
   }
 
-  File file = SD_MMC.open(path, "r");
+  std::FILE* file = std::fopen(mounted.c_str(), "rb");
   if (!file) {
     return std::nullopt;
   }
 
-  std::string content;
-  content.reserve(file.size());
-  while (file.available()) {
-    content.push_back(static_cast<char>(file.read()));
+  std::string content(static_cast<std::size_t>(fileInfo.st_size), '\0');
+  if (!content.empty()) {
+    const std::size_t readCount = std::fread(content.data(), 1, content.size(), file);
+    if (readCount != content.size()) {
+      std::fclose(file);
+      return std::nullopt;
+    }
   }
 
-  file.close();
+  std::fclose(file);
   return content;
 }
 
 bool replaceFile(const char* tempPath, const char* finalPath) {
-  if (SD_MMC.exists(finalPath) && !SD_MMC.remove(finalPath)) {
+  const std::string mountedTemp = mountedPath(tempPath);
+  const std::string mountedFinal = mountedPath(finalPath);
+  if (::access(mountedFinal.c_str(), F_OK) == 0 && std::remove(mountedFinal.c_str()) != 0) {
     return false;
   }
-  return SD_MMC.rename(tempPath, finalPath);
+  return std::rename(mountedTemp.c_str(), mountedFinal.c_str()) == 0;
 }
 
 bool writeTextFileAtomically(const char* tempPath, const char* finalPath, const std::string& content) {
-  File file = SD_MMC.open(tempPath, "w");
+  const std::string mountedTemp = mountedPath(tempPath);
+  std::FILE* file = std::fopen(mountedTemp.c_str(), "wb");
   if (!file) {
     return false;
   }
 
-  const std::size_t written =
-      file.write(reinterpret_cast<const uint8_t*>(content.data()), content.size());
-  file.close();
+  const std::size_t written = std::fwrite(content.data(), 1, content.size(), file);
+  std::fclose(file);
   if (written != content.size()) {
-    SD_MMC.remove(tempPath);
+    std::remove(mountedTemp.c_str());
     return false;
   }
 
   if (!replaceFile(tempPath, finalPath)) {
-    SD_MMC.remove(tempPath);
+    std::remove(mountedTemp.c_str());
     return false;
   }
 
@@ -68,43 +87,46 @@ bool writeTextFileAtomically(const char* tempPath, const char* finalPath, const 
 }
 
 std::optional<std::vector<uint8_t>> readBinaryFile(const std::string& path) {
-  if (!SD_MMC.exists(path.c_str())) {
+  const std::string mounted = mountedPath(path);
+  struct stat fileInfo = {};
+  if (::stat(mounted.c_str(), &fileInfo) != 0) {
     return std::nullopt;
   }
 
-  File file = SD_MMC.open(path.c_str(), "r");
+  std::FILE* file = std::fopen(mounted.c_str(), "rb");
   if (!file) {
     return std::nullopt;
   }
 
-  std::vector<uint8_t> bytes(file.size());
+  std::vector<uint8_t> bytes(static_cast<std::size_t>(fileInfo.st_size));
   if (!bytes.empty()) {
-    const std::size_t readCount = file.read(bytes.data(), bytes.size());
+    const std::size_t readCount = std::fread(bytes.data(), 1, bytes.size(), file);
     if (readCount != bytes.size()) {
-      file.close();
+      std::fclose(file);
       return std::nullopt;
     }
   }
 
-  file.close();
+  std::fclose(file);
   return bytes;
 }
 
 bool writeBinaryFileAtomically(const std::string& tempPath, const std::string& finalPath, const std::vector<uint8_t>& bytes) {
-  File file = SD_MMC.open(tempPath.c_str(), "w");
+  const std::string mountedTemp = mountedPath(tempPath);
+  std::FILE* file = std::fopen(mountedTemp.c_str(), "wb");
   if (!file) {
     return false;
   }
 
-  const std::size_t written = bytes.empty() ? 0 : file.write(bytes.data(), bytes.size());
-  file.close();
+  const std::size_t written = bytes.empty() ? 0 : std::fwrite(bytes.data(), 1, bytes.size(), file);
+  std::fclose(file);
   if (written != bytes.size()) {
-    SD_MMC.remove(tempPath.c_str());
+    std::remove(mountedTemp.c_str());
     return false;
   }
 
   if (!replaceFile(tempPath.c_str(), finalPath.c_str())) {
-    SD_MMC.remove(tempPath.c_str());
+    std::remove(mountedTemp.c_str());
     return false;
   }
 
@@ -136,26 +158,49 @@ TemplateStoreInitStatus SdMmcTemplateStore::begin() {
   manifest_.reset();
   status_.ready = false;
 
-  if (!SD_MMC.setPins(board::kSdMmcClkPin, board::kSdMmcCmdPin, board::kSdMmcD0Pin)) {
-    setUnavailableState(kTemplateStoreMountFailed, "SD_MMC.setPins failed", false);
-    return status_;
-  }
+  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+  host.slot = SDMMC_HOST_SLOT_1;
+  host.flags = SDMMC_HOST_FLAG_1BIT;
+  host.max_freq_khz = SDMMC_FREQ_DEFAULT;
 
-  if (!SD_MMC.begin(
-          board::kSdMountPoint,
-          board::kSdMode1Bit,
-          board::kSdFormatIfMountFailed,
-          BOARD_MAX_SDMMC_FREQ,
-          board::kSdMaxOpenFiles)) {
-    const std::string statusCode = SD_MMC.cardType() == CARD_NONE ? kTemplateStoreCardMissing : kTemplateStoreMountFailed;
-    setUnavailableState(statusCode, "SD_MMC.begin failed", true);
+  sdmmc_slot_config_t slotConfig = SDMMC_SLOT_CONFIG_DEFAULT();
+  slotConfig.width = 1;
+  slotConfig.clk = board::kSdMmcClkPin;
+  slotConfig.cmd = board::kSdMmcCmdPin;
+  slotConfig.d0 = board::kSdMmcD0Pin;
+  slotConfig.d1 = GPIO_NUM_NC;
+  slotConfig.d2 = GPIO_NUM_NC;
+  slotConfig.d3 = GPIO_NUM_NC;
+  slotConfig.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+
+  esp_vfs_fat_sdmmc_mount_config_t mountConfig = {
+      .format_if_mount_failed = board::kSdFormatIfMountFailed,
+      .max_files = board::kSdMaxOpenFiles,
+      .allocation_unit_size = 0,
+      .disk_status_check_enable = false,
+      .use_one_fat = false,
+  };
+
+  sdmmc_card_t* mountedCard = nullptr;
+  const esp_err_t err = esp_vfs_fat_sdmmc_mount(
+      board::kSdMountPoint,
+      &host,
+      &slotConfig,
+      &mountConfig,
+      &mountedCard);
+  if (err != ESP_OK) {
+    setUnavailableState(
+        kTemplateStoreMountFailed,
+        std::string("esp_vfs_fat_sdmmc_mount failed: ") + esp_err_to_name(err),
+        true);
     return status_;
   }
 
   mounted_ = true;
+  card_ = mountedCard;
   refreshCapacityMetrics();
 
-  if (SD_MMC.cardType() == CARD_NONE) {
+  if (card_ == nullptr) {
     setUnavailableState(kTemplateStoreCardMissing, "no SD card attached", true);
     return status_;
   }
@@ -255,8 +300,8 @@ bool SdMmcTemplateStore::removeTemplate(const std::string& employeeId) {
     return false;
   }
 
-  const std::string templatePath = templatePathForEmployee(employeeId);
-  if (SD_MMC.exists(templatePath.c_str()) && !SD_MMC.remove(templatePath.c_str())) {
+  const std::string templatePath = mountedPath(templatePathForEmployee(employeeId));
+  if (::access(templatePath.c_str(), F_OK) == 0 && std::remove(templatePath.c_str()) != 0) {
     setUnavailableState(kTemplateStoreIoError, "failed to remove template blob", true);
     return false;
   }
@@ -281,22 +326,32 @@ bool SdMmcTemplateStore::removeTemplate(const std::string& employeeId) {
 
 void SdMmcTemplateStore::endMount() {
   if (mounted_) {
-    SD_MMC.end();
+    esp_vfs_fat_sdcard_unmount(board::kSdMountPoint, card_);
+    card_ = nullptr;
     mounted_ = false;
   }
 }
 
 void SdMmcTemplateStore::refreshCapacityMetrics() {
-  if (!mounted_) {
+  if (!mounted_ || card_ == nullptr) {
     status_.health.cardSizeBytes = 0;
     status_.health.totalBytes = 0;
     status_.health.usedBytes = 0;
     return;
   }
 
-  status_.health.cardSizeBytes = SD_MMC.cardSize();
-  status_.health.totalBytes = SD_MMC.totalBytes();
-  status_.health.usedBytes = SD_MMC.usedBytes();
+  status_.health.cardSizeBytes =
+      static_cast<uint64_t>(card_->csd.capacity) * card_->csd.sector_size;
+
+  uint64_t totalBytes = 0;
+  uint64_t freeBytes = 0;
+  if (esp_vfs_fat_info(board::kSdMountPoint, &totalBytes, &freeBytes) == ESP_OK) {
+    status_.health.totalBytes = totalBytes;
+    status_.health.usedBytes = totalBytes - freeBytes;
+  } else {
+    status_.health.totalBytes = 0;
+    status_.health.usedBytes = 0;
+  }
 }
 
 void SdMmcTemplateStore::setReadyState(
@@ -360,7 +415,11 @@ SdMmcTemplateStore::ManifestLoadResult SdMmcTemplateStore::loadManifest() const 
 }
 
 bool SdMmcTemplateStore::ensureTemplateDirectory() {
-  return SD_MMC.exists(kTemplatesDirPath) || SD_MMC.mkdir(kTemplatesDirPath);
+  const std::string mountedDir = mountedPath(kTemplatesDirPath);
+  if (::access(mountedDir.c_str(), F_OK) == 0) {
+    return true;
+  }
+  return ::mkdir(mountedDir.c_str(), 0755) == 0 || errno == EEXIST;
 }
 
 bool SdMmcTemplateStore::writeManifest() {

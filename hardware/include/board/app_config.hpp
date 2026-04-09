@@ -38,6 +38,7 @@ constexpr char kSdMountPoint[] = "/sdcard";
 constexpr bool kSdMode1Bit = true;
 constexpr bool kSdFormatIfMountFailed = false;
 constexpr uint8_t kSdMaxOpenFiles = 5;
+constexpr bool kEnableTemplateStore = true;
 
 inline const char* wifiSsid() {
   return HITOMI_WIFI_SSID;

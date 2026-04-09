@@ -1,8 +1,8 @@
 # Hardware Runtime
 
 `hardware/` is a standalone PlatformIO project for the SZPI ESP32-S3 device runtime.
-It now uses an `ESP-IDF primary + Arduino as component` mixed-framework layout,
-with PlatformIO acting as the build/flash/test frontend.
+It now uses an `ESP-IDF primary + Arduino as component` layout, with PlatformIO
+acting as the build/flash/test frontend.
 
 It is intentionally **not** wired into the root `bun` / `turbo` task graph yet. Build, flash, and test it from the `hardware/` directory.
 
@@ -23,7 +23,9 @@ python3 -m platformio --version
 
 This repository is known to work with `python3 -m platformio` even when `platformio` is not on `PATH`.
 
-Phase 1 keeps the existing `setup()/loop()` runtime path via Arduino autostart.
+The runtime uses an explicit `app_main() + initArduino()` entry, with the
+Arduino core provided as a local ESP-IDF component.
+
 The IDF-primary project skeleton now lives in:
 
 - `CMakeLists.txt`
@@ -31,9 +33,14 @@ The IDF-primary project skeleton now lives in:
 - `sdkconfig.defaults`
 - `components/`
 
-The mixed-framework build also pulls `esp_littlefs` through PlatformIO `lib_deps`
-and exposes it to ESP-IDF via `EXTRA_COMPONENT_DIRS`, which keeps the existing
-`LittleFS`-based local store working under Arduino-as-component mode.
+`arduino-esp32` and `littlefs` are vendored under `hardware/components/` so the
+project remains reproducible on the current IDF-primary toolchain.
+
+PlatformIO also materializes a per-environment `sdkconfig.<env>` file during the
+first ESP-IDF configure. It is intentionally ignored in git. If you change board
+memory wiring or `sdkconfig.defaults` and the generated firmware still behaves as
+if the old settings were active, remove that `sdkconfig.<env>` once and rebuild so
+the effective config is regenerated from the updated defaults.
 
 ## Build
 
@@ -71,8 +78,8 @@ If `platformio` is not on `PATH`, the same `python3 -m platformio ...` invocatio
 ## Current Layout
 
 - `CMakeLists.txt` + `src/CMakeLists.txt`: ESP-IDF primary project skeleton
-- `sdkconfig.defaults`: IDF defaults used by the mixed-framework build
-- `components/`: reserved for future managed IDF components
+- `sdkconfig.defaults`: defaults used by the current ESP-IDF-primary build
+- `components/`: local ESP-IDF components, including Arduino 3.3.7 and LittleFS
 - `include/board`: board constants and runtime defaults
 - `include/core` + `src/core`: pure device models and business rules
 - `include/app` + `src/app`: runtime orchestration

@@ -12,6 +12,7 @@
 
 #include "core/use_cases.hpp"
 #include "infra/storage/storage_aux_codec.hpp"
+#include "../json_snapshot_codec.hpp"
 
 namespace infra {
 namespace {
@@ -42,7 +43,7 @@ bool littleFsFileExists(const char* path) {
   return ::stat(mountedPath, &fileInfo) == 0;
 }
 
-bool readJsonFile(const char* path, DynamicJsonDocument& doc) {
+bool readJsonFile(const char* path, JsonDocument& doc) {
   if (!littleFsFileExists(path)) {
     return false;
   }
@@ -57,7 +58,7 @@ bool readJsonFile(const char* path, DynamicJsonDocument& doc) {
   return !error;
 }
 
-bool writeJsonFile(const char* path, const DynamicJsonDocument& doc) {
+bool writeJsonFile(const char* path, const JsonDocument& doc) {
   File file = LittleFS.open(path, "w");
   if (!file) {
     return false;
@@ -100,65 +101,28 @@ bool writeTextFile(const char* path, const std::string& content) {
   return written == content.size();
 }
 
-core::AttendanceConfigSnapshot parseAttendanceConfig(JsonVariantConst value) {
-  return {
-      .id = value["id"] | "",
-      .workStartMinute = value["workStartMinute"] | 0,
-      .workEndMinute = value["workEndMinute"] | 0,
-      .offStartMinute = value["offStartMinute"] | 0,
-      .offEndMinute = value["offEndMinute"] | 0,
-      .updatedAt = value["updatedAt"] | 0ULL,
-  };
-}
-
-core::EnrollmentTaskSnapshot parseEnrollmentTask(JsonVariantConst value) {
-  return {
-      .taskId = value["taskId"] | "",
-      .employeeId = value["employeeId"] | "",
-      .employeeCode = value["employeeCode"] | "",
-      .employeeName = value["employeeName"] | "",
-      .status = value["status"] | "",
-      .createdAt = value["createdAt"] | 0ULL,
-      .updatedAt = value["updatedAt"] | 0ULL,
-  };
-}
-
-const char* backendLocatorModeToStorageValue(core::BackendLocatorMode mode) {
-  switch (mode) {
-    case core::BackendLocatorMode::FixedOrigin:
-    default:
-      return "fixed_origin";
-  }
-}
-
-core::BackendLocatorMode backendLocatorModeFromStorageValue(const char* value) {
-  if (value == nullptr) {
-    return core::BackendLocatorMode::FixedOrigin;
-  }
-  return std::string(value) == "fixed_origin" ? core::BackendLocatorMode::FixedOrigin
-                                               : core::BackendLocatorMode::FixedOrigin;
-}
+constexpr char kFixedOriginMode[] = "fixed_origin";
 
 std::string encodeDeviceConfig(const core::DeviceConfig& config) {
-  DynamicJsonDocument doc(16 * 1024);
+  JsonDocument doc;
   doc["schemaVersion"] = config.schemaVersion;
   doc["diagnosticsEnabled"] = config.diagnosticsEnabled;
 
-  JsonObject backendLocator = doc.createNestedObject("backendLocator");
-  backendLocator["mode"] = backendLocatorModeToStorageValue(config.backendLocator.mode);
+  JsonObject backendLocator = doc["backendLocator"].to<JsonObject>();
+  backendLocator["mode"] = kFixedOriginMode;
   backendLocator["origin"] = config.backendLocator.origin;
 
-  JsonObject bootstrapIdentity = doc.createNestedObject("bootstrapIdentity");
+  JsonObject bootstrapIdentity = doc["bootstrapIdentity"].to<JsonObject>();
   bootstrapIdentity["deviceSerial"] = config.bootstrapIdentity.deviceSerial;
   bootstrapIdentity["bootstrapSecret"] = config.bootstrapIdentity.bootstrapSecret;
 
-  JsonObject runtimeCredentials = doc.createNestedObject("runtimeCredentials");
+  JsonObject runtimeCredentials = doc["runtimeCredentials"].to<JsonObject>();
   runtimeCredentials["deviceCode"] = config.runtimeCredentials.deviceCode;
   runtimeCredentials["apiKey"] = config.runtimeCredentials.apiKey;
 
-  JsonArray wifiProfiles = doc.createNestedArray("wifiProfiles");
+  JsonArray wifiProfiles = doc["wifiProfiles"].to<JsonArray>();
   for (const auto& profile : config.wifiProfiles) {
-    JsonObject item = wifiProfiles.createNestedObject();
+    JsonObject item = wifiProfiles.add<JsonObject>();
     item["ssid"] = profile.ssid;
     item["password"] = profile.password;
     item["priority"] = profile.priority;
@@ -172,7 +136,7 @@ std::string encodeDeviceConfig(const core::DeviceConfig& config) {
 }
 
 std::optional<core::DeviceConfig> decodeDeviceConfig(const std::string& payload) {
-  DynamicJsonDocument doc(16 * 1024);
+  JsonDocument doc;
   const auto error = deserializeJson(doc, payload);
   if (error) {
     return std::nullopt;
@@ -183,7 +147,7 @@ std::optional<core::DeviceConfig> decodeDeviceConfig(const std::string& payload)
   config.diagnosticsEnabled = doc["diagnosticsEnabled"] | false;
 
   JsonVariantConst backendLocator = doc["backendLocator"];
-  config.backendLocator.mode = backendLocatorModeFromStorageValue(backendLocator["mode"] | "fixed_origin");
+  config.backendLocator.mode = core::BackendLocatorMode::FixedOrigin;
   config.backendLocator.origin = backendLocator["origin"] | "";
 
   JsonVariantConst bootstrapIdentity = doc["bootstrapIdentity"];
@@ -264,7 +228,7 @@ class SnapshotStore {
  public:
   core::SnapshotBundle load() {
     core::SnapshotBundle snapshots = {};
-    DynamicJsonDocument doc(32 * 1024);
+    JsonDocument doc;
     if (!readJsonFile(kSnapshotsPath, doc)) {
       return snapshots;
     }
@@ -280,31 +244,26 @@ class SnapshotStore {
     snapshots.lastServerTime = doc["lastServerTime"] | 0ULL;
 
     if (!doc["attendanceConfig"].isNull()) {
-      snapshots.attendanceConfig = parseAttendanceConfig(doc["attendanceConfig"]);
+      snapshots.attendanceConfig = infra::detail::parseAttendanceConfig(doc["attendanceConfig"]);
     }
     JsonArrayConst enrollmentTasks = doc["enrollmentTasks"].as<JsonArrayConst>();
     for (JsonVariantConst item : enrollmentTasks) {
-      snapshots.enrollmentTasks.push_back(parseEnrollmentTask(item));
+      snapshots.enrollmentTasks.push_back(infra::detail::parseEnrollmentTask(item));
     }
     if (snapshots.enrollmentTasks.empty() && !doc["enrollmentTask"].isNull()) {
-      snapshots.enrollmentTasks.push_back(parseEnrollmentTask(doc["enrollmentTask"]));
+      snapshots.enrollmentTasks.push_back(infra::detail::parseEnrollmentTask(doc["enrollmentTask"]));
     }
 
     JsonArrayConst employees = doc["employees"].as<JsonArrayConst>();
     for (JsonVariantConst item : employees) {
-      snapshots.employees.push_back(core::EmployeeSnapshot{
-          .id = item["id"] | "",
-          .code = item["code"] | "",
-          .name = item["name"] | "",
-          .updatedAt = item["updatedAt"] | 0ULL,
-      });
+      snapshots.employees.push_back(infra::detail::parseEmployee(item));
     }
 
     return snapshots;
   }
 
   bool save(const core::SnapshotBundle& snapshots) {
-    DynamicJsonDocument doc(32 * 1024);
+    JsonDocument doc;
     doc["timezone"] = snapshots.timezone;
     doc["deviceId"] = snapshots.deviceId;
     doc["deviceName"] = snapshots.deviceName;
@@ -316,7 +275,7 @@ class SnapshotStore {
     doc["lastServerTime"] = snapshots.lastServerTime;
 
     if (snapshots.attendanceConfig.has_value()) {
-      JsonObject config = doc.createNestedObject("attendanceConfig");
+      JsonObject config = doc["attendanceConfig"].to<JsonObject>();
       config["id"] = snapshots.attendanceConfig->id;
       config["workStartMinute"] = snapshots.attendanceConfig->workStartMinute;
       config["workEndMinute"] = snapshots.attendanceConfig->workEndMinute;
@@ -327,18 +286,18 @@ class SnapshotStore {
       doc["attendanceConfig"] = nullptr;
     }
 
-    JsonArray employees = doc.createNestedArray("employees");
+    JsonArray employees = doc["employees"].to<JsonArray>();
     for (const auto& employee : snapshots.employees) {
-      JsonObject item = employees.createNestedObject();
+      JsonObject item = employees.add<JsonObject>();
       item["id"] = employee.id;
       item["code"] = employee.code;
       item["name"] = employee.name;
       item["updatedAt"] = employee.updatedAt;
     }
 
-    JsonArray enrollmentTasks = doc.createNestedArray("enrollmentTasks");
+    JsonArray enrollmentTasks = doc["enrollmentTasks"].to<JsonArray>();
     for (const auto& taskItem : snapshots.enrollmentTasks) {
-      JsonObject task = enrollmentTasks.createNestedObject();
+      JsonObject task = enrollmentTasks.add<JsonObject>();
       task["taskId"] = taskItem.taskId;
       task["employeeId"] = taskItem.employeeId;
       task["employeeCode"] = taskItem.employeeCode;
@@ -356,7 +315,7 @@ class AttendanceQueueStore {
  public:
   std::vector<core::PendingAttendanceRecord> load() {
     std::vector<core::PendingAttendanceRecord> records;
-    DynamicJsonDocument doc(32 * 1024);
+    JsonDocument doc;
     if (!readJsonFile(kAttendanceQueuePath, doc)) {
       return records;
     }
@@ -389,10 +348,10 @@ class AttendanceQueueStore {
   }
 
   bool save(const std::vector<core::PendingAttendanceRecord>& records) {
-    DynamicJsonDocument doc(32 * 1024);
-    JsonArray items = doc.createNestedArray("items");
+    JsonDocument doc;
+    JsonArray items = doc["items"].to<JsonArray>();
     for (const auto& record : records) {
-      JsonObject item = items.createNestedObject();
+      JsonObject item = items.add<JsonObject>();
       item["clientRecordId"] = record.clientRecordId;
       item["employeeId"] = record.employeeId;
       item["recognizedAt"] = record.recognizedAt;
@@ -419,7 +378,7 @@ class FailureLogStore {
  public:
   std::vector<core::FailureLogEntry> load() {
     std::vector<core::FailureLogEntry> logs;
-    DynamicJsonDocument doc(24 * 1024);
+    JsonDocument doc;
     if (!readJsonFile(kFailureLogsPath, doc)) {
       return logs;
     }
@@ -442,10 +401,10 @@ class FailureLogStore {
   }
 
   bool save(const std::vector<core::FailureLogEntry>& logs) {
-    DynamicJsonDocument doc(24 * 1024);
-    JsonArray items = doc.createNestedArray("items");
+    JsonDocument doc;
+    JsonArray items = doc["items"].to<JsonArray>();
     for (const auto& log : logs) {
-      JsonObject item = items.createNestedObject();
+      JsonObject item = items.add<JsonObject>();
       item["id"] = log.id;
       item["api"] = log.api;
       item["occurredAt"] = log.occurredAt;

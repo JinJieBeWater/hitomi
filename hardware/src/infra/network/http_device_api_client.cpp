@@ -9,6 +9,7 @@
 
 #include "board/app_config.hpp"
 #include "core/use_cases.hpp"
+#include "../json_snapshot_codec.hpp"
 
 namespace infra {
 namespace {
@@ -35,7 +36,7 @@ std::optional<core::ApiError> parseApiError(JsonVariantConst root) {
 }
 
 template <typename T, typename ParseFn>
-ApiResult<T> postJson(const std::string& url, const DynamicJsonDocument& requestDoc, ParseFn parseFn) {
+ApiResult<T> postJson(const std::string& url, const JsonDocument& requestDoc, ParseFn parseFn) {
   ApiResult<T> result = {};
   if (WiFi.status() != WL_CONNECTED) {
     result.error = makeTransportError("NETWORK_UNAVAILABLE", "WiFi is not connected", true);
@@ -64,7 +65,7 @@ ApiResult<T> postJson(const std::string& url, const DynamicJsonDocument& request
     return result;
   }
 
-  DynamicJsonDocument responseDoc(32 * 1024);
+  JsonDocument responseDoc;
   const auto deserializeError = deserializeJson(responseDoc, responseBody);
   if (deserializeError) {
     result.error = makeTransportError("INVALID_RESPONSE", deserializeError.c_str(), true);
@@ -97,33 +98,6 @@ ApiResult<T> postJson(const std::string& url, const DynamicJsonDocument& request
   return result;
 }
 
-std::optional<core::AttendanceConfigSnapshot> parseAttendanceConfig(JsonVariantConst value) {
-  if (value.isNull()) {
-    return std::nullopt;
-  }
-
-  return core::AttendanceConfigSnapshot{
-      .id = value["id"] | "",
-      .workStartMinute = value["workStartMinute"] | 0,
-      .workEndMinute = value["workEndMinute"] | 0,
-      .offStartMinute = value["offStartMinute"] | 0,
-      .offEndMinute = value["offEndMinute"] | 0,
-      .updatedAt = value["updatedAt"] | 0ULL,
-  };
-}
-
-core::EnrollmentTaskSnapshot parseEnrollmentTask(JsonVariantConst value) {
-  return core::EnrollmentTaskSnapshot{
-      .taskId = value["taskId"] | "",
-      .employeeId = value["employeeId"] | "",
-      .employeeCode = value["employeeCode"] | "",
-      .employeeName = value["employeeName"] | "",
-      .status = value["status"] | "",
-      .createdAt = value["createdAt"] | 0ULL,
-      .updatedAt = value["updatedAt"] | 0ULL,
-  };
-}
-
 std::optional<core::SyncPayload> parseSyncPayload(JsonVariantConst data) {
   core::SyncPayload payload = {};
   payload.serverTime = data["serverTime"] | 0ULL;
@@ -132,25 +106,20 @@ std::optional<core::SyncPayload> parseSyncPayload(JsonVariantConst data) {
   payload.deviceId = device["id"] | "";
   payload.deviceName = device["name"] | "";
   payload.deviceStatus = device["status"] | "";
-  payload.attendanceConfig = parseAttendanceConfig(data["attendanceConfig"]);
+  payload.attendanceConfig = infra::detail::parseAttendanceConfig(data["attendanceConfig"]);
 
   JsonArrayConst employees = data["employees"].as<JsonArrayConst>();
   for (JsonVariantConst item : employees) {
-    payload.employees.push_back(core::EmployeeSnapshot{
-        .id = item["id"] | "",
-        .code = item["code"] | "",
-        .name = item["name"] | "",
-        .updatedAt = item["updatedAt"] | 0ULL,
-      });
+    payload.employees.push_back(infra::detail::parseEmployee(item));
   }
 
   JsonArrayConst enrollmentTasks = data["enrollmentTasks"].as<JsonArrayConst>();
   for (JsonVariantConst item : enrollmentTasks) {
-    payload.enrollmentTasks.push_back(parseEnrollmentTask(item));
+    payload.enrollmentTasks.push_back(infra::detail::parseEnrollmentTask(item));
   }
 
   if (payload.enrollmentTasks.empty() && !data["enrollmentTask"].isNull()) {
-    payload.enrollmentTasks.push_back(parseEnrollmentTask(data["enrollmentTask"]));
+    payload.enrollmentTasks.push_back(infra::detail::parseEnrollmentTask(data["enrollmentTask"]));
   }
 
   return payload;
@@ -253,7 +222,7 @@ ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
     return result;
   }
 
-  DynamicJsonDocument responseDoc(1024);
+  JsonDocument responseDoc;
   const auto deserializeError = deserializeJson(responseDoc, responseBody);
   if (deserializeError) {
     result.error = makeTransportError("INVALID_RESPONSE", deserializeError.c_str(), true);
@@ -283,7 +252,7 @@ ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
 }
 
 ApiResult<BootstrapActivationResponse> HttpDeviceApiClient::bootstrapHello(const BootstrapHelloRequest& request) {
-  DynamicJsonDocument requestDoc(1024);
+  JsonDocument requestDoc;
   requestDoc["deviceSerial"] = request.deviceSerial;
   requestDoc["bootstrapSecret"] = request.bootstrapSecret;
   requestDoc["firmwareTag"] = request.firmwareTag;
@@ -299,7 +268,7 @@ ApiResult<BootstrapActivationResponse> HttpDeviceApiClient::bootstrapHello(const
 
 
 ApiResult<core::SyncPayload> HttpDeviceApiClient::sync(const core::DeviceCredentials& credentials) {
-  DynamicJsonDocument requestDoc(1024);
+  JsonDocument requestDoc;
   requestDoc["deviceCode"] = credentials.deviceCode;
   requestDoc["apiKey"] = credentials.apiKey;
   return postJson<core::SyncPayload>(endpointUrl("/api/device/sync"), requestDoc, parseSyncPayload);
@@ -307,7 +276,7 @@ ApiResult<core::SyncPayload> HttpDeviceApiClient::sync(const core::DeviceCredent
 
 ApiResult<EnrollmentReportResponse> HttpDeviceApiClient::reportEnrollment(
     const core::DeviceCredentials& credentials, const EnrollmentReportRequest& request) {
-  DynamicJsonDocument requestDoc(1024);
+  JsonDocument requestDoc;
   requestDoc["deviceCode"] = credentials.deviceCode;
   requestDoc["apiKey"] = credentials.apiKey;
   requestDoc["taskId"] = request.taskId;
@@ -327,12 +296,12 @@ ApiResult<EnrollmentReportResponse> HttpDeviceApiClient::reportEnrollment(
 ApiResult<AttendanceUploadResponse> HttpDeviceApiClient::uploadAttendance(
     const core::DeviceCredentials& credentials,
     const std::vector<core::PendingAttendanceRecord>& records) {
-  DynamicJsonDocument requestDoc(4096 + (records.size() * 256));
+  JsonDocument requestDoc;
   requestDoc["deviceCode"] = credentials.deviceCode;
   requestDoc["apiKey"] = credentials.apiKey;
-  JsonArray jsonRecords = requestDoc.createNestedArray("records");
+  JsonArray jsonRecords = requestDoc["records"].to<JsonArray>();
   for (const auto& record : records) {
-    JsonObject entry = jsonRecords.createNestedObject();
+    JsonObject entry = jsonRecords.add<JsonObject>();
     entry["clientRecordId"] = record.clientRecordId;
     entry["employeeId"] = record.employeeId;
     entry["recognizedAt"] = record.recognizedAt;

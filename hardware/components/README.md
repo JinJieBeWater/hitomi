@@ -1,8 +1,13 @@
-# Reserved Components
+# Local Components
 
-This directory is reserved for future ESP-IDF-managed components that should
-live alongside the `hardware/` runtime as the project moves toward an
-ESP-IDF-primary layout.
+This directory contains vendored ESP-IDF components used by the current
+`hardware/` runtime.
 
-Phase 1 only establishes the mixed-framework skeleton. No additional managed
-components are checked in here yet.
+At the moment it hosts:
+
+- `arduino-esp32` `3.3.7`
+- `littlefs` `1.20.4`
+
+These components are checked into the repository so the current
+`ESP-IDF-primary + Arduino as component` build remains reproducible without
+depending on PlatformIO-managed downloads at build time.
