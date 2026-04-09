@@ -37,12 +37,23 @@ void testBuildProvisioningResponseOmitsSecrets() {
   core::DeviceConfig config = {};
   config.backendLocator.origin = "http://192.168.1.10:3000";
   config.bootstrapIdentity.deviceSerial = "BOOT-001";
+  config.bootstrapIdentity.bootstrapSecret = "bootstrap-secret";
   config.runtimeCredentials.deviceCode = "DEV-001";
   config.runtimeCredentials.apiKey = "top-secret";
+  config.wifiProfiles.push_back(core::WifiProfile{
+      .ssid = "Lab",
+      .password = "wifi-secret",
+      .priority = 5,
+      .lastSuccessAt = 123,
+      .disabled = false,
+  });
 
   const std::string response = app::buildUsbProvisioningResponse(true, "ok", config);
   expect(response.find("DEV-001") != std::string::npos, "response should include device code");
+  expect(response.find("Lab") != std::string::npos, "response should include wifi profiles");
+  expect(response.find("wifi-secret") != std::string::npos, "response should include wifi password for editing");
   expect(response.find("top-secret") == std::string::npos, "response should not include api key");
+  expect(response.find("bootstrap-secret") == std::string::npos, "response should not include bootstrap secret");
 }
 
 }  // namespace

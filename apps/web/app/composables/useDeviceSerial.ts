@@ -18,11 +18,20 @@ type SerialCommand =
   | { type: "clear_wifi_profiles" }
   | { type: "reset_device_config" };
 
+export type DeviceSerialWifiProfile = {
+  ssid: string;
+  password: string;
+  priority: number;
+  lastSuccessAt: number;
+  disabled: boolean;
+};
+
 type DeviceActivationState = "activated" | "pending_activation" | "unconfigured";
 
 export type DeviceSerialSummary = {
   schemaVersion: number;
   wifiProfileCount: number;
+  wifiProfiles: DeviceSerialWifiProfile[];
   backendOrigin: string;
   deviceSerial: string;
   activationState: DeviceActivationState;
@@ -76,23 +85,79 @@ function normalizeActivationState(value: unknown): DeviceActivationState {
   return "unconfigured";
 }
 
+function normalizeWifiProfile(value: unknown): DeviceSerialWifiProfile | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return {
+    ssid: typeof candidate.ssid === "string" ? candidate.ssid : "",
+    password: typeof candidate.password === "string" ? candidate.password : "",
+    priority: typeof candidate.priority === "number" ? candidate.priority : 0,
+    lastSuccessAt: typeof candidate.lastSuccessAt === "number" ? candidate.lastSuccessAt : 0,
+    disabled: candidate.disabled === true,
+  };
+}
+
 function normalizeSummary(value: unknown): DeviceSerialSummary | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
   }
 
   const candidate = value as Record<string, unknown>;
+  const rawWifiProfiles = Array.isArray(candidate.wifiProfiles) ? candidate.wifiProfiles : [];
 
   return {
     schemaVersion: typeof candidate.schemaVersion === "number" ? candidate.schemaVersion : 1,
     wifiProfileCount:
       typeof candidate.wifiProfileCount === "number" ? candidate.wifiProfileCount : 0,
+    wifiProfiles: rawWifiProfiles
+      .map((profile) => normalizeWifiProfile(profile))
+      .filter((profile): profile is DeviceSerialWifiProfile => profile !== null),
     backendOrigin: typeof candidate.backendOrigin === "string" ? candidate.backendOrigin : "",
     deviceSerial: typeof candidate.deviceSerial === "string" ? candidate.deviceSerial : "",
     activationState: normalizeActivationState(candidate.activationState),
     deviceCode: typeof candidate.deviceCode === "string" ? candidate.deviceCode : "",
     lastErrorCode: typeof candidate.lastErrorCode === "string" ? candidate.lastErrorCode : null,
   };
+}
+
+function redactSensitiveLogValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveLogValue(item));
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const redacted: Record<string, unknown> = {};
+
+  for (const [key, nestedValue] of Object.entries(candidate)) {
+    if (key === "password" || key === "bootstrapSecret" || key === "apiKey") {
+      redacted[key] = "***";
+      continue;
+    }
+
+    redacted[key] = redactSensitiveLogValue(nestedValue);
+  }
+
+  return redacted;
+}
+
+function sanitizeLogLine(line: string) {
+  if (!line.trim().startsWith("{")) {
+    return line;
+  }
+
+  try {
+    return JSON.stringify(redactSensitiveLogValue(JSON.parse(line)));
+  } catch {
+    return line;
+  }
 }
 
 function timeoutPromise(timeoutMs: number) {
@@ -161,7 +226,7 @@ export function useDeviceSerial() {
 
   function appendLog(line: string) {
     if (!line) return;
-    serialLogs.value.push(line);
+    serialLogs.value.push(sanitizeLogLine(line));
     if (serialLogs.value.length > MAX_LOG_LINES) {
       serialLogs.value.splice(0, serialLogs.value.length - MAX_LOG_LINES);
     }
@@ -179,7 +244,7 @@ export function useDeviceSerial() {
       if (newlineIndex >= 0) {
         const line = lineBuffer.value.slice(0, newlineIndex).replace(/\r$/, "");
         lineBuffer.value = lineBuffer.value.slice(newlineIndex + 1);
-        lastRawLine.value = line;
+        lastRawLine.value = sanitizeLogLine(line);
         appendLog(line);
         return line;
       }

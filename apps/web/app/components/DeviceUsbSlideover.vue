@@ -2,7 +2,11 @@
 import { useMutation, useQueryClient } from "@tanstack/vue-query";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 
-import { type DeviceSerialSummary, useDeviceSerial } from "~/composables/useDeviceSerial";
+import {
+  type DeviceSerialSummary,
+  type DeviceSerialWifiProfile,
+  useDeviceSerial,
+} from "~/composables/useDeviceSerial";
 
 const props = defineProps<{ open: boolean }>();
 const emit = defineEmits<{ "update:open": [boolean] }>();
@@ -14,14 +18,13 @@ const queryClient = useQueryClient();
 
 const createDevice = useMutation($orpc.device.create.mutationOptions());
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type View = "idle" | "connecting" | "new_device" | "provision" | "device_info";
-// new_device steps: create → config → writing → activating → done
-// provision steps:  action → (writing → activating → done)
 type Step = "create" | "config" | "writing" | "activating" | "done" | "action";
-
-// ─── State ────────────────────────────────────────────────────────────────────
+type WifiProfileFormItem = DeviceSerialWifiProfile & {
+  id: string;
+  originalSsid: string;
+  originalPassword: string;
+};
 
 const view = ref<View>("idle");
 const step = ref<Step>("action");
@@ -35,28 +38,107 @@ const showSerialLogs = ref(true);
 
 const summary = ref<DeviceSerialSummary | null>(null);
 const dbDevice = ref<{ id: string; name: string; deviceCode: string } | null>(null);
-const createdDevice = ref<{ id: string; bootstrapSerial: string; bootstrapSecret: string } | null>(null);
+const createdDevice = ref<{ id: string; bootstrapSerial: string; bootstrapSecret: string } | null>(
+  null,
+);
 
 const newDeviceName = ref("");
 const backendOrigin = ref("");
 const backendStatus = ref<"unknown" | "checking" | "ok" | "error">("unknown");
-const wifiProfiles = ref([{ id: mkId(), ssid: "", password: "", priority: 100 }]);
-
-// ─── Computed ─────────────────────────────────────────────────────────────────
+const wifiProfiles = ref<WifiProfileFormItem[]>([]);
 
 const deviceId = computed(() => createdDevice.value?.id ?? dbDevice.value?.id ?? null);
 const currentOrigin = computed(() => (import.meta.client ? window.location.origin : ""));
+const hasConfiguredWifiProfile = computed(() =>
+  wifiProfiles.value.some((profile) => profile.ssid.trim() && profile.password.trim()),
+);
+const hasIncompleteWifiProfile = computed(() =>
+  wifiProfiles.value.some((profile) => {
+    const ssid = profile.ssid.trim();
+    const password = profile.password.trim();
 
-const canWriteConfig = computed(
+    return Boolean(ssid) !== Boolean(password);
+  }),
+);
+const canWriteActivationConfig = computed(
   () =>
     serial.connected.value &&
-    wifiProfiles.value.some((p) => p.ssid.trim() && p.password.trim()) &&
-    backendOrigin.value.trim(),
+    Boolean(backendOrigin.value.trim()) &&
+    hasConfiguredWifiProfile.value &&
+    !hasIncompleteWifiProfile.value,
 );
+const canSaveCurrentConfig = computed(
+  () =>
+    serial.connected.value &&
+    Boolean(backendOrigin.value.trim()) &&
+    !hasIncompleteWifiProfile.value,
+);
+const wifiDetailsUnavailable = computed(
+  () => (summary.value?.wifiProfileCount ?? 0) > 0 && wifiProfiles.value.length === 0,
+);
+const wifiValidationMessage = computed(() =>
+  hasIncompleteWifiProfile.value ? "请完整填写每一项 Wi-Fi 配置后再保存。" : "",
+);
+const wifiEmptyMessage = computed(() => {
+  if (!wifiDetailsUnavailable.value) {
+    return "当前还没有 Wi-Fi 配置，点击右上角可添加新的网络。";
+  }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+  return `设备上已有 ${summary.value?.wifiProfileCount ?? 0} 项 Wi‑Fi 配置，但当前固件没有返回可编辑详情。你可以手动新增并覆盖写入，或升级设备固件后重新读取。`;
+});
+
 function mkId() {
-  return globalThis.crypto?.randomUUID?.() ?? `id_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `id_${Date.now()}_${Math.random().toString(36).slice(2)}`
+  );
+}
+
+function defaultWifiPriority(index: number) {
+  return Math.max(10, 100 - index * 10);
+}
+
+function createWifiProfileForm(
+  profile: Partial<DeviceSerialWifiProfile> = {},
+  index = wifiProfiles.value.length,
+): WifiProfileFormItem {
+  const ssid = profile.ssid ?? "";
+  const password = profile.password ?? "";
+
+  return {
+    id: mkId(),
+    ssid,
+    password,
+    priority: profile.priority ?? defaultWifiPriority(index),
+    lastSuccessAt: profile.lastSuccessAt ?? 0,
+    disabled: profile.disabled ?? false,
+    originalSsid: ssid,
+    originalPassword: password,
+  };
+}
+
+function applyConfigDraftFromSummary(
+  nextSummary: DeviceSerialSummary | null | undefined,
+  options: { ensureWifiInput?: boolean } = {},
+) {
+  if (!nextSummary) {
+    return;
+  }
+
+  if (nextSummary.backendOrigin.trim()) {
+    backendOrigin.value = nextSummary.backendOrigin.trim();
+  }
+
+  const nextProfiles = nextSummary.wifiProfiles.map((profile, index) =>
+    createWifiProfileForm(profile, index),
+  );
+
+  wifiProfiles.value =
+    nextProfiles.length > 0
+      ? nextProfiles
+      : options.ensureWifiInput
+        ? [createWifiProfileForm({}, 0)]
+        : [];
 }
 
 function resetState() {
@@ -75,24 +157,41 @@ function resetState() {
   newDeviceName.value = "";
   backendOrigin.value = import.meta.client ? window.location.origin : "";
   backendStatus.value = "unknown";
-  wifiProfiles.value = [{ id: mkId(), ssid: "", password: "", priority: 100 }];
+  wifiProfiles.value = [createWifiProfileForm({}, 0)];
   if (import.meta.client && backendOrigin.value) {
     checkBackendOrigin();
   }
 }
 
 function addWifiProfile() {
-  wifiProfiles.value.push({
-    id: mkId(),
-    ssid: "",
-    password: "",
-    priority: Math.max(10, 100 - wifiProfiles.value.length * 10),
-  });
+  wifiProfiles.value.push(createWifiProfileForm({}, wifiProfiles.value.length));
 }
 
 function removeWifiProfile(id: string) {
-  if (wifiProfiles.value.length === 1) return;
-  wifiProfiles.value = wifiProfiles.value.filter((p) => p.id !== id);
+  wifiProfiles.value = wifiProfiles.value.filter((profile) => profile.id !== id);
+}
+
+function buildWifiProfilesPayload() {
+  if (hasIncompleteWifiProfile.value) {
+    throw new Error("请完整填写每一项 Wi-Fi 配置。");
+  }
+
+  return wifiProfiles.value
+    .filter((profile) => profile.ssid.trim() && profile.password.trim())
+    .map((profile, index) => {
+      const ssid = profile.ssid.trim();
+      const password = profile.password.trim();
+      const keepLastSuccessAt =
+        profile.originalSsid === ssid && profile.originalPassword === password;
+
+      return {
+        ssid,
+        password,
+        priority: Number.isFinite(profile.priority) ? profile.priority : defaultWifiPriority(index),
+        lastSuccessAt: keepLastSuccessAt ? profile.lastSuccessAt : 0,
+        disabled: profile.disabled,
+      };
+    });
 }
 
 let backendCheckTimer: ReturnType<typeof setTimeout> | null = null;
@@ -103,13 +202,15 @@ async function checkBackendOrigin() {
     backendStatus.value = "unknown";
     return;
   }
+
   backendStatus.value = "checking";
+
   try {
-    const res = await fetch(`${url}/rpc/healthCheck`, {
+    const response = await fetch(`${url}/rpc/healthCheck`, {
       method: "POST",
       signal: AbortSignal.timeout(4000),
     });
-    backendStatus.value = res.ok ? "ok" : "error";
+    backendStatus.value = response.ok ? "ok" : "error";
   } catch {
     backendStatus.value = "error";
   }
@@ -117,64 +218,79 @@ async function checkBackendOrigin() {
 
 watch(backendOrigin, () => {
   backendStatus.value = "unknown";
-  if (backendCheckTimer) clearTimeout(backendCheckTimer);
+  if (backendCheckTimer) {
+    clearTimeout(backendCheckTimer);
+  }
   backendCheckTimer = setTimeout(checkBackendOrigin, 600);
 });
 
-async function refreshSummary() {
-  const res = await serial.sendCommand({ type: "get_config" });
-  summary.value = res.summary ?? null;
-  return res.summary ?? null;
-}
+async function refreshSummary(options: { syncEditor?: boolean; ensureWifiInput?: boolean } = {}) {
+  const response = await serial.sendCommand({ type: "get_config" });
+  summary.value = response.summary ?? null;
 
-// ─── Core Actions ─────────────────────────────────────────────────────────────
+  if (options.syncEditor) {
+    applyConfigDraftFromSummary(summary.value, { ensureWifiInput: options.ensureWifiInput });
+  }
+
+  return summary.value;
+}
 
 async function connect() {
   errorMessage.value = "";
   view.value = "connecting";
+
   try {
     await serial.connect();
     statusMessage.value = "正在读取设备信息…";
-    const s = await refreshSummary();
+    const nextSummary = await refreshSummary();
 
-    if (!s) {
+    if (!nextSummary) {
       throw new Error("未能读取设备配置摘要。");
     }
 
-    if (s.activationState === "unconfigured") {
-      // Device has no bootstrapSecret — needs full provisioning
+    applyConfigDraftFromSummary(nextSummary, {
+      ensureWifiInput: nextSummary.activationState !== "activated",
+    });
+
+    if (nextSummary.activationState === "unconfigured") {
       view.value = "new_device";
       step.value = "create";
       statusMessage.value = "全新设备，请先创建设备记录。";
       return;
     }
 
-    // Device has a valid bootstrap identity — look up in DB
     const found = await queryClient.fetchQuery(
-      $orpc.device.findByBootstrapSerial.queryOptions({ input: { serial: s.deviceSerial } }),
+      $orpc.device.findByBootstrapSerial.queryOptions({
+        input: { serial: nextSummary.deviceSerial },
+      }),
     );
     dbDevice.value = found ? { id: found.id, name: found.name, deviceCode: found.deviceCode } : null;
 
-    if (s.activationState === "activated") {
+    if (nextSummary.activationState === "activated") {
       view.value = "device_info";
       statusMessage.value = found ? `已识别：${found.name}` : "已激活设备（后台未找到记录）";
-    } else {
-      view.value = "provision";
-      step.value = "action";
-      statusMessage.value = found
-        ? `已识别：${found.name}，待激活`
-        : "设备已有 Bootstrap 配置但后台未找到记录，可创建新设备。";
+      return;
     }
-  } catch (err: any) {
-    errorMessage.value = err?.message || "连接失败。";
+
+    view.value = "provision";
+    step.value = "action";
+    statusMessage.value = found
+      ? `已识别：${found.name}，待激活`
+      : "设备已有 Bootstrap 配置但后台未找到记录，可创建新设备。";
+  } catch (error: any) {
+    errorMessage.value = error?.message || "连接失败。";
     view.value = "idle";
   }
 }
 
 async function handleCreateDevice() {
-  if (!newDeviceName.value.trim()) return;
+  if (!newDeviceName.value.trim()) {
+    return;
+  }
+
   busy.value = true;
   errorMessage.value = "";
+
   try {
     const result = await createDevice.mutateAsync({ name: newDeviceName.value.trim() });
     createdDevice.value = {
@@ -187,43 +303,115 @@ async function handleCreateDevice() {
       name: result.device.name,
       deviceCode: result.device.deviceCode,
     };
-    // Move to config step in whichever view we're in
     step.value = "config";
     statusMessage.value = `设备「${result.device.name}」已创建，请填写网络配置。`;
-  } catch (err: any) {
-    errorMessage.value = err?.message || "创建设备失败。";
+    if (wifiProfiles.value.length === 0) {
+      wifiProfiles.value = [createWifiProfileForm({}, 0)];
+    }
+  } catch (error: any) {
+    errorMessage.value = error?.message || "创建设备失败。";
   } finally {
     busy.value = false;
   }
 }
 
-// writeBootstrap=true for new devices (need to write set_bootstrap_identity)
-// writeBootstrap=false for provision flow (device already has bootstrap identity)
-async function writeAndActivate(writeBootstrap: boolean) {
-  if (!deviceId.value) return;
+async function writeConfig(options: {
+  writeBootstrap?: boolean;
+  waitForActivation?: boolean;
+  requireWifi?: boolean;
+  pendingMessage: string;
+  successMessage: string;
+  successToastTitle: string;
+}) {
+  if (!deviceId.value) {
+    return;
+  }
+
+  const profiles = buildWifiProfilesPayload();
+  const origin = backendOrigin.value.trim();
+
+  if (!origin) {
+    throw new Error("请填写后台地址。");
+  }
+
+  if (options.requireWifi && profiles.length === 0) {
+    throw new Error("请至少配置一个 Wi-Fi 网络。");
+  }
+
   busy.value = true;
   errorMessage.value = "";
-  step.value = "writing";
-  statusMessage.value = "正在写入配置…";
-  try {
-    const profiles = wifiProfiles.value
-      .filter((p) => p.ssid.trim() && p.password.trim())
-      .map((p) => ({ ssid: p.ssid.trim(), password: p.password.trim(), priority: p.priority }));
+  if (options.waitForActivation) {
+    step.value = "writing";
+  }
+  statusMessage.value = options.pendingMessage;
 
+  try {
     await serial.sendCommand({ type: "set_wifi_profiles", profiles });
-    await serial.sendCommand({ type: "set_backend_origin", origin: backendOrigin.value.trim() });
-    if (writeBootstrap && createdDevice.value) {
+    await serial.sendCommand({ type: "set_backend_origin", origin });
+
+    if (options.writeBootstrap && createdDevice.value) {
       await serial.sendCommand({
         type: "set_bootstrap_identity",
         deviceSerial: createdDevice.value.bootstrapSerial,
         bootstrapSecret: createdDevice.value.bootstrapSecret,
       });
     }
-    await refreshSummary();
-    await pollUntilActivated();
-  } catch (err: any) {
-    errorMessage.value = err?.message || "写入配置失败。";
-    step.value = "config";
+
+    await refreshSummary({ syncEditor: true, ensureWifiInput: options.requireWifi });
+
+    if (options.waitForActivation) {
+      await pollUntilActivated();
+      return;
+    }
+
+    statusMessage.value = options.successMessage;
+    toast.add({ title: options.successToastTitle });
+  } catch (error: any) {
+    errorMessage.value = error?.message || "写入配置失败。";
+    if (options.waitForActivation) {
+      step.value = "config";
+    }
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function writeAndActivate(writeBootstrap: boolean) {
+  await writeConfig({
+    writeBootstrap,
+    waitForActivation: true,
+    requireWifi: true,
+    pendingMessage: "正在写入配置…",
+    successMessage: "设备激活成功！",
+    successToastTitle: "设备已激活",
+  });
+}
+
+async function saveCurrentConfig() {
+  await writeConfig({
+    waitForActivation: false,
+    requireWifi: false,
+    pendingMessage: "正在保存设备配置…",
+    successMessage: "设备配置已保存，设备将按新参数重新连接。",
+    successToastTitle: "设备配置已保存",
+  });
+}
+
+async function reloadCurrentConfig() {
+  busy.value = true;
+  errorMessage.value = "";
+  statusMessage.value = "正在读取设备当前配置…";
+
+  try {
+    const nextSummary = await refreshSummary({ syncEditor: true });
+    if (!nextSummary) {
+      throw new Error("未能读取设备当前配置。");
+    }
+
+    statusMessage.value = "已同步设备当前配置。";
+    toast.add({ title: "已刷新设备配置" });
+  } catch (error: any) {
+    errorMessage.value = error?.message || "读取设备配置失败。";
   } finally {
     busy.value = false;
   }
@@ -233,12 +421,18 @@ async function pollUntilActivated() {
   step.value = "activating";
   statusMessage.value = "等待设备自动激活…";
   polling.value = true;
+
   try {
     for (let i = 0; i < 30; i++) {
-      if (!polling.value) return;
-      const s = await refreshSummary();
-      if (s?.activationState === "activated") {
+      if (!polling.value) {
+        return;
+      }
+
+      const nextSummary = await refreshSummary();
+      if (nextSummary?.activationState === "activated") {
+        applyConfigDraftFromSummary(nextSummary);
         step.value = "done";
+        view.value = "device_info";
         statusMessage.value = "设备激活成功！";
         toast.add({ title: "设备已激活" });
         await queryClient.invalidateQueries({
@@ -246,12 +440,14 @@ async function pollUntilActivated() {
         });
         return;
       }
-      await new Promise((r) => setTimeout(r, 2000));
+
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
+
     errorMessage.value = "等待超时，设备未在预期时间内完成激活。";
     step.value = "action";
-  } catch (err: any) {
-    errorMessage.value = err?.message || "激活失败。";
+  } catch (error: any) {
+    errorMessage.value = error?.message || "激活失败。";
     step.value = "action";
   } finally {
     polling.value = false;
@@ -259,32 +455,38 @@ async function pollUntilActivated() {
 }
 
 async function executeReset(type: "credentials" | "full") {
-  if (!deviceId.value) return;
+  if (!deviceId.value) {
+    return;
+  }
+
   busy.value = true;
   errorMessage.value = "";
   confirmingReset.value = null;
+
   try {
     if (type === "credentials") {
       await serial.sendCommand({ type: "clear_runtime_credentials" });
     } else {
       await serial.sendCommand({ type: "reset_device_config" });
     }
-    await refreshSummary();
-    statusMessage.value = type === "credentials"
-      ? "凭证已清除，设备将重新激活。"
-      : "设备已完全重置，进入待激活状态。";
+
+    await refreshSummary({
+      syncEditor: true,
+      ensureWifiInput: type === "full",
+    });
+
+    statusMessage.value =
+      type === "credentials" ? "凭证已清除，设备将重新激活。" : "设备已完全重置，进入待激活状态。";
     toast.add({ title: type === "credentials" ? "凭证已清除" : "设备已完全重置" });
     view.value = "provision";
     step.value = "action";
     await pollUntilActivated();
-  } catch (err: any) {
-    errorMessage.value = err?.message || "重置失败。";
+  } catch (error: any) {
+    errorMessage.value = error?.message || "重置失败。";
   } finally {
     busy.value = false;
   }
 }
-
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
 
 watch(
   () => props.open,
@@ -293,9 +495,10 @@ watch(
       polling.value = false;
       await serial.disconnect();
       resetState();
-    } else {
-      resetState();
+      return;
     }
+
+    resetState();
   },
 );
 
@@ -388,55 +591,22 @@ onBeforeUnmount(async () => {
               <span class="ml-2">Bootstrap：{{ createdDevice?.bootstrapSerial }}</span>
             </div>
 
-            <!-- WiFi profiles -->
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-highlighted">Wi‑Fi 网络</span>
-                <UButton size="xs" variant="outline" icon="i-lucide-plus" @click="addWifiProfile">添加</UButton>
-              </div>
-              <div v-for="profile in wifiProfiles" :key="profile.id" class="rounded-2xl border border-neutral-200/70 p-3 dark:border-neutral-800/80">
-                <div class="grid gap-3 sm:grid-cols-[1fr_1fr_80px_auto]">
-                  <UFormField label="SSID">
-                    <UInput v-model="profile.ssid" placeholder="网络名称" class="w-full" />
-                  </UFormField>
-                  <UFormField label="密码">
-                    <UInput v-model="profile.password" type="password" placeholder="密码" class="w-full" />
-                  </UFormField>
-                  <UFormField label="优先级">
-                    <UInput v-model.number="profile.priority" type="number" class="w-full" />
-                  </UFormField>
-                  <div class="flex items-end">
-                    <UButton size="sm" color="error" variant="outline" icon="i-lucide-trash-2" :disabled="wifiProfiles.length === 1" @click="removeWifiProfile(profile.id)" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <UFormField label="后台地址">
-              <div class="flex items-center gap-2">
-                <UInput v-model="backendOrigin" placeholder="http://192.168.x.x:3001" class="min-w-0 flex-1" />
-                <UIcon
-                  v-if="backendStatus === 'checking'"
-                  name="i-lucide-loader-circle"
-                  class="size-4 shrink-0 animate-spin text-muted"
-                />
-                <UIcon
-                  v-else-if="backendStatus === 'ok'"
-                  name="i-lucide-circle-check"
-                  class="size-4 shrink-0 text-success"
-                />
-                <UIcon
-                  v-else-if="backendStatus === 'error'"
-                  name="i-lucide-circle-x"
-                  class="size-4 shrink-0 text-error"
-                />
-              </div>
-              <p v-if="backendStatus === 'error'" class="mt-1 text-xs text-error">后台地址不可达，请检查 IP 和端口。</p>
-            </UFormField>
-
-            <UButton icon="i-lucide-zap" :loading="step === 'writing' || busy" :disabled="!canWriteConfig" class="w-full rounded-2xl" @click="writeAndActivate(true)">
-              写入配置并激活
-            </UButton>
+            <DeviceUsbConfigEditor
+              v-model:backend-origin="backendOrigin"
+              :wifi-profiles="wifiProfiles"
+              title="首配参数"
+              description="支持动态添加、删除和修改设备当前保存的 Wi-Fi 与后台地址。"
+              :empty-message="wifiEmptyMessage"
+              submit-label="写入配置并激活"
+              submit-icon="i-lucide-zap"
+              :submit-loading="step === 'writing' || busy"
+              :submit-disabled="!canWriteActivationConfig"
+              :show-backend-status="true"
+              :validation-message="wifiValidationMessage"
+              @add:wifi-profile="addWifiProfile"
+              @remove:wifi-profile="removeWifiProfile"
+              @submit="writeAndActivate(true)"
+            />
           </template>
 
           <!-- step: activating -->
@@ -485,35 +655,23 @@ onBeforeUnmount(async () => {
                 重新配网（可选）
                 <UIcon :name="showProvisionForm ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-4 text-muted" />
               </button>
-              <div v-if="showProvisionForm" class="space-y-4 border-t border-neutral-200/70 p-4 dark:border-neutral-800/80">
-                <div class="space-y-3">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm font-medium text-highlighted">Wi‑Fi 网络</span>
-                    <UButton size="xs" variant="outline" icon="i-lucide-plus" @click="addWifiProfile">添加</UButton>
-                  </div>
-                  <div v-for="profile in wifiProfiles" :key="profile.id" class="rounded-2xl border border-neutral-200/70 p-3 dark:border-neutral-800/80">
-                    <div class="grid gap-3 sm:grid-cols-[1fr_1fr_80px_auto]">
-                      <UFormField label="SSID">
-                        <UInput v-model="profile.ssid" placeholder="网络名称" class="w-full" />
-                      </UFormField>
-                      <UFormField label="密码">
-                        <UInput v-model="profile.password" type="password" placeholder="密码" class="w-full" />
-                      </UFormField>
-                      <UFormField label="优先级">
-                        <UInput v-model.number="profile.priority" type="number" class="w-full" />
-                      </UFormField>
-                      <div class="flex items-end">
-                        <UButton size="sm" color="error" variant="outline" icon="i-lucide-trash-2" :disabled="wifiProfiles.length === 1" @click="removeWifiProfile(profile.id)" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <UFormField label="后台地址">
-                  <UInput v-model="backendOrigin" placeholder="http://192.168.x.x:3001" class="w-full" />
-                </UFormField>
-                <UButton size="sm" variant="outline" icon="i-lucide-zap" :disabled="!canWriteConfig" @click="writeAndActivate(false)">
-                  写入配置并激活
-                </UButton>
+              <div v-if="showProvisionForm" class="border-t border-neutral-200/70 p-4 dark:border-neutral-800/80">
+                <DeviceUsbConfigEditor
+                  v-model:backend-origin="backendOrigin"
+                  :wifi-profiles="wifiProfiles"
+                  title="当前待写入配置"
+                  description="可直接调整设备上已保存的 Wi-Fi 列表，再重新激活。"
+                  :empty-message="wifiEmptyMessage"
+                  submit-label="写入配置并激活"
+                  submit-icon="i-lucide-zap"
+                  :submit-loading="busy"
+                  :submit-disabled="!canWriteActivationConfig"
+                  :show-backend-status="true"
+                  :validation-message="wifiValidationMessage"
+                  @add:wifi-profile="addWifiProfile"
+                  @remove:wifi-profile="removeWifiProfile"
+                  @submit="writeAndActivate(false)"
+                />
               </div>
             </div>
           </template>
@@ -551,6 +709,47 @@ onBeforeUnmount(async () => {
             <div class="text-xs text-muted">设备码：{{ summary?.deviceCode || dbDevice?.deviceCode || "—" }}</div>
             <div class="text-xs text-muted">后台地址：{{ summary?.backendOrigin || "—" }}</div>
             <div class="text-xs text-muted">Wi‑Fi 数量：{{ summary?.wifiProfileCount ?? "—" }}</div>
+          </div>
+
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <p class="text-xs font-medium tracking-[0.14em] text-muted uppercase">当前配置</p>
+              <UButton
+                size="xs"
+                variant="ghost"
+                color="neutral"
+                icon="i-lucide-refresh-cw"
+                :loading="busy"
+                @click="reloadCurrentConfig"
+              >
+                重新读取
+              </UButton>
+            </div>
+
+            <UAlert
+              v-if="wifiDetailsUnavailable"
+              color="warning"
+              icon="i-lucide-triangle-alert"
+              title="当前固件未返回 Wi‑Fi 详情"
+              :description="`设备回包显示已有 ${summary?.wifiProfileCount ?? 0} 项 Wi‑Fi 配置，但没有返回可编辑明细。现在可以新增并覆盖写入；如果要读取现有 SSID/密码，请升级到包含 wifiProfiles 返回字段的固件后重新读取。`"
+            />
+
+            <DeviceUsbConfigEditor
+              v-model:backend-origin="backendOrigin"
+              :wifi-profiles="wifiProfiles"
+              title="设备配置表单"
+              description="读取当前设备配置后可直接修改，支持动态添加和删除 Wi-Fi 项。"
+              :empty-message="wifiEmptyMessage"
+              submit-label="保存到设备"
+              submit-icon="i-lucide-save"
+              :submit-loading="busy"
+              :submit-disabled="!canSaveCurrentConfig"
+              :show-backend-status="true"
+              :validation-message="wifiValidationMessage"
+              @add:wifi-profile="addWifiProfile"
+              @remove:wifi-profile="removeWifiProfile"
+              @submit="saveCurrentConfig"
+            />
           </div>
 
           <div class="space-y-3">

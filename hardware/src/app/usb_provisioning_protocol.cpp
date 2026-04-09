@@ -92,6 +92,15 @@ std::string buildUsbProvisioningResponse(
   JsonObject summary = doc["summary"].to<JsonObject>();
   summary["schemaVersion"] = config.schemaVersion;
   summary["wifiProfileCount"] = config.wifiProfiles.size();
+  JsonArray wifiProfiles = summary["wifiProfiles"].to<JsonArray>();
+  for (const auto& profile : config.wifiProfiles) {
+    JsonObject item = wifiProfiles.add<JsonObject>();
+    item["ssid"] = profile.ssid;
+    item["password"] = profile.password;
+    item["priority"] = profile.priority;
+    item["lastSuccessAt"] = profile.lastSuccessAt;
+    item["disabled"] = profile.disabled;
+  }
   summary["backendOrigin"] = config.backendLocator.origin;
   summary["deviceSerial"] = config.bootstrapIdentity.deviceSerial;
   summary["activationState"] = activationStateValue(config.activationState());

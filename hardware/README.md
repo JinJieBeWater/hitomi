@@ -153,7 +153,7 @@ Supported commands:
 {"type":"reset_device_config"}
 ```
 
-Responses are JSON summaries that intentionally omit secrets such as the runtime `apiKey`.
+Responses include the current editable config snapshot for Web Serial forms, while still omitting activation secrets such as the runtime `apiKey`.
 
 ## Demo Flow
 
