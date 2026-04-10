@@ -1,4 +1,4 @@
-#include "infra/i2c/board_i2c_bus.hpp"
+#include "infra/board/board_control_bus.hpp"
 
 #include <driver/i2c_master.h>
 #include <esp_err.h>
@@ -20,19 +20,19 @@ struct DeviceSlot {
   i2c_master_dev_handle_t handle = nullptr;
 };
 
-struct BoardI2cBusState {
+struct BoardControlBusState {
   i2c_master_bus_handle_t busHandle = nullptr;
   std::array<DeviceSlot, kMaxBoardI2cDevices> devices = {};
   bool busReady = false;
   bool ioExpanderReady = false;
 };
 
-BoardI2cBusState& boardI2cBusState() {
-  static auto* state = new BoardI2cBusState();
+BoardControlBusState& boardControlBusState() {
+  static auto* state = new BoardControlBusState();
   return *state;
 }
 
-DeviceSlot* findDeviceSlot(BoardI2cBusState& state, uint8_t address) {
+DeviceSlot* findDeviceSlot(BoardControlBusState& state, uint8_t address) {
   for (auto& slot : state.devices) {
     if (slot.handle != nullptr && slot.address == address) {
       return &slot;
@@ -41,7 +41,7 @@ DeviceSlot* findDeviceSlot(BoardI2cBusState& state, uint8_t address) {
   return nullptr;
 }
 
-DeviceSlot* allocateDeviceSlot(BoardI2cBusState& state) {
+DeviceSlot* allocateDeviceSlot(BoardControlBusState& state) {
   for (auto& slot : state.devices) {
     if (slot.handle == nullptr) {
       return &slot;
@@ -50,7 +50,7 @@ DeviceSlot* allocateDeviceSlot(BoardI2cBusState& state) {
   return nullptr;
 }
 
-i2c_master_dev_handle_t deviceHandle(BoardI2cBusState& state, uint8_t address) {
+i2c_master_dev_handle_t deviceHandle(BoardControlBusState& state, uint8_t address) {
   if (!state.busReady || state.busHandle == nullptr) {
     return nullptr;
   }
@@ -81,8 +81,8 @@ i2c_master_dev_handle_t deviceHandle(BoardI2cBusState& state, uint8_t address) {
 
 }  // namespace
 
-bool ensureBoardI2cBusInitialized() {
-  BoardI2cBusState& state = boardI2cBusState();
+bool ensureBoardControlBusReady() {
+  BoardControlBusState& state = boardControlBusState();
   if (state.busReady && state.busHandle != nullptr) {
     return true;
   }
@@ -107,23 +107,23 @@ bool ensureBoardI2cBusInitialized() {
   return true;
 }
 
-bool ensureBoardIoExpanderInitialized() {
-  BoardI2cBusState& state = boardI2cBusState();
+bool ensureBoardIoExpanderReady() {
+  BoardControlBusState& state = boardControlBusState();
   if (state.ioExpanderReady) {
     return true;
   }
-  if (!ensureBoardI2cBusInitialized()) {
+  if (!ensureBoardControlBusReady()) {
     return false;
   }
 
-  if (!writeBoardI2cRegister(
+  if (!writeBoardControlRegister(
           board::kIoExpanderAddress,
           board::kIoExpanderOutputReg,
           board::kIoExpanderDefaultOutput,
           1000)) {
     return false;
   }
-  if (!writeBoardI2cRegister(
+  if (!writeBoardControlRegister(
           board::kIoExpanderAddress,
           board::kIoExpanderConfigReg,
           board::kIoExpanderDefaultConfig,
@@ -135,18 +135,18 @@ bool ensureBoardIoExpanderInitialized() {
   return true;
 }
 
-bool probeBoardI2cDevice(uint8_t address, int timeoutMs) {
-  BoardI2cBusState& state = boardI2cBusState();
-  if (!ensureBoardI2cBusInitialized() || state.busHandle == nullptr) {
+bool probeBoardControlDevice(uint8_t address, int timeoutMs) {
+  BoardControlBusState& state = boardControlBusState();
+  if (!ensureBoardControlBusReady() || state.busHandle == nullptr) {
     return false;
   }
 
   return i2c_master_probe(state.busHandle, address, timeoutMs) == ESP_OK;
 }
 
-bool readBoardI2cRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, std::size_t length, int timeoutMs) {
-  BoardI2cBusState& state = boardI2cBusState();
-  if (!ensureBoardI2cBusInitialized()) {
+bool readBoardControlRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, std::size_t length, int timeoutMs) {
+  BoardControlBusState& state = boardControlBusState();
+  if (!ensureBoardControlBusReady()) {
     return false;
   }
 
@@ -158,9 +158,9 @@ bool readBoardI2cRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, s
   return i2c_master_transmit_receive(handle, &startReg, sizeof(startReg), buffer, length, timeoutMs) == ESP_OK;
 }
 
-bool writeBoardI2cRegister(uint8_t address, uint8_t reg, uint8_t value, int timeoutMs) {
-  BoardI2cBusState& state = boardI2cBusState();
-  if (!ensureBoardI2cBusInitialized()) {
+bool writeBoardControlRegister(uint8_t address, uint8_t reg, uint8_t value, int timeoutMs) {
+  BoardControlBusState& state = boardControlBusState();
+  if (!ensureBoardControlBusReady()) {
     return false;
   }
 
@@ -173,7 +173,7 @@ bool writeBoardI2cRegister(uint8_t address, uint8_t reg, uint8_t value, int time
   return i2c_master_transmit(handle, payload, sizeof(payload), timeoutMs) == ESP_OK;
 }
 
-bool updateBoardI2cRegisterBit(
+bool updateBoardControlRegisterBit(
     uint8_t address,
     uint8_t reg,
     uint8_t bitMask,
@@ -181,7 +181,7 @@ bool updateBoardI2cRegisterBit(
     int timeoutMs,
     uint8_t* newValue) {
   uint8_t currentValue = 0;
-  if (!readBoardI2cRegisters(address, reg, &currentValue, sizeof(currentValue), timeoutMs)) {
+  if (!readBoardControlRegisters(address, reg, &currentValue, sizeof(currentValue), timeoutMs)) {
     return false;
   }
 
@@ -191,7 +191,7 @@ bool updateBoardI2cRegisterBit(
     currentValue &= static_cast<uint8_t>(~bitMask);
   }
 
-  if (!writeBoardI2cRegister(address, reg, currentValue, timeoutMs)) {
+  if (!writeBoardControlRegister(address, reg, currentValue, timeoutMs)) {
     return false;
   }
 

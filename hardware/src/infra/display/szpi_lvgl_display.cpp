@@ -17,7 +17,7 @@
 
 #include "board/pins.hpp"
 #include "infra/display/touch_transform.hpp"
-#include "infra/i2c/board_i2c_bus.hpp"
+#include "infra/board/board_control_bus.hpp"
 
 namespace {
 
@@ -97,11 +97,11 @@ bool onColorTransferDone(
 }
 
 bool readI2cRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, size_t length, int timeoutMs) {
-  return infra::readBoardI2cRegisters(address, startReg, buffer, length, timeoutMs);
+  return infra::readBoardControlRegisters(address, startReg, buffer, length, timeoutMs);
 }
 
 bool probeFt6336() {
-  return infra::probeBoardI2cDevice(kFt6336Address, kTouchI2cTimeoutMs);
+  return infra::probeBoardControlDevice(kFt6336Address, kTouchI2cTimeoutMs);
 }
 
 bool readFt6336Sample(Ft6336Sample& sample) {
@@ -130,7 +130,7 @@ bool readFt6336Sample(Ft6336Sample& sample) {
 }
 
 bool setPca9557OutputState(uint8_t gpioBit, bool level) {
-  return infra::updateBoardI2cRegisterBit(
+  return infra::updateBoardControlRegisterBit(
       board::kIoExpanderAddress,
       board::kIoExpanderOutputReg,
       gpioBit,
@@ -139,7 +139,7 @@ bool setPca9557OutputState(uint8_t gpioBit, bool level) {
 }
 
 bool initIoExpander() {
-  return infra::ensureBoardIoExpanderInitialized();
+  return infra::ensureBoardIoExpanderReady();
 }
 
 bool initBacklightPwm() {

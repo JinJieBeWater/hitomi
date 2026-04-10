@@ -12,14 +12,13 @@
 #include <sensor.h>
 
 #include <atomic>
-#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "board/app_config.hpp"
 #include "board/pins.hpp"
-#include "infra/i2c/board_i2c_bus.hpp"
+#include "infra/board/board_control_bus.hpp"
 
 namespace infra {
 namespace {
@@ -30,7 +29,7 @@ constexpr uint32_t kCameraTaskStackSize = 6 * 1024;
 constexpr BaseType_t kCameraTaskCore = 0;
 
 bool setIoExpanderOutputBit(uint8_t gpioBit, bool level) {
-  return infra::updateBoardI2cRegisterBit(
+  return infra::updateBoardControlRegisterBit(
       board::kIoExpanderAddress,
       board::kIoExpanderOutputReg,
       gpioBit,
@@ -144,14 +143,15 @@ struct Esp32CameraPort::Impl {
     }
   }
 
-  void withStatusLock(const std::function<void(face::CameraStatus&)>& updater) {
+  template <typename Fn>
+  void withStatusLock(Fn&& updater) {
     if (statusMutex == nullptr) {
-      updater(status);
+      std::forward<Fn>(updater)(status);
       return;
     }
 
     if (xSemaphoreTake(statusMutex, portMAX_DELAY) == pdTRUE) {
-      updater(status);
+      std::forward<Fn>(updater)(status);
       xSemaphoreGive(statusMutex);
     }
   }
@@ -247,9 +247,9 @@ bool Esp32CameraPort::init() {
   impl_->withStatusLock([](face::CameraStatus& status) {
     status.lastError.clear();
   });
-  if (!infra::ensureBoardIoExpanderInitialized()) {
+  if (!infra::ensureBoardIoExpanderReady()) {
     impl_->withStatusLock([](face::CameraStatus& status) {
-      status.lastError = "shared board I2C bus init failed";
+      status.lastError = "board control bus init failed";
     });
     return false;
   }
