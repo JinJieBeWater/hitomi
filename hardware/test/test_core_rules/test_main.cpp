@@ -298,28 +298,111 @@ void testChooseWifiProfilePrefersPriorityThenRecentSuccess() {
   expect(chosen.value() == 2, "wifi chooser should prefer highest priority then most recent success");
 }
 
+void testRankWifiProfilesPrefersConfiguredProfilesByPriorityThenRecentSuccess() {
+  std::vector<core::WifiProfile> profiles = {
+      core::WifiProfile{
+          .ssid = "dorm",
+          .password = "dormpass",
+          .priority = 5,
+          .lastSuccessAt = 50,
+          .disabled = false,
+      },
+      core::WifiProfile{
+          .ssid = "lab",
+          .password = "labpass",
+          .priority = 10,
+          .lastSuccessAt = 10,
+          .disabled = false,
+      },
+      core::WifiProfile{
+          .ssid = "phone",
+          .password = "phonepass",
+          .priority = 10,
+          .lastSuccessAt = 90,
+          .disabled = false,
+      },
+      core::WifiProfile{
+          .ssid = "disabled",
+          .password = "secret",
+          .priority = 99,
+          .lastSuccessAt = 999,
+          .disabled = true,
+      },
+  };
+
+  const auto ranked = core::rankWifiProfiles(profiles);
+  expect(ranked.size() == 3, "wifi ranker should skip disabled profiles");
+  expect(ranked[0] == 2, "wifi ranker should prefer highest priority then most recent success");
+  expect(ranked[1] == 1, "wifi ranker should keep next-best configured profile");
+  expect(ranked[2] == 0, "wifi ranker should retain lower-priority profiles as fallback");
+}
+
 void testUpsertWifiProfileReplacesBySsidAndRespectsLimit() {
   std::vector<core::WifiProfile> profiles = {
-      core::WifiProfile{.ssid = "a", .password = "1", .priority = 1, .lastSuccessAt = 1, .disabled = false},
-      core::WifiProfile{.ssid = "b", .password = "2", .priority = 2, .lastSuccessAt = 2, .disabled = false},
+      core::WifiProfile{
+          .ssid = "a",
+          .password = "1",
+          .priority = 1,
+          .lastSuccessAt = 1,
+          .lastSuccessBssid = "AA:AA:AA:AA:AA:AA",
+          .lastSuccessChannel = 1,
+          .disabled = false,
+      },
+      core::WifiProfile{
+          .ssid = "b",
+          .password = "2",
+          .priority = 2,
+          .lastSuccessAt = 2,
+          .lastSuccessBssid = "BB:BB:BB:BB:BB:BB",
+          .lastSuccessChannel = 6,
+          .disabled = false,
+      },
   };
 
   core::upsertWifiProfile(
       profiles,
-      core::WifiProfile{.ssid = "b", .password = "new", .priority = 9, .lastSuccessAt = 9, .disabled = false},
+      core::WifiProfile{
+          .ssid = "b",
+          .password = "new",
+          .priority = 9,
+          .lastSuccessAt = 9,
+          .lastSuccessBssid = "CC:CC:CC:CC:CC:CC",
+          .lastSuccessChannel = 11,
+          .disabled = false,
+      },
       3);
   core::upsertWifiProfile(
       profiles,
-      core::WifiProfile{.ssid = "c", .password = "3", .priority = 3, .lastSuccessAt = 3, .disabled = false},
+      core::WifiProfile{
+          .ssid = "c",
+          .password = "3",
+          .priority = 3,
+          .lastSuccessAt = 3,
+          .lastSuccessBssid = "",
+          .lastSuccessChannel = 0,
+          .disabled = false,
+      },
       3);
   core::upsertWifiProfile(
       profiles,
-      core::WifiProfile{.ssid = "d", .password = "4", .priority = 4, .lastSuccessAt = 4, .disabled = false},
+      core::WifiProfile{
+          .ssid = "d",
+          .password = "4",
+          .priority = 4,
+          .lastSuccessAt = 4,
+          .lastSuccessBssid = "",
+          .lastSuccessChannel = 0,
+          .disabled = false,
+      },
       3);
 
   expect(profiles.size() == 3, "wifi profiles should respect configured limit");
   expect(profiles.front().ssid == "b", "updated wifi profile should be re-sorted to the front");
   expect(profiles.front().password == "new", "wifi profile should replace matching ssid");
+  expect(
+      profiles.front().lastSuccessBssid == "CC:CC:CC:CC:CC:CC",
+      "wifi profile should preserve updated last-known-good BSSID metadata");
+  expect(profiles.front().lastSuccessChannel == 11, "wifi profile should preserve updated last-known-good channel");
 }
 
 void testDecodeStorageAuxStateFallsBackToDefaultsOnInvalidPayload() {
@@ -472,6 +555,7 @@ int main() {
     testBuildShanghaiLocalDateUsesUtcPlusEight();
     testFailureLogHelpersCapRetention();
     testChooseWifiProfilePrefersPriorityThenRecentSuccess();
+    testRankWifiProfilesPrefersConfiguredProfilesByPriorityThenRecentSuccess();
     testUpsertWifiProfileReplacesBySsidAndRespectsLimit();
     testDecodeStorageAuxStateFallsBackToDefaultsOnInvalidPayload();
     testEncodeDecodeStorageAuxStateRoundTrips();

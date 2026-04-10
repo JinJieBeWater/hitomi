@@ -127,6 +127,8 @@ std::string encodeDeviceConfig(const core::DeviceConfig& config) {
     item["password"] = profile.password;
     item["priority"] = profile.priority;
     item["lastSuccessAt"] = profile.lastSuccessAt;
+    item["lastSuccessBssid"] = profile.lastSuccessBssid;
+    item["lastSuccessChannel"] = profile.lastSuccessChannel;
     item["disabled"] = profile.disabled;
   }
 
@@ -165,6 +167,8 @@ std::optional<core::DeviceConfig> decodeDeviceConfig(const std::string& payload)
         .password = item["password"] | "",
         .priority = item["priority"] | 0,
         .lastSuccessAt = item["lastSuccessAt"] | 0ULL,
+        .lastSuccessBssid = item["lastSuccessBssid"] | "",
+        .lastSuccessChannel = static_cast<uint8_t>(item["lastSuccessChannel"] | 0),
         .disabled = item["disabled"] | false,
     });
   }

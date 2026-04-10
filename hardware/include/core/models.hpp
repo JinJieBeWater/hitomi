@@ -49,6 +49,8 @@ struct WifiProfile {
   std::string password;
   int priority = 0;
   uint64_t lastSuccessAt = 0;
+  std::string lastSuccessBssid;
+  uint8_t lastSuccessChannel = 0;
   bool disabled = false;
 
   bool configured() const {

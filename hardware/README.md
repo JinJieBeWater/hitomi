@@ -118,7 +118,7 @@ If `platformio` is not on `PATH`, the same `python3 -m platformio ...` invocatio
 
 - Loads device config, snapshots, queue, and failure logs from local storage
 - Supports USB-C serial provisioning for Wi-Fi profiles, backend origin, and bootstrap identity
-- Automatically reconnects to known Wi-Fi profiles based on configured priority / prior success
+- Reconnects to known Wi-Fi profiles using last-known-good directed connect, scan-ranked candidates, and auth-failure cooldown
 - Supports bootstrap activation against the local backend before switching to runtime device credentials
 - Renders a single LVGL status screen
 - Registers FT6336 touch as an LVGL pointer input on the shared I2C bus
@@ -154,6 +154,46 @@ Supported commands:
 ```
 
 Responses include the current editable config snapshot for Web Serial forms, while still omitting activation secrets such as the runtime `apiKey`.
+
+## Wi-Fi Connection Mechanism
+
+The current firmware uses a staged connection strategy instead of the older
+"scan first, then try one profile" loop.
+
+At a high level:
+
+1. Provisioning stores a list of Wi-Fi profiles with operator-assigned priority.
+2. Successful connections persist last-known-good metadata per profile:
+   - `lastSuccessAt`
+   - `lastSuccessBssid`
+   - `lastSuccessChannel`
+3. On boot or reconnect, the runtime first attempts a directed connect using the
+   best last-known-good profile and its stored `BSSID/channel` when available.
+4. If that fails, the runtime performs one async scan, builds one best visible
+   candidate per configured profile, and ranks those candidates by:
+   - profile priority
+   - prior success recency
+   - last-known-good BSSID match
+   - RSSI
+5. If scan-based candidates still produce no usable target, the runtime performs
+   one fallback direct connect against the best configured profile. This keeps
+   hidden SSIDs and stale scan results usable.
+6. Authentication-style failures such as wrong passwords trigger a runtime
+   cooldown for that profile so a bad credential does not repeatedly delay
+   better profiles in the same boot session.
+7. Connection state is updated from Wi-Fi driver events. `GOT_IP` persists the
+   latest last-known-good metadata; disconnect reasons are used to classify
+   retry behavior.
+
+Important constraint:
+
+- A scan can tell the device which APs are visible, their RSSI, auth mode,
+  BSSID, and channel. It cannot prove a password is correct. Password validity
+  is only known after a real association/authentication attempt.
+
+Detailed design notes live in:
+
+- `hardware/docs/wifi-connection-mechanism.md`
 
 ## Demo Flow
 

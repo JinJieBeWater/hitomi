@@ -81,6 +81,7 @@ void AppRuntime::setup() {
   state.lastTemplateStoreProbeMs = nowMs;
   state.lastButtonPressed = digitalRead(board::kBootKeyPin) == LOW;
 
+  processWifiDriverEvents(context, state, nowMs);
   ensureWifiConnection(context, state, nowMs);
   probeConnectivity(context, state, nowMs);
   printRuntimeCheck(context, state);
@@ -95,11 +96,13 @@ void AppRuntime::tick(uint32_t nowMs) {
   processUsbProvisioning(context, state, nowMs);
   pollBootButton(state, nowMs);
   syncDeviceApiClientConfig(context, state);
+  processWifiDriverEvents(context, state, nowMs);
   ensureWifiConnection(context, state, nowMs);
 
   while (const auto command = context.display.consumeCommand()) {
     handleDisplayCommand(context, state, *command, nowMs);
   }
+
 
   if (nowMs - state.lastNetworkProbeMs >= board::kNetworkProbeIntervalMs) {
     probeConnectivity(context, state, nowMs);

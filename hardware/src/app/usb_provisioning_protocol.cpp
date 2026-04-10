@@ -43,6 +43,8 @@ std::optional<UsbProvisioningCommand> parseUsbProvisioningCommand(const std::str
           .password = item["password"] | "",
           .priority = item["priority"] | 0,
           .lastSuccessAt = item["lastSuccessAt"] | 0ULL,
+          .lastSuccessBssid = item["lastSuccessBssid"] | "",
+          .lastSuccessChannel = static_cast<uint8_t>(item["lastSuccessChannel"] | 0),
           .disabled = item["disabled"] | false,
       });
     }

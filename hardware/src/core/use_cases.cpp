@@ -229,6 +229,22 @@ std::optional<std::size_t> chooseWifiProfile(
   return bestIndex;
 }
 
+std::vector<std::size_t> rankWifiProfiles(const std::vector<WifiProfile>& profiles) {
+  std::vector<std::size_t> ranked;
+  ranked.reserve(profiles.size());
+
+  for (std::size_t index = 0; index < profiles.size(); ++index) {
+    if (profiles[index].configured()) {
+      ranked.push_back(index);
+    }
+  }
+
+  std::sort(ranked.begin(), ranked.end(), [&](std::size_t left, std::size_t right) {
+    return compareWifiProfiles(profiles[left], profiles[right]);
+  });
+  return ranked;
+}
+
 void markWifiProfileSuccess(std::vector<WifiProfile>& profiles, const std::string& ssid, uint64_t connectedAt) {
   for (auto& profile : profiles) {
     if (profile.ssid == ssid) {

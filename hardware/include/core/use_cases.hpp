@@ -38,6 +38,7 @@ std::optional<AttendanceUploadStatus> attendanceUploadStatusFromApiValue(const s
 
 std::optional<std::size_t> chooseWifiProfile(
     const std::vector<WifiProfile>& profiles, const std::vector<std::string>& availableSsids);
+std::vector<std::size_t> rankWifiProfiles(const std::vector<WifiProfile>& profiles);
 void markWifiProfileSuccess(std::vector<WifiProfile>& profiles, const std::string& ssid, uint64_t connectedAt);
 void upsertWifiProfile(std::vector<WifiProfile>& profiles, const WifiProfile& profile, std::size_t limit = 5);
 

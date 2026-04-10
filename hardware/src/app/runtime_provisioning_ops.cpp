@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 
+#include "app/runtime_lifecycle_service.hpp"
 #include "app/runtime_network_ops.hpp"
 #include "app/runtime_storage_ops.hpp"
 #include "app/usb_provisioning_protocol.hpp"
@@ -15,10 +16,22 @@ namespace {
 void resetConnectivity(RuntimeState& state) {
   WiFi.disconnect(false, false);
   WiFi.scanDelete();
+  state.wifiConnectInProgress = false;
   state.wifiScanInProgress = false;
   state.connectivity = ConnectivityState::Disconnected;
   state.activeWifiSsid.reset();
   state.lastWifiConnectAttemptMs = 0;
+  state.lastWifiRetryRoundMs = 0;
+  state.lastWifiScanRequestMs = 0;
+  state.lastWifiScanCompletedMs = 0;
+  state.lastWifiEventSequence = currentWifiDriverEventSequence();
+  state.wifiCandidateCursor = 0;
+  state.wifiShouldTryLastKnownGood = true;
+  state.wifiConfiguredFallbackAttempted = false;
+  state.lastWifiDisconnectReason.reset();
+  state.activeWifiProfileIndex.reset();
+  state.wifiCandidates.clear();
+  state.wifiProfileRuntime.clear();
   state.lastActivationAttemptMs = 0;
   state.apiProbeSucceeded = false;
   state.apiProbeStatusCode = std::nullopt;

@@ -73,6 +73,10 @@
 
 - `deviceCode`
 - `apiKey`
+- 设备运行配置中的关键连接信息，例如：
+  - Wi-Fi profiles
+  - 后台地址
+  - bootstrap identity
 - 少量设备级开关
 - 存储架构版本号
 
@@ -81,6 +85,15 @@
 - 不保存大对象
 - 不保存模板库
 - 不依赖 `LittleFS` 或 `SD Card`
+
+补充说明：
+
+- 若设备本地保存 Wi-Fi profiles，可同时附带用于加速重连的连接元数据，例如：
+  - `lastSuccessAt`
+  - `lastSuccessBssid`
+  - `lastSuccessChannel`
+- 这类元数据属于设备运行配置的一部分，允许持久化
+- 认证失败后的冷却状态属于运行时内存态，不要求跨重启持久化
 
 ### 2. LittleFS
 
