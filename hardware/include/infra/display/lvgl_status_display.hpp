@@ -20,6 +20,8 @@ class LvglStatusDisplay final : public DisplayPort {
   bool init() override;
   bool ready() const override;
   void render(const ui::AppViewModel& viewModel) override;
+  void updateCameraPreview(const DisplayRgb565Frame& frame) override;
+  void clearCameraPreview() override;
   void tick(uint32_t nowMs) override;
   std::optional<DisplayCommand> consumeCommand() override;
 

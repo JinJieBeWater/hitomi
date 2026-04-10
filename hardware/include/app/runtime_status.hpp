@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/models.hpp"
+#include "face/ports.hpp"
 
 namespace app {
 
@@ -41,6 +42,13 @@ struct RuntimeStatus {
   bool syncInFlight = false;
   bool uploadInFlight = false;
   bool faceModuleEnabled = false;
+  bool cameraAvailable = false;
+  bool cameraReady = false;
+  uint32_t cameraCaptureCount = 0;
+  uint32_t cameraFailedCaptureCount = 0;
+  face::CameraFrameInfo cameraLastFrame = {};
+  std::string cameraSensorModel;
+  std::string cameraLastError;
   std::optional<std::string> lastErrorCode;
 };
 

@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "board/app_config.hpp"
 #include "infra/display/szpi_lvgl_display.hpp"
@@ -102,8 +103,12 @@ struct LvglStatusDisplayData {
   std::array<lv_obj_t*, kSidebarPages.size()> pageContainers = {};
 
   lv_obj_t* homePeriodLabel = nullptr;
+  lv_obj_t* homeCameraImage = nullptr;
   lv_obj_t* homeCameraLabel = nullptr;
   lv_obj_t* homeAttendanceLabel = nullptr;
+  lv_image_dsc_t homeCameraImageDsc = {};
+  std::vector<uint16_t> homeCameraPreviewBuffer = {};
+  bool homeCameraPreviewReady = false;
 
   lv_obj_t* enrollSummaryLabel = nullptr;
   lv_obj_t* enrollTaskList = nullptr;
@@ -303,6 +308,19 @@ void refreshHomePage(LvglStatusDisplayData& data) {
   lv_label_set_text(data.homePeriodLabel, data.lastViewModel.periodLine.c_str());
   lv_label_set_text(data.homeCameraLabel, data.lastViewModel.cameraHintLine.c_str());
   lv_label_set_text(data.homeAttendanceLabel, data.lastViewModel.attendanceResultLine.c_str());
+  if (data.homeCameraImage != nullptr) {
+    if (data.homeCameraPreviewReady) {
+      lv_obj_clear_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_align(data.homeCameraLabel, LV_ALIGN_BOTTOM_LEFT, 10, -8);
+      lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_LEFT, 0);
+      lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_DOT);
+    } else {
+      lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_center(data.homeCameraLabel);
+      lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, 0);
+      lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
+    }
+  }
 }
 
 void refreshEnrollPage(LvglStatusDisplayData& data) {
@@ -536,7 +554,12 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_style_radius(cameraFrame, 18, 0);
   lv_obj_remove_flag(cameraFrame, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(cameraFrame, LV_SCROLLBAR_MODE_OFF);
+  data.homeCameraImage = lv_image_create(cameraFrame);
+  lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_center(data.homeCameraImage);
   data.homeCameraLabel = lv_label_create(cameraFrame);
+  lv_obj_set_width(data.homeCameraLabel, kPageWidth - 24);
+  lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
   applyLabelStyle(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, kMutedTextHex);
   lv_obj_center(data.homeCameraLabel);
 
@@ -657,6 +680,61 @@ void createUi(LvglStatusDisplayData& data) {
 
 struct LvglStatusDisplay::Impl : LvglStatusDisplayData {};
 
+namespace {
+
+void updatePreviewDescriptor(LvglStatusDisplayData& data, lv_coord_t width, lv_coord_t height) {
+  data.homeCameraImageDsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+  data.homeCameraImageDsc.header.cf = LV_COLOR_FORMAT_RGB565;
+  data.homeCameraImageDsc.header.flags = 0;
+  data.homeCameraImageDsc.header.w = static_cast<uint16_t>(width);
+  data.homeCameraImageDsc.header.h = static_cast<uint16_t>(height);
+  data.homeCameraImageDsc.header.stride = static_cast<uint16_t>(width * sizeof(uint16_t));
+  data.homeCameraImageDsc.data_size = static_cast<uint32_t>(width * height * sizeof(uint16_t));
+  data.homeCameraImageDsc.data = reinterpret_cast<const uint8_t*>(data.homeCameraPreviewBuffer.data());
+}
+
+void resampleCameraPreview(
+    std::vector<uint16_t>& destination,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight,
+    const uint8_t* source,
+    uint16_t sourceWidth,
+    uint16_t sourceHeight) {
+  auto readSourcePixel = [&](uint32_t x, uint32_t y) -> uint16_t {
+    const std::size_t sourceIndex = (static_cast<std::size_t>(y) * static_cast<std::size_t>(sourceWidth) + static_cast<std::size_t>(x)) * 2U;
+    const uint8_t first = source[sourceIndex];
+    const uint8_t second = source[sourceIndex + 1];
+    if (board::kCameraRgb565BigEndian) {
+      return static_cast<uint16_t>((static_cast<uint16_t>(first) << 8) | second);
+    }
+    return static_cast<uint16_t>((static_cast<uint16_t>(second) << 8) | first);
+  };
+
+  const uint32_t sourceAspectScaled = static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight);
+  const uint32_t targetAspectScaled = static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth);
+
+  uint32_t cropWidth = sourceWidth;
+  uint32_t cropHeight = sourceHeight;
+  if (sourceAspectScaled > targetAspectScaled) {
+    cropWidth = (static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth)) / static_cast<uint32_t>(targetHeight);
+  } else if (sourceAspectScaled < targetAspectScaled) {
+    cropHeight = (static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight)) / static_cast<uint32_t>(targetWidth);
+  }
+
+  const uint32_t cropX = (static_cast<uint32_t>(sourceWidth) - cropWidth) / 2U;
+  const uint32_t cropY = (static_cast<uint32_t>(sourceHeight) - cropHeight) / 2U;
+  for (lv_coord_t y = 0; y < targetHeight; ++y) {
+    const uint32_t sourceY = cropY + (static_cast<uint32_t>(y) * cropHeight) / static_cast<uint32_t>(targetHeight);
+    for (lv_coord_t x = 0; x < targetWidth; ++x) {
+      const uint32_t sourceX = cropX + (static_cast<uint32_t>(x) * cropWidth) / static_cast<uint32_t>(targetWidth);
+      destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
+          readSourcePixel(sourceX, sourceY);
+    }
+  }
+}
+
+}  // namespace
+
 LvglStatusDisplay::LvglStatusDisplay() : impl_(std::make_unique<Impl>()) {}
 
 LvglStatusDisplay::~LvglStatusDisplay() = default;
@@ -694,6 +772,53 @@ void LvglStatusDisplay::render(const ui::AppViewModel& viewModel) {
   impl_->hasViewModel = true;
   refreshUi(*impl_);
   lv_timer_handler();
+}
+
+void LvglStatusDisplay::updateCameraPreview(const DisplayRgb565Frame& frame) {
+  if (!ready() || frame.data == nullptr || frame.width == 0 || frame.height == 0 || impl_->homeCameraImage == nullptr) {
+    return;
+  }
+  if (impl_->currentPage != SidebarPage::Home) {
+    return;
+  }
+
+  const lv_coord_t targetWidth = kPageWidth;
+  const lv_coord_t targetHeight = kHomeCameraHeight;
+  const std::size_t bufferSize = static_cast<std::size_t>(targetWidth) * static_cast<std::size_t>(targetHeight);
+  if (impl_->homeCameraPreviewBuffer.size() != bufferSize) {
+    impl_->homeCameraPreviewBuffer.assign(bufferSize, 0);
+  }
+
+  resampleCameraPreview(
+      impl_->homeCameraPreviewBuffer,
+      targetWidth,
+      targetHeight,
+      frame.data,
+      frame.width,
+      frame.height);
+  updatePreviewDescriptor(*impl_, targetWidth, targetHeight);
+  impl_->homeCameraPreviewReady = true;
+
+  lv_image_set_src(impl_->homeCameraImage, &impl_->homeCameraImageDsc);
+  lv_obj_set_size(impl_->homeCameraImage, targetWidth, targetHeight);
+  lv_obj_center(impl_->homeCameraImage);
+  lv_obj_clear_flag(impl_->homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_invalidate(impl_->homeCameraImage);
+  if (impl_->currentPage == SidebarPage::Home && impl_->hasViewModel) {
+    refreshHomePage(*impl_);
+  }
+}
+
+void LvglStatusDisplay::clearCameraPreview() {
+  if (!ready() || impl_->homeCameraImage == nullptr) {
+    return;
+  }
+
+  impl_->homeCameraPreviewReady = false;
+  lv_obj_add_flag(impl_->homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+  if (impl_->currentPage == SidebarPage::Home && impl_->hasViewModel) {
+    refreshHomePage(*impl_);
+  }
 }
 
 void LvglStatusDisplay::tick(uint32_t nowMs) {

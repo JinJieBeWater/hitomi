@@ -2,6 +2,8 @@
 # Project-local copied Arduino component used only during PlatformIO builds
 .pio/installed
 managed_components
+.platformio-home
+.component-cache
 sdkconfig.*
 !sdkconfig.defaults
 .vscode/.browse.c_cpp.db*

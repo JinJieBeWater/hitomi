@@ -2,7 +2,6 @@
 
 #include <Arduino.h>
 
-#include <driver/i2c.h>
 #include <driver/ledc.h>
 #include <driver/spi_master.h>
 #include <esp_err.h>
@@ -18,18 +17,12 @@
 
 #include "board/pins.hpp"
 #include "infra/display/touch_transform.hpp"
+#include "infra/i2c/board_i2c_bus.hpp"
 
 namespace {
 
-constexpr TickType_t kI2cTimeout = pdMS_TO_TICKS(1000);
-constexpr TickType_t kTouchI2cTimeout = pdMS_TO_TICKS(20);
-
-constexpr uint8_t kPca9557Address = 0x19;
-constexpr uint8_t kPca9557OutputReg = 0x01;
-constexpr uint8_t kPca9557ConfigReg = 0x03;
-constexpr uint8_t kPca9557DefaultOutput = 0x05;
-constexpr uint8_t kPca9557DefaultConfig = 0xF8;
-constexpr uint8_t kLcdCsBit = 1u << 0;
+constexpr int kI2cTimeoutMs = 1000;
+constexpr int kTouchI2cTimeoutMs = 20;
 
 constexpr uint8_t kFt6336Address = 0x38;
 constexpr uint8_t kFt6336TouchStatusReg = 0x02;
@@ -57,7 +50,6 @@ struct SzpiLvglDisplayImpl {
   infra::TouchReadState touchState = {};
   uint32_t touchTapCount = 0;
   uint32_t lastTouchErrorLogMs = 0;
-  bool i2cInstalled = false;
   bool spiInitialized = false;
   bool touchReady = false;
   bool ready = false;
@@ -104,30 +96,12 @@ bool onColorTransferDone(
   return false;
 }
 
-bool writePca9557Register(uint8_t reg, uint8_t value) {
-  uint8_t payload[] = {reg, value};
-  esp_err_t err =
-      i2c_master_write_to_device(board::kI2cPort, kPca9557Address, payload, sizeof(payload), kI2cTimeout);
-  if (err != ESP_OK) {
-    Serial.printf(
-        "[SZPI.ESP_LCD] PCA9557 write reg=0x%02X value=0x%02X failed: %s\n",
-        reg,
-        value,
-        esp_err_to_name(err));
-    return false;
-  }
-
-  return true;
-}
-
-bool readI2cRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, size_t length, TickType_t timeout) {
-  esp_err_t err = i2c_master_write_read_device(board::kI2cPort, address, &startReg, sizeof(startReg), buffer, length, timeout);
-  return err == ESP_OK;
+bool readI2cRegisters(uint8_t address, uint8_t startReg, uint8_t* buffer, size_t length, int timeoutMs) {
+  return infra::readBoardI2cRegisters(address, startReg, buffer, length, timeoutMs);
 }
 
 bool probeFt6336() {
-  uint8_t touchStatus = 0;
-  return readI2cRegisters(kFt6336Address, kFt6336TouchStatusReg, &touchStatus, sizeof(touchStatus), kTouchI2cTimeout);
+  return infra::probeBoardI2cDevice(kFt6336Address, kTouchI2cTimeoutMs);
 }
 
 bool readFt6336Sample(Ft6336Sample& sample) {
@@ -137,7 +111,7 @@ bool readFt6336Sample(Ft6336Sample& sample) {
           kFt6336TouchStatusReg,
           payload,
           sizeof(payload),
-          kTouchI2cTimeout)) {
+          kTouchI2cTimeoutMs)) {
     return false;
   }
 
@@ -156,41 +130,16 @@ bool readFt6336Sample(Ft6336Sample& sample) {
 }
 
 bool setPca9557OutputState(uint8_t gpioBit, bool level) {
-  uint8_t output = kPca9557DefaultOutput;
-  if (level) {
-    output |= gpioBit;
-  } else {
-    output &= static_cast<uint8_t>(~gpioBit);
-  }
-
-  return writePca9557Register(kPca9557OutputReg, output);
+  return infra::updateBoardI2cRegisterBit(
+      board::kIoExpanderAddress,
+      board::kIoExpanderOutputReg,
+      gpioBit,
+      level,
+      kI2cTimeoutMs);
 }
 
 bool initIoExpander() {
-  i2c_config_t cfg = {};
-  cfg.mode = I2C_MODE_MASTER;
-  cfg.sda_io_num = board::kI2cSdaPin;
-  cfg.scl_io_num = board::kI2cSclPin;
-  cfg.sda_pullup_en = GPIO_PULLUP_ENABLE;
-  cfg.scl_pullup_en = GPIO_PULLUP_ENABLE;
-  cfg.master.clk_speed = 100000;
-
-  if (!logEspError(i2c_param_config(board::kI2cPort, &cfg), "i2c_param_config")) {
-    return false;
-  }
-
-  esp_err_t err = i2c_driver_install(board::kI2cPort, cfg.mode, 0, 0, 0);
-  if (err == ESP_ERR_INVALID_STATE) {
-    i2c_driver_delete(board::kI2cPort);
-    err = i2c_driver_install(board::kI2cPort, cfg.mode, 0, 0, 0);
-  }
-
-  if (!logEspError(err, "i2c_driver_install")) {
-    return false;
-  }
-
-  return writePca9557Register(kPca9557OutputReg, kPca9557DefaultOutput) &&
-         writePca9557Register(kPca9557ConfigReg, kPca9557DefaultConfig);
+  return infra::ensureBoardIoExpanderInitialized();
 }
 
 bool initBacklightPwm() {
@@ -283,7 +232,7 @@ bool initPanel(SzpiLvglDisplayImpl& impl) {
   if (!logEspError(esp_lcd_panel_reset(impl.panel), "esp_lcd_panel_reset")) {
     return false;
   }
-  if (!setPca9557OutputState(kLcdCsBit, false)) {
+  if (!setPca9557OutputState(board::kIoExpanderLcdCsBit, false)) {
     Serial.println("[SZPI.ESP_LCD] Failed to pull LCD_CS low");
     return false;
   }
@@ -438,10 +387,6 @@ void releaseDisplayResources(SzpiLvglDisplayImpl& impl) {
     impl.spiInitialized = false;
   }
 
-  if (impl.i2cInstalled) {
-    i2c_driver_delete(board::kI2cPort);
-    impl.i2cInstalled = false;
-  }
 }
 
 }  // namespace
@@ -470,7 +415,6 @@ bool SzpiLvglDisplay::init() {
     Serial.println("[SZPI.ESP_LCD] PCA9557 init failed");
     return false;
   }
-  impl_->i2cInstalled = true;
   if (!initBacklightPwm()) {
     Serial.println("[SZPI.ESP_LCD] Backlight PWM init failed");
     return false;

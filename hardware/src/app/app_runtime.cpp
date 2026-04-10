@@ -4,6 +4,7 @@
 
 #include <memory>
 
+#include "app/runtime_camera_ops.hpp"
 #include "app/runtime_lifecycle_service.hpp"
 #include "app/runtime_network_executor.hpp"
 #include "app/runtime_network_ops.hpp"
@@ -77,9 +78,12 @@ void AppRuntime::setup() {
   if (!state.displayReady) {
     Serial.println("[APP] display init failed");
   }
+  initializeCamera(context, state);
 
   const uint32_t nowMs = millis();
   state.lastButtonPollMs = nowMs;
+  state.lastCameraPollMs = nowMs;
+  state.lastCameraStatusRenderMs = nowMs;
   state.lastNetworkProbeMs = nowMs;
   state.lastTemplateStoreProbeMs = nowMs;
   state.lastButtonPressed = digitalRead(board::kBootKeyPin) == LOW;
@@ -106,6 +110,7 @@ void AppRuntime::tick(uint32_t nowMs) {
     handleDisplayCommand(context, state, *command, nowMs);
   }
 
+  pollCamera(context, state, nowMs);
 
   if (nowMs - state.lastNetworkProbeMs >= board::kNetworkProbeIntervalMs) {
     probeConnectivity(context, state, nowMs);

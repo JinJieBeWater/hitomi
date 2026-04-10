@@ -203,6 +203,29 @@ std::string enrollmentTaskSummary(const app::RuntimeStatus& status) {
   return "Enrollment tasks: " + std::to_string(status.snapshots.enrollmentTasks.size()) + " pending";
 }
 
+std::string cameraLabel(const app::RuntimeStatus& status) {
+  if (!status.cameraAvailable) {
+    return "Camera unavailable";
+  }
+
+  if (!status.cameraReady) {
+    if (!status.cameraLastError.empty()) {
+      return "Camera init failed\n" + status.cameraLastError;
+    }
+    return "Camera present\nWaiting for init";
+  }
+
+  std::ostringstream oss;
+  oss << (status.cameraSensorModel.empty() ? "Camera ready" : status.cameraSensorModel + " ready");
+  if (status.cameraLastFrame.bytes > 0) {
+    oss << "\n" << status.cameraLastFrame.width << "x" << status.cameraLastFrame.height << " "
+        << face::cameraPixelFormatName(status.cameraLastFrame.pixelFormat) << " #" << status.cameraCaptureCount;
+  } else {
+    oss << "\nWaiting for first frame";
+  }
+  return oss.str();
+}
+
 }  // namespace
 
 AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
@@ -210,7 +233,7 @@ AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
   view.title = "Hitomi Device";
   view.subtitle = subtitleLabel(status);
   view.periodLine = periodLabel(status);
-  view.cameraHintLine = "Camera feed placeholder";
+  view.cameraHintLine = cameraLabel(status);
   view.attendanceResultLine = attendanceResultLabel(status);
   view.enrollmentTasks = enrollmentTasks(status);
   view.enrollmentTaskSummaryLine = enrollmentTaskSummary(status);

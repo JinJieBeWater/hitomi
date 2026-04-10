@@ -56,6 +56,8 @@ struct RuntimeState {
   bool wifiConfiguredFallbackAttempted = false;
   uint32_t lastButtonPollMs = 0;
   uint32_t lastApiProbeAttemptMs = 0;
+  uint32_t lastCameraPollMs = 0;
+  uint32_t lastCameraStatusRenderMs = 0;
   uint32_t lastNetworkProbeMs = 0;
   uint32_t lastTemplateStoreProbeMs = 0;
   uint32_t lastWifiConnectAttemptMs = 0;

@@ -4,6 +4,7 @@
 #include "app/runtime_network_executor.hpp"
 #include "board/app_config.hpp"
 #include "face/ports.hpp"
+#include "infra/camera/esp32_camera_port.hpp"
 #include "infra/display/lvgl_status_display.hpp"
 #include "infra/network/http_device_api_client.hpp"
 #include "infra/storage/json_local_store.hpp"
@@ -19,7 +20,7 @@ AppRuntime& runtime() {
   static infra::HttpDeviceApiClient deviceApiClient(board::apiBaseUrl());
   static std::unique_ptr<RuntimeNetworkExecutor> networkExecutor = createRuntimeNetworkExecutor(deviceApiClient);
   static infra::SdMmcTemplateStore templateStore;
-  static face::NoopCameraPort camera;
+  static infra::Esp32CameraPort camera;
   static face::NoopEnrollmentServicePort enrollmentService;
   static face::NoopRecognitionServicePort recognitionService;
   static AppRuntime appRuntime(

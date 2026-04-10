@@ -18,6 +18,12 @@ struct DisplayCommand {
   std::string targetId;
 };
 
+struct DisplayRgb565Frame {
+  const uint8_t* data = nullptr;
+  uint16_t width = 0;
+  uint16_t height = 0;
+};
+
 class DisplayPort {
  public:
   virtual ~DisplayPort() = default;
@@ -25,6 +31,8 @@ class DisplayPort {
   virtual bool init() = 0;
   virtual bool ready() const = 0;
   virtual void render(const ui::AppViewModel& viewModel) = 0;
+  virtual void updateCameraPreview(const DisplayRgb565Frame& frame) = 0;
+  virtual void clearCameraPreview() = 0;
   virtual void tick(uint32_t nowMs) = 0;
   virtual std::optional<DisplayCommand> consumeCommand() = 0;
 };

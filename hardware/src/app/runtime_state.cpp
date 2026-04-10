@@ -38,6 +38,14 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.syncInFlight = state.syncInFlight;
   status.uploadInFlight = state.uploadInFlight;
   status.faceModuleEnabled = state.faceModuleEnabled;
+  const face::CameraStatus cameraStatus = context.camera.status();
+  status.cameraAvailable = cameraStatus.supported;
+  status.cameraReady = cameraStatus.initialized;
+  status.cameraCaptureCount = cameraStatus.captureCount;
+  status.cameraFailedCaptureCount = cameraStatus.failedCaptureCount;
+  status.cameraLastFrame = cameraStatus.lastFrame;
+  status.cameraSensorModel = cameraStatus.sensorModel;
+  status.cameraLastError = cameraStatus.lastError;
   status.lastErrorCode = state.lastErrorCode;
   return status;
 }
