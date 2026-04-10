@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
 import { computed, ref, watch } from "vue";
 
+import { formatDeviceSerialConnectError, useDeviceSerial } from "~/composables/useDeviceSerial";
 import { usePagedListState } from "~/composables/usePagedListState";
 import { colorDeviceStatus, formatDateTime, labelDeviceStatus } from "~/utils/format";
 
@@ -13,6 +14,7 @@ definePageMeta({
 const { $orpc } = useNuxtApp();
 const queryClient = useQueryClient();
 const toast = useToast();
+const serial = useDeviceSerial();
 const pageSize = 20;
 
 const page = ref(1);
@@ -31,7 +33,7 @@ const lastCreated = ref<{
   bootstrapSecret: string;
   name: string;
 } | null>(null);
-const usbSlideoverOpen = ref(false);
+const serialConnectLoading = ref(false);
 const deleteDeviceImpact = ref<{
   id: string;
   deviceCode: string;
@@ -213,6 +215,23 @@ async function copyText(label: string, value: string) {
   }
 }
 
+async function openSerialConfigPage() {
+  serialConnectLoading.value = true;
+
+  try {
+    await serial.requestPortConnection();
+    await navigateTo("/devices/serial");
+  } catch (error: any) {
+    toast.add({
+      title: "连接设备失败",
+      description: formatDeviceSerialConnectError(error),
+      color: "error",
+    });
+  } finally {
+    serialConnectLoading.value = false;
+  }
+}
+
 function resetFilters() {
   resetPage();
   keyword.value = "";
@@ -305,7 +324,14 @@ function getRowActions(item: any) {
       <PageHeader title="设备管理" :badges="headerBadges">
         <template #actions>
           <UButton variant="outline" icon="i-lucide-refresh-cw" @click="devicesQuery.refetch()">刷新</UButton>
-          <UButton variant="outline" icon="i-lucide-usb" @click="usbSlideoverOpen = true">连接设备</UButton>
+          <UButton
+            variant="outline"
+            icon="i-lucide-usb"
+            :loading="serialConnectLoading"
+            @click="openSerialConfigPage"
+          >
+            连接设备
+          </UButton>
           <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()">创建设备</UButton>
         </template>
       </PageHeader>
@@ -467,10 +493,8 @@ function getRowActions(item: any) {
         @copy:code="lastCreated && copyText('设备码', lastCreated.deviceCode)"
         @copy:bootstrap-serial="lastCreated && copyText('Bootstrap 序列号', lastCreated.bootstrapSerial)"
         @copy:bootstrap-secret="lastCreated && copyText('Bootstrap 密钥', lastCreated.bootstrapSecret)"
-        @start-activation="createdResultOpen = false; usbSlideoverOpen = true"
+        @start-activation="createdResultOpen = false; openSerialConfigPage()"
       />
-
-      <DeviceUsbSlideover v-model:open="usbSlideoverOpen" />
 
       <DeleteConfirmModal
         :open="deleteDeviceOpen"

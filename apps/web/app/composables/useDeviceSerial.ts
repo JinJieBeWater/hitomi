@@ -46,15 +46,22 @@ type DeviceSerialResponse = {
 };
 
 type BrowserSerialPort = {
+  connected?: boolean;
   readable: ReadableStream<Uint8Array> | null;
   writable: WritableStream<Uint8Array> | null;
   open(options: { baudRate: number }): Promise<void>;
   close(): Promise<void>;
 };
 
-type BrowserSerialApi = {
+type BrowserSerialApi = EventTarget & {
+  getPorts(): Promise<BrowserSerialPort[]>;
   requestPort(): Promise<BrowserSerialPort>;
 };
+
+type RestoreAuthorizedPortResult =
+  | { status: "restored"; port: BrowserSerialPort }
+  | { status: "none" }
+  | { status: "multiple" };
 
 function getSerialApi(): BrowserSerialApi | null {
   if (!import.meta.client || typeof navigator === "undefined") {
@@ -168,83 +175,226 @@ function timeoutPromise(timeoutMs: number) {
 
 const MAX_LOG_LINES = 500;
 
-export function useDeviceSerial() {
-  const port = ref<BrowserSerialPort | null>(null);
-  const reader = ref<ReadableStreamDefaultReader<Uint8Array> | null>(null);
-  const writer = ref<WritableStreamDefaultWriter<Uint8Array> | null>(null);
-  const lineBuffer = ref("");
-  const lastRawLine = ref("");
-  const serialLogs = ref<string[]>([]);
-  const supported = computed(() => getSerialApi() !== null);
-  const connected = computed(() => port.value !== null);
-  const encoder = new TextEncoder();
-  const decoder = new TextDecoder();
+const sharedPort = ref<BrowserSerialPort | null>(null);
+const sharedReader = ref<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+const sharedWriter = ref<WritableStreamDefaultWriter<Uint8Array> | null>(null);
+const sharedLineBuffer = ref("");
+const sharedLastRawLine = ref("");
+const sharedSerialLogs = ref<string[]>([]);
+const sharedSupported = computed(() => getSerialApi() !== null);
+const sharedConnected = computed(() => sharedPort.value !== null);
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+let sharedEventsBound = false;
 
-  async function connect() {
+export function formatDeviceSerialConnectError(
+  error: any,
+  fallback = "连接设备失败，请检查 USB 连接后重试。",
+) {
+  const message = error?.message || "";
+  const name = error?.name || "";
+
+  if (
+    name === "NotFoundError" ||
+    /No port selected/i.test(message) ||
+    /requestPort/i.test(message)
+  ) {
+    return "未选择串口设备。";
+  }
+
+  if (name === "NetworkError") {
+    return "串口连接失败，请确认设备未被其他程序占用。";
+  }
+
+  return message || fallback;
+}
+
+function shouldResetConnection(error: any) {
+  const message = error?.message || "";
+  const name = error?.name || "";
+
+  return (
+    name === "NetworkError" ||
+    name === "InvalidStateError" ||
+    /串口已断开/.test(message) ||
+    /device has been lost/i.test(message)
+  );
+}
+
+function isPortLogicallyConnected(port: BrowserSerialPort | null | undefined) {
+  return Boolean(port && port.connected !== false);
+}
+
+function isSharedConnectionHealthy() {
+  return Boolean(
+    sharedPort.value &&
+    isPortLogicallyConnected(sharedPort.value) &&
+    sharedPort.value.readable &&
+    sharedPort.value.writable &&
+    sharedReader.value &&
+    sharedWriter.value,
+  );
+}
+
+function resetSharedConnectionState() {
+  sharedPort.value = null;
+  sharedReader.value = null;
+  sharedWriter.value = null;
+  sharedLineBuffer.value = "";
+}
+
+function resetSharedSessionOutput() {
+  sharedSerialLogs.value = [];
+  sharedLastRawLine.value = "";
+}
+
+async function teardownSharedConnection(options: { closePort?: boolean } = {}) {
+  const { closePort = true } = options;
+  const activePort = sharedPort.value;
+
+  try {
+    await sharedReader.value?.cancel();
+  } catch {}
+  try {
+    sharedReader.value?.releaseLock();
+  } catch {}
+  try {
+    sharedWriter.value?.releaseLock();
+  } catch {}
+  if (closePort && activePort) {
+    try {
+      await activePort.close();
+    } catch {}
+  }
+
+  resetSharedConnectionState();
+}
+
+async function openSharedPort(port: BrowserSerialPort) {
+  if (!port.readable || !port.writable) {
+    await port.open({ baudRate: 115200 });
+  }
+
+  if (!port.readable || !port.writable) {
+    throw new Error("串口不可读写。");
+  }
+
+  sharedPort.value = port;
+  sharedReader.value = port.readable.getReader();
+  sharedWriter.value = port.writable.getWriter();
+  sharedLineBuffer.value = "";
+}
+
+function ensureSerialEventHandlers() {
+  if (sharedEventsBound) {
+    return;
+  }
+
+  const serialApi = getSerialApi();
+  if (!serialApi) {
+    return;
+  }
+
+  serialApi.addEventListener("disconnect", (event) => {
+    const disconnectedPort =
+      (event as Event & { port?: BrowserSerialPort | null }).port ??
+      ((event.target as BrowserSerialPort | null) || null);
+
+    if (disconnectedPort && disconnectedPort === sharedPort.value) {
+      void teardownSharedConnection({ closePort: false });
+    }
+  });
+
+  sharedEventsBound = true;
+}
+
+export function useDeviceSerial() {
+  async function restoreAuthorizedPort(): Promise<RestoreAuthorizedPortResult> {
+    ensureSerialEventHandlers();
+
+    if (isSharedConnectionHealthy()) {
+      return { status: "restored", port: sharedPort.value! };
+    }
+
+    const serialApi = getSerialApi();
+    if (!serialApi) {
+      return { status: "none" };
+    }
+
+    const ports = await serialApi.getPorts();
+    if (ports.length === 0) {
+      return { status: "none" };
+    }
+
+    if (ports.length > 1) {
+      return { status: "multiple" };
+    }
+
+    const nextPort = ports[0];
+    if (!nextPort) {
+      return { status: "none" };
+    }
+
+    if (nextPort !== sharedPort.value) {
+      resetSharedSessionOutput();
+    }
+
+    await teardownSharedConnection({ closePort: false });
+    await openSharedPort(nextPort);
+    return { status: "restored", port: nextPort };
+  }
+
+  async function requestPortConnection() {
+    ensureSerialEventHandlers();
+
     const serialApi = getSerialApi();
     if (!serialApi) {
       throw new Error("当前浏览器不支持 Web Serial，请改用 Chromium 浏览器。");
     }
 
     const nextPort = await serialApi.requestPort();
-    await nextPort.open({ baudRate: 115200 });
-
-    if (!nextPort.readable || !nextPort.writable) {
-      await nextPort.close();
-      throw new Error("串口不可读写。");
+    if (nextPort === sharedPort.value && isSharedConnectionHealthy()) {
+      return nextPort;
     }
 
-    port.value = nextPort;
-    reader.value = nextPort.readable.getReader();
-    writer.value = nextPort.writable.getWriter();
-    lineBuffer.value = "";
+    if (nextPort !== sharedPort.value) {
+      resetSharedSessionOutput();
+    }
+
+    await teardownSharedConnection({ closePort: nextPort !== sharedPort.value });
+    await openSharedPort(nextPort);
+    return nextPort;
   }
 
   async function disconnect() {
-    try {
-      await reader.value?.cancel();
-    } catch {}
-    try {
-      reader.value?.releaseLock();
-    } catch {}
-    try {
-      writer.value?.releaseLock();
-    } catch {}
-    try {
-      await port.value?.close();
-    } catch {}
-
-    port.value = null;
-    reader.value = null;
-    writer.value = null;
-    lineBuffer.value = "";
+    await teardownSharedConnection();
   }
 
   function clearLogs() {
-    serialLogs.value = [];
+    sharedSerialLogs.value = [];
   }
 
   function appendLog(line: string) {
     if (!line) return;
-    serialLogs.value.push(sanitizeLogLine(line));
-    if (serialLogs.value.length > MAX_LOG_LINES) {
-      serialLogs.value.splice(0, serialLogs.value.length - MAX_LOG_LINES);
+    sharedSerialLogs.value.push(sanitizeLogLine(line));
+    if (sharedSerialLogs.value.length > MAX_LOG_LINES) {
+      sharedSerialLogs.value.splice(0, sharedSerialLogs.value.length - MAX_LOG_LINES);
     }
   }
 
   async function readLine(timeoutMs = 5000): Promise<string> {
-    const activeReader = reader.value;
+    const activeReader = sharedReader.value;
     if (!activeReader) {
       throw new Error("串口尚未连接。");
     }
 
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const newlineIndex = lineBuffer.value.indexOf("\n");
+      const newlineIndex = sharedLineBuffer.value.indexOf("\n");
       if (newlineIndex >= 0) {
-        const line = lineBuffer.value.slice(0, newlineIndex).replace(/\r$/, "");
-        lineBuffer.value = lineBuffer.value.slice(newlineIndex + 1);
-        lastRawLine.value = sanitizeLogLine(line);
+        const line = sharedLineBuffer.value.slice(0, newlineIndex).replace(/\r$/, "");
+        sharedLineBuffer.value = sharedLineBuffer.value.slice(newlineIndex + 1);
+        sharedLastRawLine.value = sanitizeLogLine(line);
         appendLog(line);
         return line;
       }
@@ -254,52 +404,61 @@ export function useDeviceSerial() {
         timeoutPromise(Math.max(1, deadline - Date.now())),
       ]);
       if (result.done) {
+        await teardownSharedConnection({ closePort: false });
         throw new Error("串口已断开。");
       }
-      lineBuffer.value += decoder.decode(result.value, { stream: true });
+      sharedLineBuffer.value += decoder.decode(result.value, { stream: true });
     }
 
     throw new Error("读取串口超时。");
   }
 
   async function sendCommand(command: SerialCommand, timeoutMs = 8000) {
-    const activeWriter = writer.value;
+    const activeWriter = sharedWriter.value;
     if (!activeWriter) {
       throw new Error("串口尚未连接。");
     }
 
-    await activeWriter.write(encoder.encode(`${JSON.stringify(command)}\n`));
+    try {
+      await activeWriter.write(encoder.encode(`${JSON.stringify(command)}\n`));
 
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const line = await readLine(Math.max(1, deadline - Date.now()));
-      if (!line.trim().startsWith("{")) {
-        continue;
-      }
-
-      try {
-        const parsed = JSON.parse(line);
-        if (isProvisioningResponse(parsed)) {
-          return {
-            ...parsed,
-            summary: normalizeSummary(parsed.summary),
-          };
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const line = await readLine(Math.max(1, deadline - Date.now()));
+        if (!line.trim().startsWith("{")) {
+          continue;
         }
-      } catch {
-        // ignore runtime log lines
+
+        try {
+          const parsed = JSON.parse(line);
+          if (isProvisioningResponse(parsed)) {
+            return {
+              ...parsed,
+              summary: normalizeSummary(parsed.summary),
+            };
+          }
+        } catch {
+          // ignore runtime log lines
+        }
       }
+    } catch (error) {
+      if (shouldResetConnection(error)) {
+        await teardownSharedConnection({ closePort: false });
+      }
+      throw error;
     }
 
     throw new Error("未收到有效的设备响应。");
   }
 
   return {
-    supported,
-    connected,
-    lastRawLine,
-    serialLogs,
+    supported: sharedSupported,
+    connected: sharedConnected,
+    lastRawLine: sharedLastRawLine,
+    serialLogs: sharedSerialLogs,
     clearLogs,
-    connect,
+    restoreAuthorizedPort,
+    requestPortConnection,
     disconnect,
     sendCommand,
   };

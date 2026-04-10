@@ -61,5 +61,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="containerRef" class="size-full" />
+  <div ref="containerRef" class="size-full pt-2" />
 </template>

@@ -27,6 +27,7 @@ const props = withDefaults(
     showBackendStatus?: boolean;
     validationMessage?: string;
     emptyMessage?: string;
+    embedded?: boolean;
   }>(),
   {
     backendStatus: "unknown",
@@ -39,6 +40,7 @@ const props = withDefaults(
     showBackendStatus: false,
     validationMessage: "",
     emptyMessage: "当前还没有 Wi-Fi 配置，点击右上角可添加新的网络。",
+    embedded: false,
   },
 );
 
@@ -55,10 +57,26 @@ const backendOriginModel = computed({
 });
 
 const hasProfiles = computed(() => props.wifiProfiles.length > 0);
+const rootClass = computed(() =>
+  props.embedded
+    ? "space-y-3"
+    : "space-y-4 rounded-2xl border border-neutral-200/70 p-4 dark:border-neutral-800/80",
+);
+const profileListClass = computed(() => (props.embedded ? "divide-y divide-neutral-200/70 dark:divide-neutral-800/80" : "space-y-3"));
+const profileItemClass = computed(() =>
+  props.embedded
+    ? "py-3 first:pt-0 last:pb-0"
+    : "rounded-2xl border border-neutral-200/70 p-3 dark:border-neutral-800/80",
+);
+const emptyClass = computed(() =>
+  props.embedded
+    ? "border border-dashed border-neutral-300/70 px-0 py-3 text-sm text-muted dark:border-neutral-700/70"
+    : "rounded-2xl border border-dashed border-neutral-300/80 px-4 py-5 text-sm text-muted dark:border-neutral-700/70",
+);
 </script>
 
 <template>
-  <div class="space-y-4 rounded-2xl border border-neutral-200/70 p-4 dark:border-neutral-800/80">
+  <div :class="rootClass">
     <div class="flex items-start justify-between gap-3">
       <div class="space-y-1">
         <div class="text-sm font-semibold text-highlighted">{{ title }}</div>
@@ -75,11 +93,11 @@ const hasProfiles = computed(() => props.wifiProfiles.length > 0);
       </UButton>
     </div>
 
-    <div v-if="hasProfiles" class="space-y-3">
+    <div v-if="hasProfiles" :class="profileListClass">
       <div
         v-for="(profile, index) in wifiProfiles"
         :key="profile.id"
-        class="rounded-2xl border border-neutral-200/70 p-3 dark:border-neutral-800/80"
+        :class="profileItemClass"
       >
         <div class="mb-3 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
@@ -134,10 +152,7 @@ const hasProfiles = computed(() => props.wifiProfiles.length > 0);
       </div>
     </div>
 
-    <div
-      v-else
-      class="rounded-2xl border border-dashed border-neutral-300/80 px-4 py-5 text-sm text-muted dark:border-neutral-700/70"
-    >
+    <div v-else :class="emptyClass">
       {{ emptyMessage }}
     </div>
 
