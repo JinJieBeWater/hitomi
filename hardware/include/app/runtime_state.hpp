@@ -45,6 +45,9 @@ struct RuntimeState {
   bool syncInFlight = false;
   bool uploadInFlight = false;
   bool renderDirty = true;
+  bool manualApiProbeRequested = false;
+  bool manualActivationRequested = false;
+  bool manualSyncRequested = false;
   bool lastButtonPressed = false;
   bool activationInFlight = false;
   bool wifiConnectInProgress = false;
@@ -59,6 +62,7 @@ struct RuntimeState {
   uint32_t lastWifiRetryRoundMs = 0;
   uint32_t lastWifiScanRequestMs = 0;
   uint32_t lastWifiScanCompletedMs = 0;
+  uint32_t networkRequestGeneration = 1;
   uint32_t lastSyncAttemptMs = 0;
   uint32_t lastUploadAttemptMs = 0;
   uint32_t lastActivationAttemptMs = 0;

@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "app/runtime_lifecycle_service.hpp"
+#include "app/runtime_network_executor.hpp"
 #include "app/runtime_network_ops.hpp"
 #include "app/runtime_provisioning_ops.hpp"
 #include "app/runtime_state.hpp"
@@ -13,7 +14,6 @@
 #include "board/app_config.hpp"
 #include "board/pins.hpp"
 #include "face/ports.hpp"
-#include "infra/device_api_client.hpp"
 #include "infra/display_port.hpp"
 #include "infra/local_store.hpp"
 #include "infra/template_store_port.hpp"
@@ -23,7 +23,7 @@ namespace app {
 AppRuntime::AppRuntime(
     infra::DisplayPort& display,
     infra::LocalStore& localStore,
-    infra::DeviceApiClient& deviceApiClient,
+    RuntimeNetworkExecutor& networkExecutor,
     infra::TemplateStorePort& templateStore,
     face::CameraPort& camera,
     face::EnrollmentServicePort& enrollmentService,
@@ -31,7 +31,7 @@ AppRuntime::AppRuntime(
     : context_(std::make_unique<RuntimeContext>(RuntimeContext{
           .display = display,
           .localStore = localStore,
-          .deviceApiClient = deviceApiClient,
+          .networkExecutor = networkExecutor,
           .templateStore = templateStore,
           .camera = camera,
           .enrollmentService = enrollmentService,
@@ -53,7 +53,10 @@ void AppRuntime::setup() {
   initializeLocalStore(context, state);
   loadPersistedState(context, state);
   seedDeviceConfigFromBoardDefaults(context, state);
-  syncDeviceApiClientConfig(context, state);
+  if (!context.networkExecutor.start()) {
+    Serial.println("[APP] network executor init failed");
+    state.lastErrorCode = "NETWORK_EXECUTOR_INIT_FAILED";
+  }
   if (board::kEnableTemplateStore) {
     initializeTemplateStore(context, state);
     runTemplateStoreSelfTest(context, state);
@@ -95,9 +98,9 @@ void AppRuntime::tick(uint32_t nowMs) {
   context.display.tick(nowMs);
   processUsbProvisioning(context, state, nowMs);
   pollBootButton(state, nowMs);
-  syncDeviceApiClientConfig(context, state);
   processWifiDriverEvents(context, state, nowMs);
   ensureWifiConnection(context, state, nowMs);
+  consumeCompletedNetworkRequest(context, state, nowMs);
 
   while (const auto command = context.display.consumeCommand()) {
     handleDisplayCommand(context, state, *command, nowMs);
@@ -108,25 +111,11 @@ void AppRuntime::tick(uint32_t nowMs) {
     probeConnectivity(context, state, nowMs);
   }
 
-  if (shouldProbeApi(context, state, nowMs)) {
-    performApiProbe(context, state, nowMs);
-  }
-
-  if (shouldActivate(context, state, nowMs)) {
-    performActivation(context, state, nowMs);
-  }
-
   if (board::kEnableTemplateStore) {
     probeTemplateStore(context, state, nowMs);
   }
 
-  if (shouldSync(context, state, nowMs)) {
-    performSync(context, state, nowMs);
-  }
-
-  if (shouldUpload(context, state, nowMs)) {
-    performUpload(context, state, nowMs);
-  }
+  dispatchNetworkRequest(context, state, nowMs);
 
   if (state.renderDirty) {
     updateView(context, state);

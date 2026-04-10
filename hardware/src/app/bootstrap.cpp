@@ -1,6 +1,7 @@
 #include "app/bootstrap.hpp"
 
 #include "app/app_runtime.hpp"
+#include "app/runtime_network_executor.hpp"
 #include "board/app_config.hpp"
 #include "face/ports.hpp"
 #include "infra/display/lvgl_status_display.hpp"
@@ -16,6 +17,7 @@ AppRuntime& runtime() {
   static infra::LvglStatusDisplay display;
   static infra::JsonLocalStore localStore;
   static infra::HttpDeviceApiClient deviceApiClient(board::apiBaseUrl());
+  static std::unique_ptr<RuntimeNetworkExecutor> networkExecutor = createRuntimeNetworkExecutor(deviceApiClient);
   static infra::SdMmcTemplateStore templateStore;
   static face::NoopCameraPort camera;
   static face::NoopEnrollmentServicePort enrollmentService;
@@ -23,7 +25,7 @@ AppRuntime& runtime() {
   static AppRuntime appRuntime(
       display,
       localStore,
-      deviceApiClient,
+      *networkExecutor,
       templateStore,
       camera,
       enrollmentService,

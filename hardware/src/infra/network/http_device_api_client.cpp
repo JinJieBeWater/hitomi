@@ -189,12 +189,8 @@ std::optional<BootstrapActivationResponse> parseBootstrapActivationResponse(Json
 HttpDeviceApiClient::HttpDeviceApiClient(std::string baseUrl)
     : baseUrl_(std::move(baseUrl)) {}
 
-bool HttpDeviceApiClient::configured() const {
-  return !baseUrl_.empty();
-}
-
-void HttpDeviceApiClient::setBaseUrl(const std::string& baseUrl) {
-  baseUrl_ = baseUrl;
+std::unique_ptr<DeviceApiClient> HttpDeviceApiClient::cloneWithBaseUrl(const std::string& baseUrl) const {
+  return std::make_unique<HttpDeviceApiClient>(baseUrl);
 }
 
 ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {

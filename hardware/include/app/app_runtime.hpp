@@ -6,7 +6,6 @@
 namespace infra {
 class DisplayPort;
 class LocalStore;
-class DeviceApiClient;
 class TemplateStorePort;
 }  // namespace infra
 
@@ -20,13 +19,14 @@ namespace app {
 
 struct RuntimeContext;
 struct RuntimeState;
+class RuntimeNetworkExecutor;
 
 class AppRuntime {
  public:
   AppRuntime(
       infra::DisplayPort& display,
       infra::LocalStore& localStore,
-      infra::DeviceApiClient& deviceApiClient,
+      RuntimeNetworkExecutor& networkExecutor,
       infra::TemplateStorePort& templateStore,
       face::CameraPort& camera,
       face::EnrollmentServicePort& enrollmentService,

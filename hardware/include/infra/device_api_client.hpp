@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -61,8 +62,7 @@ class DeviceApiClient {
  public:
   virtual ~DeviceApiClient() = default;
 
-  virtual bool configured() const = 0;
-  virtual void setBaseUrl(const std::string& baseUrl) = 0;
+  virtual std::unique_ptr<DeviceApiClient> cloneWithBaseUrl(const std::string& baseUrl) const = 0;
   virtual ApiResult<ServerProbeResponse> probeServer() = 0;
   virtual ApiResult<BootstrapActivationResponse> bootstrapHello(const BootstrapHelloRequest& request) = 0;
   virtual ApiResult<core::SyncPayload> sync(const core::DeviceCredentials& credentials) = 0;

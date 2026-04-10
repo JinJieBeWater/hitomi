@@ -15,7 +15,6 @@
 #include "board/app_config.hpp"
 #include "board/pins.hpp"
 #include "core/use_cases.hpp"
-#include "infra/device_api_client.hpp"
 #include "infra/local_store.hpp"
 
 namespace app {
@@ -364,10 +363,9 @@ void applyConnectedState(const RuntimeContext& context, RuntimeState& state, uin
 
 void applyDisconnectedState(RuntimeState& state, uint32_t nowMs, std::optional<uint8_t> reason) {
   registerWifiAttemptFailure(state, nowMs, reason);
+  invalidatePendingNetworkRequests(state);
   state.wifiConnectInProgress = false;
   state.lastWifiDisconnectReason = reason;
-  state.apiProbeInFlight = false;
-  state.activationInFlight = false;
 
   if (state.activeWifiSsid.has_value()) {
     state.activeWifiSsid.reset();
@@ -575,10 +573,6 @@ void seedDeviceConfigFromBoardDefaults(const RuntimeContext& context, RuntimeSta
   if (changed) {
     context.localStore.saveDeviceConfig(state.deviceConfig);
   }
-}
-
-void syncDeviceApiClientConfig(const RuntimeContext& context, const RuntimeState& state) {
-  context.deviceApiClient.setBaseUrl(state.deviceConfig.backendLocator.origin);
 }
 
 void ensureWifiConnection(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {

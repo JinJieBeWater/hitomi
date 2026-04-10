@@ -8,7 +8,6 @@
 #include "app/runtime_storage_ops.hpp"
 #include "app/usb_provisioning_protocol.hpp"
 #include "core/use_cases.hpp"
-#include "infra/device_api_client.hpp"
 
 namespace app {
 namespace {
@@ -35,7 +34,7 @@ void resetConnectivity(RuntimeState& state) {
   state.lastActivationAttemptMs = 0;
   state.apiProbeSucceeded = false;
   state.apiProbeStatusCode = std::nullopt;
-  state.activationInFlight = false;
+  invalidatePendingNetworkRequests(state);
   resetNetworkTaskSchedule(state);
 }
 
@@ -55,7 +54,6 @@ bool applyUsbProvisioningCommand(
       return true;
     case UsbProvisioningCommandType::SetBackendOrigin:
       state.deviceConfig.backendLocator.origin = command.backendOrigin;
-      context.deviceApiClient.setBaseUrl(state.deviceConfig.backendLocator.origin);
       persistDeviceConfig(context, state);
       resetConnectivity(state);
       return true;

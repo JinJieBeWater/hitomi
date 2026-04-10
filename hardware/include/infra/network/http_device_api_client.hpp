@@ -10,8 +10,7 @@ class HttpDeviceApiClient final : public DeviceApiClient {
  public:
   explicit HttpDeviceApiClient(std::string baseUrl);
 
-  bool configured() const override;
-  void setBaseUrl(const std::string& baseUrl) override;
+  std::unique_ptr<DeviceApiClient> cloneWithBaseUrl(const std::string& baseUrl) const override;
   ApiResult<ServerProbeResponse> probeServer() override;
   ApiResult<BootstrapActivationResponse> bootstrapHello(const BootstrapHelloRequest& request) override;
   ApiResult<core::SyncPayload> sync(const core::DeviceCredentials& credentials) override;
