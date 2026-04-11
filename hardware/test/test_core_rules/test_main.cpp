@@ -470,6 +470,12 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   status.credentialsReady = true;
   status.filesystemReady = true;
   status.templateStoreReady = true;
+  status.faceEngineReady = true;
+  status.faceEngineStatusDetail = std::optional<std::string>("Linked (model load deferred)");
+  status.faceDetectReady = true;
+  status.faceDetected = true;
+  status.detectedFaceCount = 2;
+  status.faceTopScore = 0.87f;
   status.faceModuleEnabled = true;
   status.connectivity = app::ConnectivityState::Connected;
   status.pendingQueueSize = 3;
@@ -513,7 +519,16 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
 
   expect(diagnostics.credentialsLine.find("DEV-001") != std::string::npos, "diagnostics should surface device code");
   expect(diagnostics.snapshotLine.find("employees=1") != std::string::npos, "diagnostics should describe snapshots");
+  expect(
+      diagnostics.faceLine.find("Linked (model load deferred)") != std::string::npos,
+      "diagnostics should surface face engine state");
+  expect(
+      diagnostics.faceDetectLine.find("faces=2") != std::string::npos,
+      "diagnostics should surface face detect count");
   expect(view.storageLine.find("templates=2") != std::string::npos, "view should surface template count");
+  expect(
+      view.faceDetectLine.find("2 face(s)") != std::string::npos && view.faceDetectLine.find("@0.87") != std::string::npos,
+      "view should surface face detect summary");
   expect(view.activationLine.find("waiting for claim") != std::string::npos, "view should show activation state");
   expect(view.wifiLine.find("Lab-WiFi") != std::string::npos, "view should show connected SSID");
   expect(view.apiLine.find("Reachable") != std::string::npos, "view should surface API success");

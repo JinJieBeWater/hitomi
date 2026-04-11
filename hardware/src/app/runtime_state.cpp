@@ -22,6 +22,9 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.credentialsReady = state.credentialsReady;
   status.filesystemReady = state.filesystemReady;
   status.templateStoreReady = state.templateStoreReady;
+  status.faceEngineReady = state.faceEngineReady;
+  status.faceDetectReady = state.faceDetectReady;
+  status.faceDetected = state.faceDetected;
   status.templateStoreStatusCode = state.storageAux.templateStoreHealth.statusCode;
   status.templateCount = state.storageAux.templateLibrarySummary.templateCount;
   status.sdTotalBytes = state.storageAux.templateStoreHealth.totalBytes;
@@ -37,6 +40,10 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.activationInFlight = state.activationInFlight;
   status.syncInFlight = state.syncInFlight;
   status.uploadInFlight = state.uploadInFlight;
+  status.faceEngineStatusDetail = state.faceEngineStatusDetail;
+  status.faceDetectStatusDetail = state.faceDetectStatusDetail;
+  status.faceTopScore = state.faceTopScore;
+  status.detectedFaceCount = state.detectedFaceCount;
   status.faceModuleEnabled = state.faceModuleEnabled;
   const face::CameraStatus cameraStatus = context.camera.status();
   status.cameraAvailable = cameraStatus.supported;

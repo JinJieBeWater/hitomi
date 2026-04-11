@@ -24,6 +24,7 @@ struct AppViewModel {
   std::string wifiLine;
   std::string activationLine;
   std::string apiLine;
+  std::string faceDetectLine;
   std::string syncLine;
   std::string taskLine;
   std::string queueLine;

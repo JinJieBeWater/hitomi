@@ -39,6 +39,9 @@ struct RuntimeState {
   bool filesystemReady = false;
   bool templateStoreReady = false;
   bool displayReady = false;
+  bool faceEngineReady = false;
+  bool faceDetectReady = false;
+  bool faceDetected = false;
   bool faceModuleEnabled = false;
   bool apiProbeInFlight = false;
   bool apiProbeSucceeded = false;
@@ -58,6 +61,7 @@ struct RuntimeState {
   uint32_t lastApiProbeAttemptMs = 0;
   uint32_t lastCameraPollMs = 0;
   uint32_t lastCameraStatusRenderMs = 0;
+  uint32_t lastFaceDetectionMs = 0;
   uint32_t lastNetworkProbeMs = 0;
   uint32_t lastTemplateStoreProbeMs = 0;
   uint32_t lastWifiConnectAttemptMs = 0;
@@ -70,7 +74,11 @@ struct RuntimeState {
   uint32_t lastActivationAttemptMs = 0;
   uint32_t lastWifiEventSequence = 0;
   std::size_t wifiCandidateCursor = 0;
+  std::size_t detectedFaceCount = 0;
   std::optional<std::string> apiProbeStatusCode;
+  std::optional<std::string> faceEngineStatusDetail;
+  std::optional<std::string> faceDetectStatusDetail;
+  std::optional<float> faceTopScore;
   std::optional<std::string> lastErrorCode;
   std::optional<uint8_t> lastWifiDisconnectReason;
   std::optional<std::size_t> activeWifiProfileIndex;

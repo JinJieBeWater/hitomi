@@ -4,5 +4,8 @@ file(GLOB_RECURSE hitomi_runtime_sources
 idf_component_register(
     SRCS ${hitomi_runtime_sources}
     INCLUDE_DIRS "../include"
-    REQUIRES framework-arduinoespressif32
+    REQUIRES
+        framework-arduinoespressif32
+        human_face_detect
+        human_face_recognition
 )

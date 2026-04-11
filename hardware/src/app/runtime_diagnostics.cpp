@@ -2,6 +2,7 @@
 
 #include <sstream>
 
+#include "app/runtime_face_status.hpp"
 #include "infra/template_store_port.hpp"
 
 namespace app {
@@ -67,6 +68,9 @@ std::string queueLine(const RuntimeStatus& status) {
 }
 
 std::string faceLine(const RuntimeStatus& status) {
+  if (status.faceEngineReady || status.faceEngineStatusDetail.has_value()) {
+    return formatFaceEngineLine(status, FaceLineStyle::Diagnostics);
+  }
   if (infra::templateStoreDisabled(status.templateStoreStatusCode)) {
     return "Recognition: disabled (template store disabled)";
   }
@@ -82,6 +86,10 @@ std::string faceLine(const RuntimeStatus& status) {
   return "Recognition: enabled";
 }
 
+std::string faceDetectLine(const RuntimeStatus& status) {
+  return formatFaceDetectLine(status, FaceLineStyle::Diagnostics);
+}
+
 }  // namespace
 
 RuntimeDiagnostics buildRuntimeDiagnostics(const RuntimeStatus& status) {
@@ -91,6 +99,7 @@ RuntimeDiagnostics buildRuntimeDiagnostics(const RuntimeStatus& status) {
       .storageLine = storageLine(status),
       .queueLine = queueLine(status),
       .faceLine = faceLine(status),
+      .faceDetectLine = faceDetectLine(status),
   };
 }
 

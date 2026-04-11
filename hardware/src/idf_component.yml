@@ -1,2 +1,4 @@
 dependencies:
   espressif/esp32-camera: "2.1.5"
+  espressif/human_face_detect: "0.3.0"
+  espressif/human_face_recognition: "0.3.0"

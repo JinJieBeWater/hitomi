@@ -116,7 +116,7 @@ struct LvglStatusDisplayData {
   lv_obj_t* enrollStartButton = nullptr;
   lv_obj_t* enrollStatusLabel = nullptr;
 
-  std::array<StatusRow, 5> systemRows = {};
+  std::array<StatusRow, 7> systemRows = {};
 
   ui::AppViewModel lastViewModel = {};
   uint32_t lastLvglTickMs = 0;
@@ -385,8 +385,10 @@ void refreshSystemPage(LvglStatusDisplayData& data) {
   setSystemRowValue(data.systemRows[0], data.lastViewModel.credentialsLine);
   setSystemRowValue(data.systemRows[1], data.lastViewModel.wifiLine);
   setSystemRowValue(data.systemRows[2], data.lastViewModel.apiLine);
-  setSystemRowValue(data.systemRows[3], data.lastViewModel.storageLine);
-  setSystemRowValue(data.systemRows[4], data.lastViewModel.errorLine);
+  setSystemRowValue(data.systemRows[3], data.lastViewModel.faceLine);
+  setSystemRowValue(data.systemRows[4], data.lastViewModel.faceDetectLine);
+  setSystemRowValue(data.systemRows[5], data.lastViewModel.storageLine);
+  setSystemRowValue(data.systemRows[6], data.lastViewModel.errorLine);
 }
 
 void refreshCurrentPage(LvglStatusDisplayData& data) {
@@ -634,8 +636,10 @@ void createSystemPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   data.systemRows[0] = createSystemRow(parent, 0, "Credentials");
   data.systemRows[1] = createSystemRow(parent, kSystemRowHeight + kSystemRowGap, "WiFi");
   data.systemRows[2] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 2, "API");
-  data.systemRows[3] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 3, "Storage");
-  data.systemRows[4] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 4, "Error");
+  data.systemRows[3] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 3, "Face");
+  data.systemRows[4] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 4, "Detect");
+  data.systemRows[5] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 5, "Storage");
+  data.systemRows[6] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 6, "Error");
 }
 
 void createUi(LvglStatusDisplayData& data) {
@@ -670,6 +674,9 @@ void createUi(LvglStatusDisplayData& data) {
   createEnrollPage(data, data.pageContainers[toIndex(SidebarPage::Enroll)]);
 
   data.pageContainers[toIndex(SidebarPage::System)] = createPageContainer(screen);
+  lv_obj_add_flag(data.pageContainers[toIndex(SidebarPage::System)], LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(data.pageContainers[toIndex(SidebarPage::System)], LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(data.pageContainers[toIndex(SidebarPage::System)], LV_SCROLLBAR_MODE_AUTO);
   createSystemPage(data, data.pageContainers[toIndex(SidebarPage::System)]);
 
   refreshNavButtons(data);

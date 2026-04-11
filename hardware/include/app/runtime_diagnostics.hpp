@@ -12,6 +12,7 @@ struct RuntimeDiagnostics {
   std::string storageLine;
   std::string queueLine;
   std::string faceLine;
+  std::string faceDetectLine;
 };
 
 RuntimeDiagnostics buildRuntimeDiagnostics(const RuntimeStatus& status);

@@ -29,11 +29,32 @@ void testStatusScreenShowsApiProbeState() {
   expect(view.apiLine.find("HTTP_404") != std::string::npos, "api line should surface probe failure code");
 }
 
+void testStatusScreenShowsFaceDetectState() {
+  app::RuntimeStatus status = {};
+  status.faceEngineReady = true;
+  status.faceEngineStatusDetail = std::optional<std::string>("Linked (model load deferred)");
+  status.faceDetectReady = true;
+  status.faceDetected = true;
+  status.detectedFaceCount = 1;
+  status.faceTopScore = 0.93f;
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(
+      view.faceLine.find("Linked (model load deferred)") != std::string::npos,
+      "face line should surface engine state detail");
+  expect(
+      view.faceDetectLine.find("1 face(s)") != std::string::npos &&
+          view.faceDetectLine.find("@0.93") != std::string::npos,
+      "face detect line should surface detection count and score");
+}
+
 }  // namespace
 
 int main() {
   try {
     testStatusScreenShowsApiProbeState();
+    testStatusScreenShowsFaceDetectState();
     std::cout << "[PASS] status screen api probe" << '\n';
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

@@ -36,6 +36,7 @@ constexpr uint32_t kUploadRetryIntervalMs = 15 * 1000;
 constexpr uint32_t kTemplateStoreProbeIntervalMs = 2000;
 constexpr uint32_t kCameraPreviewIntervalMs = 33;
 constexpr uint32_t kCameraStatusRefreshIntervalMs = 500;
+constexpr uint32_t kFaceDetectIntervalMs = 750;
 constexpr uint32_t kCameraPowerStabilizeDelayMs = 30;
 constexpr uint32_t kCameraXclkHz = 20 * 1000 * 1000;
 constexpr bool kCameraRgb565BigEndian = true;

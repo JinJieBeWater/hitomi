@@ -25,6 +25,9 @@ struct RuntimeStatus {
   bool credentialsReady = false;
   bool filesystemReady = false;
   bool templateStoreReady = false;
+  bool faceEngineReady = false;
+  bool faceDetectReady = false;
+  bool faceDetected = false;
   std::string templateStoreStatusCode;
   std::size_t templateCount = 0;
   uint64_t sdTotalBytes = 0;
@@ -41,6 +44,10 @@ struct RuntimeStatus {
   std::optional<std::string> apiProbeStatusCode;
   bool syncInFlight = false;
   bool uploadInFlight = false;
+  std::optional<std::string> faceEngineStatusDetail;
+  std::optional<std::string> faceDetectStatusDetail;
+  std::optional<float> faceTopScore;
+  std::size_t detectedFaceCount = 0;
   bool faceModuleEnabled = false;
   bool cameraAvailable = false;
   bool cameraReady = false;

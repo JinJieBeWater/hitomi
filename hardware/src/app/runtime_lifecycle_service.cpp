@@ -676,6 +676,7 @@ void printRuntimeCheck(const RuntimeContext& context, const RuntimeState& state)
   Serial.println(diagnostics.storageLine.c_str());
   Serial.println(diagnostics.queueLine.c_str());
   Serial.println(diagnostics.faceLine.c_str());
+  Serial.println(diagnostics.faceDetectLine.c_str());
 
   if (partition != nullptr) {
     Serial.printf("Running partition: %s (%lu bytes)\n", partition->label, static_cast<unsigned long>(partition->size));

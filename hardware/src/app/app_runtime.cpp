@@ -5,6 +5,7 @@
 #include <memory>
 
 #include "app/runtime_camera_ops.hpp"
+#include "app/runtime_face_engine_ops.hpp"
 #include "app/runtime_lifecycle_service.hpp"
 #include "app/runtime_network_executor.hpp"
 #include "app/runtime_network_ops.hpp"
@@ -73,6 +74,7 @@ void AppRuntime::setup() {
     Serial.println("[APP] template store disabled on current runtime");
   }
   initWifi();
+  initializeFaceEngine(state);
 
   state.displayReady = context.display.init();
   if (!state.displayReady) {

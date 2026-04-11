@@ -1,5 +1,6 @@
 #include "app/runtime_camera_ops.hpp"
 
+#include "app/runtime_face_engine_ops.hpp"
 #include "board/app_config.hpp"
 #include "face/ports.hpp"
 #include "infra/display_port.hpp"
@@ -48,6 +49,7 @@ void pollCamera(RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
         .width = frame->info().width,
         .height = frame->info().height,
     });
+    runFaceDetection(state, frame->info(), frame->data(), nowMs);
   }
   const bool shouldRefreshStatus =
       nowMs - state.lastCameraStatusRenderMs >= board::kCameraStatusRefreshIntervalMs;

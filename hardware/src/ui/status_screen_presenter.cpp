@@ -3,6 +3,7 @@
 #include <ctime>
 #include <sstream>
 
+#include "app/runtime_face_status.hpp"
 #include "core/use_cases.hpp"
 #include "infra/template_store_port.hpp"
 
@@ -122,7 +123,7 @@ std::string storageLabel(const app::RuntimeStatus& status) {
 }
 
 std::string faceModuleLabel(const app::RuntimeStatus& status) {
-  return std::string("Face module: ") + (status.faceModuleEnabled ? "Enabled" : "Disabled");
+  return app::formatFaceEngineLine(status, app::FaceLineStyle::Presenter);
 }
 
 std::string apiLabel(const app::RuntimeStatus& status) {
@@ -142,6 +143,10 @@ std::string apiLabel(const app::RuntimeStatus& status) {
     return "Failed (" + status.apiProbeStatusCode.value() + ")";
   }
   return "Waiting";
+}
+
+std::string faceDetectLabel(const app::RuntimeStatus& status) {
+  return app::formatFaceDetectLine(status, app::FaceLineStyle::Presenter);
 }
 
 uint64_t effectiveStatusTime(const app::RuntimeStatus& status) {
@@ -243,6 +248,7 @@ AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
       (status.activeWifiSsid.has_value() ? " (" + status.activeWifiSsid.value() + ")" : "");
   view.activationLine = activationLabel(status);
   view.apiLine = apiLabel(status);
+  view.faceDetectLine = faceDetectLabel(status);
   view.syncLine = "Sync: " + syncLabel(status);
   view.taskLine = taskLabel(status);
   view.queueLine = "Queue: " + std::to_string(status.pendingQueueSize);
