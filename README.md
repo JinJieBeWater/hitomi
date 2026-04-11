@@ -81,3 +81,21 @@ hitomi/
 - `bun run db:studio`: Open database studio UI
 - `bun run db:local`: Start the local SQLite database
 - `bun run check`: Run Oxlint and Oxfmt
+
+## Device Provisioning
+
+The admin web app now includes a dedicated serial configuration flow for devices:
+
+- Open `/devices`
+- Click `连接设备` in the page header or use the entry in the device creation result modal
+- Let Chromium prompt for a serial port
+- Continue configuration in the dedicated `/devices/serial` page
+
+The serial configuration page can:
+
+- read the current device config
+- edit Wi-Fi profiles and backend origin
+- write bootstrap identity for first-run setup
+- retry activation and inspect live serial logs
+
+If Web Serial is unavailable in the browser, fall back to the newline-delimited JSON protocol documented in [hardware/README.md](./hardware/README.md).

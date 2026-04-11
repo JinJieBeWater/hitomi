@@ -139,7 +139,7 @@ The SZPI ESP32-S3 runtime now probes the onboard FT6336 touch controller on the 
 
 ## USB Provisioning
 
-The firmware now accepts newline-delimited JSON commands on the USB CDC serial port. This remains the protocol contract for first-run provisioning. The recommended operator experience is to trigger these commands from the web admin's Web Serial activation wizard, with PlatformIO / serial-monitor tools kept as fallback.
+The firmware now accepts newline-delimited JSON commands on the USB CDC serial port. This remains the protocol contract for first-run provisioning. The recommended operator experience is to start from the web admin's device page, let Chromium prompt for a serial port, and then continue in the dedicated `/devices/serial` configuration console. PlatformIO / serial-monitor tools remain the fallback.
 
 Supported commands:
 
@@ -194,6 +194,8 @@ Important constraint:
 Detailed design notes live in:
 
 - `hardware/docs/wifi-connection-mechanism.md`
+- `hardware/docs/network-request-mechanism.md`
+- `hardware/docs/board-control-bus-mechanism.md`
 
 ## Demo Flow
 
@@ -201,10 +203,10 @@ Suggested demo flow:
 
 1. Flash firmware and open the admin backend in a Chromium browser.
 2. Create a device and keep the bootstrap credentials available.
-3. Open the USB activation wizard from the device page or creation result modal.
-4. Connect the device over Web Serial and write `set_wifi_profiles`, `set_backend_origin`, and `set_bootstrap_identity`.
+3. Open the serial configuration entry from the device page header or the creation result modal.
+4. Select the device in the browser's serial chooser, then let the `/devices/serial` page write `set_wifi_profiles`, `set_backend_origin`, and `set_bootstrap_identity`.
 5. Let the device auto-connect to a known Wi-Fi profile.
-6. Issue activation from the same wizard flow.
+6. Continue activation from the same serial configuration page.
 7. Device receives runtime `deviceCode/apiKey` and continues with normal `/api/device/sync`.
 
 Fallback path:
