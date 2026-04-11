@@ -109,6 +109,17 @@ const entityStyles = {
     "rounded=1;whiteSpace=wrap;arcSize=6;fillColor=#FAF8F4;strokeColor=#B4AEA6;strokeWidth=1.8;fontSize=16;fontStyle=1;fontColor=#7A756E;swimlane;startSize=48;horizontal=1;html=1;",
 };
 
+const tableStyles = {
+  primary:
+    "shape=table;startSize=34;container=1;childLayout=tableLayout;recursiveResize=0;collapsible=0;rowLines=1;columnLines=1;html=1;whiteSpace=wrap;fillColor=#FAF8F4;strokeColor=#8C867F;strokeWidth=1.8;fontColor=#2D2B28;",
+  secondary:
+    "shape=table;startSize=34;container=1;childLayout=tableLayout;recursiveResize=0;collapsible=0;rowLines=1;columnLines=1;html=1;whiteSpace=wrap;fillColor=#F7FBFF;strokeColor=#6FA8D6;strokeWidth=1.8;fontColor=#2D2B28;",
+  tertiary:
+    "shape=table;startSize=34;container=1;childLayout=tableLayout;recursiveResize=0;collapsible=0;rowLines=1;columnLines=1;html=1;whiteSpace=wrap;fillColor=#F7F5FE;strokeColor=#9A90D6;strokeWidth=1.8;fontColor=#2D2B28;",
+  inactive:
+    "shape=table;startSize=34;container=1;childLayout=tableLayout;recursiveResize=0;collapsible=0;rowLines=1;columnLines=1;html=1;whiteSpace=wrap;fillColor=#FAF8F4;strokeColor=#B4AEA6;strokeWidth=1.8;fontColor=#7A756E;",
+};
+
 const diagrams = [
   {
     slug: "figure-3-1",
@@ -287,7 +298,10 @@ const diagrams = [
         to: "service-admin-api",
         fromAnchor: "right",
         toAnchor: "left",
-        points: [],
+        points: [
+          { x: 470, y: 255 },
+          { x: 470, y: 355 },
+        ],
       },
       {
         type: "edge",
@@ -298,8 +312,8 @@ const diagrams = [
         fromAnchor: "left",
         toAnchor: "right",
         points: [
-          { x: 1090, y: 615 },
-          { x: 1090, y: 355 },
+          { x: 980, y: 615 },
+          { x: 980, y: 355 },
         ],
       },
       {
@@ -327,8 +341,8 @@ const diagrams = [
       {
         type: "text",
         id: "label-device-service",
-        x: 930,
-        y: 300,
+        x: 900,
+        y: 320,
         w: 140,
         h: 24,
         text: ["激活 / 同步 / 上传"],
@@ -519,85 +533,102 @@ const diagrams = [
       { type: "title", id: "title", x: 80, y: 44, w: 1494, h: 44, text: ["图 3-4 数据库关系图"] },
 
       {
-        type: "entity",
+        type: "tableEntity",
         id: "db-employee",
         semantic: "primary",
         x: 150,
-        y: 170,
-        w: 320,
+        y: 190,
+        w: 300,
         h: 250,
         title: "employee",
-        fields: ["PK id", "UK code", "name", "created_at", "updated_at"],
-      },
-      {
-        type: "entity",
-        id: "db-device",
-        semantic: "primary",
-        x: 1170,
-        y: 170,
-        w: 320,
-        h: 270,
-        title: "device",
-        fields: [
-          "PK id",
-          "UK device_code",
-          "name",
-          "api_key_hash",
-          "status",
-          "last_seen_at",
-          "created_at",
-          "updated_at",
+        columns: ["类型", "字段", "键"],
+        rows: [
+          ["text", "id", "PK"],
+          ["text", "code", "UK"],
+          ["text", "name", ""],
+          ["integer", "created_at", ""],
+          ["integer", "updated_at", ""],
         ],
       },
       {
-        type: "entity",
-        id: "db-face",
-        semantic: "secondary",
-        x: 520,
-        y: 170,
-        w: 320,
-        h: 260,
-        title: "face_profile",
-        fields: ["PK id", "FK employee_id", "FK device_id", "status", "created_at", "updated_at"],
+        type: "tableEntity",
+        id: "db-device",
+        semantic: "primary",
+        x: 1050,
+        y: 190,
+        w: 300,
+        h: 270,
+        title: "device",
+        columns: ["类型", "字段", "键"],
+        rows: [
+          ["text", "id", "PK"],
+          ["text", "device_code", "UK"],
+          ["text", "name", ""],
+          ["text", "api_key_hash", ""],
+          ["text", "status", ""],
+          ["integer", "last_seen_at", ""],
+          ["integer", "created_at", ""],
+          ["integer", "updated_at", ""],
+        ],
       },
       {
-        type: "entity",
+        type: "tableEntity",
+        id: "db-face",
+        semantic: "secondary",
+        x: 560,
+        y: 190,
+        w: 300,
+        h: 260,
+        title: "face_profile",
+        columns: ["类型", "字段", "键"],
+        rows: [
+          ["text", "id", "PK"],
+          ["text", "employee_id", "FK"],
+          ["text", "device_id", "FK"],
+          ["text", "status", ""],
+          ["integer", "created_at", ""],
+          ["integer", "updated_at", ""],
+        ],
+      },
+      {
+        type: "tableEntity",
         id: "db-record",
         semantic: "secondary",
-        x: 520,
-        y: 560,
+        x: 420,
+        y: 520,
         w: 320,
         h: 290,
         title: "attendance_record",
-        fields: [
-          "PK id",
-          "FK employee_id",
-          "FK device_id",
-          "recognized_at",
-          "local_date",
-          "type",
-          "created_at",
-          "updated_at",
+        columns: ["类型", "字段", "键"],
+        rows: [
+          ["text", "id", "PK"],
+          ["text", "employee_id", "FK"],
+          ["text", "device_id", "FK"],
+          ["integer", "recognized_at", ""],
+          ["text", "local_date", ""],
+          ["text", "type", ""],
+          ["integer", "created_at", ""],
+          ["integer", "updated_at", ""],
         ],
       },
       {
-        type: "entity",
+        type: "tableEntity",
         id: "db-config",
         semantic: "inactive",
-        x: 960,
-        y: 590,
-        w: 360,
+        x: 840,
+        y: 540,
+        w: 340,
         h: 220,
         title: "attendance_config",
-        fields: [
-          "PK id",
-          "work_start_minute",
-          "work_end_minute",
-          "off_start_minute",
-          "off_end_minute",
-          "updated_at",
+        columns: ["类型", "字段", "键"],
+        rows: [
+          ["text", "id", "PK"],
+          ["integer", "work_start_minute", ""],
+          ["integer", "work_end_minute", ""],
+          ["integer", "off_start_minute", ""],
+          ["integer", "off_end_minute", ""],
+          ["integer", "updated_at", ""],
         ],
-        note: "单例配置，不建立外键",
       },
 
       {
@@ -608,7 +639,7 @@ const diagrams = [
         to: "db-face",
         fromAnchor: "right",
         toAnchor: "left",
-        points: [],
+        points: [{ x: 530, y: 330 }],
         drawioEdgeStyle: "entityRelationEdgeStyle",
         startArrow: "ERone",
         endArrow: "ERzeroToOne",
@@ -621,7 +652,7 @@ const diagrams = [
         to: "db-face",
         fromAnchor: "left",
         toAnchor: "right",
-        points: [],
+        points: [{ x: 970, y: 330 }],
         drawioEdgeStyle: "entityRelationEdgeStyle",
         startArrow: "ERone",
         endArrow: "ERmany",
@@ -635,8 +666,8 @@ const diagrams = [
         fromAnchor: "bottom",
         toAnchor: "left",
         points: [
-          { x: 310, y: 500 },
-          { x: 310, y: 705 },
+          { x: 300, y: 470 },
+          { x: 300, y: 660 },
         ],
         drawioEdgeStyle: "entityRelationEdgeStyle",
         startArrow: "ERone",
@@ -648,11 +679,13 @@ const diagrams = [
         semantic: "context",
         from: "db-device",
         to: "db-record",
-        fromAnchor: "bottom",
+        fromAnchor: "right",
         toAnchor: "right",
         points: [
-          { x: 1330, y: 520 },
-          { x: 1330, y: 705 },
+          { x: 1390, y: 330 },
+          { x: 1390, y: 815 },
+          { x: 780, y: 815 },
+          { x: 780, y: 680 },
         ],
         drawioEdgeStyle: "entityRelationEdgeStyle",
         startArrow: "ERone",
@@ -662,8 +695,8 @@ const diagrams = [
       {
         type: "text",
         id: "label-emp-face-name",
-        x: 418,
-        y: 252,
+        x: 505,
+        y: 300,
         w: 72,
         h: 24,
         text: ["has"],
@@ -673,8 +706,8 @@ const diagrams = [
       {
         type: "text",
         id: "label-device-face-name",
-        x: 904,
-        y: 252,
+        x: 920,
+        y: 300,
         w: 88,
         h: 24,
         text: ["handles"],
@@ -684,8 +717,8 @@ const diagrams = [
       {
         type: "text",
         id: "label-emp-record-name",
-        x: 252,
-        y: 688,
+        x: 268,
+        y: 640,
         w: 80,
         h: 24,
         text: ["owns"],
@@ -695,8 +728,8 @@ const diagrams = [
       {
         type: "text",
         id: "label-device-record-name",
-        x: 1222,
-        y: 688,
+        x: 1160,
+        y: 640,
         w: 90,
         h: 24,
         text: ["uploads"],
@@ -1505,10 +1538,10 @@ const diagrams = [
         type: "node",
         id: "admin-components",
         semantic: "secondary",
-        x: 1020,
+        x: 980,
         y: 700,
-        w: 340,
-        h: 110,
+        w: 420,
+        h: 118,
         text: [
           "关键共享组件",
           "AttendanceConfigEditor / DeviceSerialWorkspace",
@@ -1651,9 +1684,9 @@ const diagrams = [
         semantic: "primary",
         x: 830,
         y: 210,
-        w: 220,
+        w: 240,
         h: 76,
-        text: ["返回当前配置摘要", "backendOrigin / Wi-Fi / activationState"],
+        text: ["返回当前配置摘要", "backend / Wi-Fi / activationState"],
       },
 
       {
@@ -1767,17 +1800,10 @@ const diagrams = [
         to: "serial-e",
         fromAnchor: "left",
         toAnchor: "right",
-        points: [{ x: 750, y: 392 }],
-      },
-      {
-        type: "edge",
-        id: "edge-serial-a-d",
-        semantic: "optional",
-        from: "serial-a",
-        to: "serial-d",
-        fromAnchor: "right",
-        toAnchor: "left",
-        points: [{ x: 1120, y: 248 }],
+        points: [
+          { x: 750, y: 248 },
+          { x: 750, y: 393 },
+        ],
       },
       {
         type: "edge",
@@ -1791,13 +1817,16 @@ const diagrams = [
       },
       {
         type: "edge",
-        id: "edge-serial-d-e",
+        id: "edge-serial-e-d",
         semantic: "optional",
-        from: "serial-d",
-        to: "serial-e",
-        fromAnchor: "left",
-        toAnchor: "right",
-        points: [{ x: 1120, y: 393 }],
+        from: "serial-e",
+        to: "serial-d",
+        fromAnchor: "right",
+        toAnchor: "left",
+        points: [
+          { x: 1120, y: 330 },
+          { x: 1120, y: 393 },
+        ],
       },
       {
         type: "edge",
@@ -1854,7 +1883,7 @@ const diagrams = [
         type: "text",
         id: "label-serial-get",
         x: 700,
-        y: 230,
+        y: 205,
         w: 60,
         h: 24,
         text: ["读取"],
@@ -1865,7 +1894,7 @@ const diagrams = [
         type: "text",
         id: "label-serial-write",
         x: 700,
-        y: 373,
+        y: 345,
         w: 60,
         h: 24,
         text: ["写入"],
@@ -1876,7 +1905,7 @@ const diagrams = [
         type: "text",
         id: "label-serial-hello",
         x: 1080,
-        y: 543,
+        y: 510,
         w: 50,
         h: 24,
         text: ["激活"],
@@ -1931,7 +1960,7 @@ const diagrams = [
           "管理后台页面",
           "dashboard / employees / devices",
           "face-profiles / attendance-records",
-          "devices/serial",
+          "devices / serial",
         ],
       },
       {
@@ -1942,13 +1971,7 @@ const diagrams = [
         y: 620,
         w: 280,
         h: 140,
-        text: [
-          "设备端运行时",
-          "/api/device/sync",
-          "/api/device/enrollment/report",
-          "/api/device/attendance/upload",
-          "bootstrap/hello",
-        ],
+        text: ["设备端运行时", "sync / enrollment/report", "attendance/upload / bootstrap/hello"],
       },
 
       {
@@ -1957,12 +1980,13 @@ const diagrams = [
         semantic: "tertiary",
         x: 560,
         y: 220,
-        w: 400,
+        w: 420,
         h: 170,
         text: [
           "管理端 oRPC 路由",
           "dashboard / employee / device",
-          "attendanceConfig / faceProfile / attendanceRecord",
+          "attendanceConfig / faceProfile",
+          "attendanceRecord",
         ],
       },
       {
@@ -1984,10 +2008,10 @@ const diagrams = [
         id: "api-errors",
         semantic: "secondary",
         x: 610,
-        y: 830,
-        w: 300,
+        y: 820,
+        w: 320,
         h: 90,
-        text: ["统一响应与错误码", "AdminBusinessError / device error.code / retryable"],
+        text: ["统一响应与错误码", "AdminBusinessError / device code / retryable"],
       },
 
       {
@@ -2001,7 +2025,7 @@ const diagrams = [
         text: ["业务规则层", "登录鉴权 / 设备鉴权", "时间段判定 / 状态流转 / 去重规则"],
       },
       {
-        type: "entity",
+        type: "tableEntity",
         id: "api-db",
         semantic: "secondary",
         x: 1130,
@@ -2009,7 +2033,14 @@ const diagrams = [
         w: 350,
         h: 280,
         title: "SQLite / Drizzle 业务表",
-        fields: ["employee", "device", "attendance_config", "face_profile", "attendance_record"],
+        columns: ["表名", "说明"],
+        rows: [
+          ["employee", "员工基础信息"],
+          ["device", "设备身份与状态"],
+          ["attendance_config", "全局考勤配置"],
+          ["face_profile", "录脸任务与状态"],
+          ["attendance_record", "最终考勤记录"],
+        ],
       },
       {
         type: "node",
@@ -2019,7 +2050,7 @@ const diagrams = [
         y: 830,
         w: 290,
         h: 90,
-        text: ["appRouter 聚合入口", "packages/api/src/routers/index.ts"],
+        text: ["appRouter 聚合入口", "routers/index.ts"],
       },
 
       {
@@ -2059,10 +2090,10 @@ const diagrams = [
         from: "api-http",
         to: "api-rules",
         fromAnchor: "right",
-        toAnchor: "bottom",
+        toAnchor: "left",
         points: [
           { x: 1060, y: 695 },
-          { x: 1060, y: 390 },
+          { x: 1060, y: 295 },
         ],
       },
       {
@@ -2083,7 +2114,7 @@ const diagrams = [
         to: "api-orpc",
         fromAnchor: "top",
         toAnchor: "bottom",
-        points: [],
+        points: [{ x: 760, y: 785 }],
       },
       {
         type: "edge",
@@ -2093,7 +2124,7 @@ const diagrams = [
         to: "api-http",
         fromAnchor: "top",
         toAnchor: "bottom",
-        points: [],
+        points: [{ x: 760, y: 785 }],
       },
       {
         type: "edge",
@@ -2103,7 +2134,11 @@ const diagrams = [
         to: "api-orpc",
         fromAnchor: "left",
         toAnchor: "right",
-        points: [{ x: 1030, y: 875 }],
+        points: [
+          { x: 1030, y: 875 },
+          { x: 1030, y: 510 },
+          { x: 980, y: 510 },
+        ],
       },
     ],
   },
@@ -2780,7 +2815,7 @@ const diagrams = [
         to: "storage-rel-nvs",
         fromAnchor: "right",
         toAnchor: "left",
-        points: [],
+        points: [{ x: 560, y: 260 }],
       },
       {
         type: "edge",
@@ -2790,7 +2825,10 @@ const diagrams = [
         to: "storage-rel-lfs",
         fromAnchor: "right",
         toAnchor: "left",
-        points: [{ x: 550, y: 480 }],
+        points: [
+          { x: 540, y: 480 },
+          { x: 610, y: 480 },
+        ],
       },
       {
         type: "edge",
@@ -2800,7 +2838,10 @@ const diagrams = [
         to: "storage-rel-lfs",
         fromAnchor: "right",
         toAnchor: "left",
-        points: [{ x: 550, y: 690 }],
+        points: [
+          { x: 540, y: 690 },
+          { x: 610, y: 500 },
+        ],
       },
       {
         type: "edge",
@@ -2830,7 +2871,10 @@ const diagrams = [
         to: "storage-rel-lfs",
         fromAnchor: "left",
         toAnchor: "right",
-        points: [],
+        points: [
+          { x: 1060, y: 290 },
+          { x: 1060, y: 480 },
+        ],
       },
       {
         type: "edge",
@@ -2853,7 +2897,10 @@ const diagrams = [
         to: "storage-rel-lfs",
         fromAnchor: "left",
         toAnchor: "right",
-        points: [{ x: 1050, y: 700 }],
+        points: [
+          { x: 1060, y: 700 },
+          { x: 1060, y: 520 },
+        ],
       },
     ],
   },
@@ -3112,12 +3159,13 @@ mkdirSync(figuresDir, { recursive: true });
 mkdirSync(figureSrcDir, { recursive: true });
 
 for (const diagram of diagrams) {
-  const drawio = renderDrawio(diagram);
-  const svg = renderSvg(diagram);
-  const html = renderHtml(diagram);
-  const drawioPath = join(figureSrcDir, `${diagram.slug}.drawio`);
-  const svgPath = join(figuresDir, `${diagram.slug}.svg`);
-  const htmlPath = join(figureSrcDir, `${diagram.slug}.html`);
+  const preparedDiagram = prepareDiagram(diagram);
+  const drawio = renderDrawio(preparedDiagram);
+  const svg = renderSvg(preparedDiagram);
+  const html = renderHtml(preparedDiagram);
+  const drawioPath = join(figureSrcDir, `${preparedDiagram.slug}.drawio`);
+  const svgPath = join(figuresDir, `${preparedDiagram.slug}.svg`);
+  const htmlPath = join(figureSrcDir, `${preparedDiagram.slug}.html`);
 
   writeFileSync(drawioPath, drawio, "utf8");
   writeFileSync(svgPath, svg, "utf8");
@@ -3127,6 +3175,328 @@ for (const diagram of diagrams) {
 console.log(`Rendered ${diagrams.length} thesis figures with anthropic-diagram styling.`);
 console.log(`SVG files: ${figuresDir}`);
 console.log(`Drawio files: ${figureSrcDir}`);
+
+function prepareDiagram(diagram) {
+  const prepared = structuredClone(diagram);
+
+  for (const shape of prepared.shapes) {
+    if (shape.type === "node") {
+      fitBlockShape(shape, {
+        fontSize: shape.fontSize ?? 18,
+        minFontSize: 13,
+        lineHeightRatio: 1.28,
+        paddingY: 16,
+        paddingX: 20,
+        minHeight: shape.semantic === "start" ? 68 : 64,
+      });
+      continue;
+    }
+
+    if (shape.type === "diamond") {
+      fitBlockShape(shape, {
+        fontSize: shape.fontSize ?? 17,
+        minFontSize: 13,
+        lineHeightRatio: 1.22,
+        paddingY: 20,
+        paddingX: 28,
+        minHeight: 90,
+      });
+      continue;
+    }
+
+    if (shape.type === "cylinder") {
+      fitBlockShape(shape, {
+        fontSize: shape.fontSize ?? 18,
+        minFontSize: 13,
+        lineHeightRatio: 1.28,
+        paddingY: 18,
+        paddingX: 20,
+        minHeight: 86,
+      });
+      continue;
+    }
+
+    if (shape.type === "entity") {
+      fitEntityShape(shape);
+      continue;
+    }
+
+    if (shape.type === "tableEntity") {
+      fitTableEntity(shape);
+    }
+  }
+
+  for (const shape of prepared.shapes) {
+    if (shape.type === "edge" && shape.preserveRoute !== true) {
+      shape.points = autoRouteEdge(prepared, shape);
+    }
+  }
+
+  return prepared;
+}
+
+function autoRouteEdge(diagram, edge) {
+  if (["Swimlane Sequence", "Linear Workflow", "Feedback Loop Workflow"].includes(diagram.spec?.pattern ?? "")) {
+    return edge.points ?? [];
+  }
+
+  const source = diagram.shapes.find((item) => item.id === edge.from);
+  const target = diagram.shapes.find((item) => item.id === edge.to);
+  if (!source || !target) {
+    return edge.points ?? [];
+  }
+
+  const sourcePanel = findContainingPanel(diagram, source);
+  const targetPanel = findContainingPanel(diagram, target);
+  if (!sourcePanel || !targetPanel || sourcePanel.id === targetPanel.id) {
+    return edge.points ?? [];
+  }
+
+  const from = getConnectorPoint(diagram, edge.from, edge.fromAnchor ?? "right");
+  const to = getConnectorPoint(diagram, edge.to, edge.toAnchor ?? "left");
+  const margin = 20;
+
+  if (edge.fromAnchor === "left" || edge.fromAnchor === "right") {
+    const exitX = edge.fromAnchor === "left" ? sourcePanel.x - margin : sourcePanel.x + sourcePanel.w + margin;
+    return [
+      { x: exitX, y: from.y },
+      { x: exitX, y: to.y },
+    ];
+  }
+
+  if (edge.fromAnchor === "top" || edge.fromAnchor === "bottom") {
+    const exitY = edge.fromAnchor === "top" ? sourcePanel.y - margin : sourcePanel.y + sourcePanel.h + margin;
+    return [
+      { x: from.x, y: exitY },
+      { x: to.x, y: exitY },
+    ];
+  }
+
+  return edge.points ?? [];
+}
+
+function findContainingPanel(diagram, shape) {
+  const cx = shape.x + shape.w / 2;
+  const cy = shape.y + shape.h / 2;
+  return (
+    diagram.shapes.find(
+      (candidate) =>
+        candidate.type === "panel" &&
+        cx >= candidate.x &&
+        cx <= candidate.x + candidate.w &&
+        cy >= candidate.y &&
+        cy <= candidate.y + candidate.h,
+    ) ?? null
+  );
+}
+
+function fitBlockShape(shape, options) {
+  const originalLines = [...shape.text];
+  let fontSize = options.fontSize;
+  let wrappedLines = originalLines;
+
+  while (fontSize >= options.minFontSize) {
+    wrappedLines = originalLines.flatMap((line) => wrapText(line, shape.w - options.paddingX * 2, fontSize));
+    const lineHeight = Math.round(fontSize * options.lineHeightRatio);
+    const requiredHeight = Math.max(options.minHeight, wrappedLines.length * lineHeight + options.paddingY * 2);
+
+    if (requiredHeight <= shape.h || fontSize === options.minFontSize) {
+      const nextHeight = Math.max(options.minHeight, requiredHeight);
+      const delta = shape.h - nextHeight;
+      shape.y += delta / 2;
+      shape.h = nextHeight;
+      shape.text = wrappedLines;
+      shape.fontSize = fontSize;
+      shape.lineHeight = lineHeight;
+      return;
+    }
+
+    fontSize -= 1;
+  }
+}
+
+function fitEntityShape(shape) {
+  const titleFontSize = shape.titleFontSize ?? 20;
+  const bodyBaseFontSize = shape.bodyFontSize ?? 16;
+  const originalFields = shape.note ? [...shape.fields, shape.note] : [...shape.fields];
+  let bodyFontSize = bodyBaseFontSize;
+  let wrappedBodyLines = originalFields;
+  const headerHeight = 48;
+
+  while (bodyFontSize >= 12) {
+    wrappedBodyLines = originalFields.flatMap((line) => wrapText(line, shape.w - 42, bodyFontSize));
+    const lineHeight = Math.round(bodyFontSize * 1.22);
+    const bodyHeight = wrappedBodyLines.length * lineHeight + 22;
+    const requiredHeight = headerHeight + bodyHeight + 12;
+
+    if (requiredHeight <= shape.h || bodyFontSize === 12) {
+      const nextHeight = Math.max(requiredHeight, headerHeight + 60);
+      const delta = shape.h - nextHeight;
+      shape.y += delta / 2;
+      shape.h = nextHeight;
+      shape.bodyLines = wrappedBodyLines;
+      shape.titleFontSize = titleFontSize;
+      shape.bodyFontSize = bodyFontSize;
+      shape.bodyLineHeight = lineHeight;
+      return;
+    }
+
+    bodyFontSize -= 1;
+  }
+}
+
+function fitTableEntity(shape) {
+  const titleFontSize = shape.titleFontSize ?? 16;
+  const headerFontSize = shape.headerFontSize ?? 12;
+  const bodyFontSize = shape.bodyFontSize ?? 13;
+  const titleHeight = Math.round(titleFontSize * 1.5) + 10;
+  const columnHeaderHeight = Math.round(headerFontSize * 1.5) + 8;
+  const rowHeight = Math.round(bodyFontSize * 1.55) + 8;
+  const noteHeight = shape.note ? Math.round(bodyFontSize * 1.45) + 10 : 0;
+  const requiredHeight = titleHeight + columnHeaderHeight + rowHeight * shape.rows.length;
+
+  const nextHeight = Math.max(requiredHeight, titleHeight + columnHeaderHeight + rowHeight * 2);
+  const delta = shape.h - nextHeight;
+
+  shape.y += delta / 2;
+  shape.h = nextHeight;
+  shape.titleFontSize = titleFontSize;
+  shape.headerFontSize = headerFontSize;
+  shape.bodyFontSize = bodyFontSize;
+  shape.noteHeight = noteHeight;
+}
+
+function wrapText(text, maxWidth, fontSize) {
+  if (!text) {
+    return [""];
+  }
+
+  const tokens = tokenizeWrapText(text);
+  const lines = [];
+  let current = "";
+
+  for (const token of tokens) {
+    const candidate = current + token;
+
+    if (estimateTextWidth(candidate.trimEnd(), fontSize) <= maxWidth || current.length === 0) {
+      current = candidate;
+      continue;
+    }
+
+    if (current.trim()) {
+      lines.push(current.trimEnd());
+      current = token.trimStart();
+      continue;
+    }
+
+    const forced = forceBreakToken(token, maxWidth, fontSize);
+    lines.push(...forced.slice(0, -1));
+    current = forced.at(-1) ?? "";
+  }
+
+  if (current.trim()) {
+    lines.push(current.trimEnd());
+  }
+
+  return lines;
+}
+
+function tokenizeWrapText(text) {
+  const whitespaceSeparated = text.split(/(\s+)/).filter(Boolean);
+  const tokens = [];
+
+  for (const piece of whitespaceSeparated) {
+    if (/^\s+$/.test(piece)) {
+      tokens.push(piece);
+      continue;
+    }
+
+    tokens.push(...splitSmartToken(piece));
+  }
+
+  return tokens;
+}
+
+function splitSmartToken(token) {
+  const parts = [];
+  let current = "";
+
+  for (let index = 0; index < token.length; index += 1) {
+    const char = token[index];
+    const prev = token[index - 1] ?? "";
+
+    const boundary =
+      (/[/_-]/.test(char) && current.length > 0) ||
+      (/[A-Z]/.test(char) && /[a-z]/.test(prev)) ||
+      (/\d/.test(char) && /[A-Za-z]/.test(prev));
+
+    if (boundary) {
+      parts.push(current);
+      current = char;
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current) {
+    parts.push(current);
+  }
+
+  return parts;
+}
+
+function forceBreakToken(token, maxWidth, fontSize) {
+  const chunks = [];
+  let current = "";
+
+  for (const char of [...token]) {
+    const candidate = current + char;
+    if (estimateTextWidth(candidate, fontSize) <= maxWidth || current.length === 0) {
+      current = candidate;
+      continue;
+    }
+
+    chunks.push(current);
+    current = char;
+  }
+
+  if (current) {
+    chunks.push(current);
+  }
+
+  return chunks;
+}
+
+function estimateTextWidth(text, fontSize) {
+  let width = 0;
+
+  for (const char of [...text]) {
+    if (/\s/.test(char)) {
+      width += fontSize * 0.28;
+      continue;
+    }
+
+    if (/[A-Z]/.test(char)) {
+      width += fontSize * 0.62;
+      continue;
+    }
+
+    if (/[a-z0-9]/.test(char)) {
+      width += fontSize * 0.54;
+      continue;
+    }
+
+    if (/[/_.:+-]/.test(char)) {
+      width += fontSize * 0.4;
+      continue;
+    }
+
+    width += fontSize * 0.95;
+  }
+
+  return width;
+}
 
 function renderDrawio(diagram) {
   const body = [];
@@ -3227,6 +3597,11 @@ function renderDrawio(diagram) {
           false,
         ),
       );
+      continue;
+    }
+
+    if (shape.type === "tableEntity") {
+      body.push(...tableEntityCells(shape));
       continue;
     }
 
@@ -3382,6 +3757,11 @@ function renderSvg(diagram) {
       continue;
     }
 
+    if (shape.type === "tableEntity") {
+      parts.push(svgTableEntity(shape));
+      continue;
+    }
+
     if (shape.type === "node") {
       parts.push(svgNode(shape));
       continue;
@@ -3464,6 +3844,82 @@ function svgEntity(shape) {
   ].join("\n");
 }
 
+function svgTableEntity(shape) {
+  const tone =
+    shape.semantic === "secondary"
+      ? { fill: "#F7FBFF", stroke: "#6FA8D6", text: "#2D2B28" }
+      : shape.semantic === "tertiary"
+        ? { fill: "#F7F5FE", stroke: "#9A90D6", text: "#2D2B28" }
+        : shape.semantic === "inactive"
+          ? { fill: "#FAF8F4", stroke: "#B4AEA6", text: "#7A756E" }
+          : { fill: "#FAF8F4", stroke: "#8C867F", text: "#2D2B28" };
+  const headerHeight = Math.round((shape.titleFontSize ?? 16) * 1.5) + 10;
+  const columnHeaderHeight = Math.round((shape.headerFontSize ?? 12) * 1.5) + 8;
+  const rowHeight = Math.round((shape.bodyFontSize ?? 13) * 1.55) + 8;
+  const colWidths = getTableColumnWidths(shape.w, shape.columns.length);
+  const x2 = shape.x + colWidths[0];
+  const x3 = shape.columns.length === 3 ? x2 + colWidths[1] : null;
+
+  const lines = [
+    `<rect x="${shape.x}" y="${shape.y}" width="${shape.w}" height="${shape.h}" rx="10" ry="10" fill="#ffffff" stroke="${tone.stroke}" stroke-width="1.6"/>`,
+    `<rect x="${shape.x}" y="${shape.y}" width="${shape.w}" height="${headerHeight}" rx="10" ry="10" fill="${tone.fill}" stroke="${tone.stroke}" stroke-width="1.2"/>`,
+    svgText(shape.x, shape.y + 4, shape.w, headerHeight - 8, [shape.title], {
+      fontSize: shape.titleFontSize ?? 16,
+      fill: tone.text,
+      fontWeight: 700,
+    }),
+    `<rect x="${shape.x}" y="${shape.y + headerHeight}" width="${shape.w}" height="${columnHeaderHeight}" fill="${tone.fill}" opacity="0.55" stroke="none"/>`,
+    `<line x1="${shape.x}" y1="${shape.y + headerHeight}" x2="${shape.x + shape.w}" y2="${shape.y + headerHeight}" stroke="${tone.stroke}" stroke-width="1.1"/>`,
+    `<line x1="${shape.x}" y1="${shape.y + headerHeight + columnHeaderHeight}" x2="${shape.x + shape.w}" y2="${shape.y + headerHeight + columnHeaderHeight}" stroke="${tone.stroke}" stroke-width="1.1"/>`,
+    `<line x1="${x2}" y1="${shape.y + headerHeight}" x2="${x2}" y2="${shape.y + shape.h}" stroke="${tone.stroke}" stroke-width="1"/>`,
+  ];
+
+  if (x3 !== null) {
+    lines.push(`<line x1="${x3}" y1="${shape.y + headerHeight}" x2="${x3}" y2="${shape.y + shape.h}" stroke="${tone.stroke}" stroke-width="1"/>`);
+  }
+
+  shape.columns.forEach((column, index) => {
+    const offsetX = index === 0 ? shape.x : index === 1 ? x2 : x3;
+    const width = colWidths[index];
+    lines.push(
+      svgText(offsetX, shape.y + headerHeight + 2, width, columnHeaderHeight - 4, [column], {
+        fontSize: shape.headerFontSize ?? 12,
+        fill: "#6b7280",
+      }),
+    );
+  });
+
+  shape.rows.forEach((row, index) => {
+    const rowY = shape.y + headerHeight + columnHeaderHeight + index * rowHeight;
+    lines.push(`<line x1="${shape.x}" y1="${rowY}" x2="${shape.x + shape.w}" y2="${rowY}" stroke="${tone.stroke}" stroke-width="0.9"/>`);
+    row.forEach((cell, cellIndex) => {
+      const offsetX = cellIndex === 0 ? shape.x : cellIndex === 1 ? x2 : x3;
+      const width = colWidths[cellIndex];
+      lines.push(
+        svgText(offsetX + 4, rowY + 2, width - 8, rowHeight - 4, [cell], {
+          fontSize: shape.bodyFontSize ?? 13,
+          fill: tone.text,
+          anchor: "start",
+          alignX: offsetX + 10,
+        }),
+      );
+    });
+  });
+
+  if (shape.note) {
+    lines.push(
+      svgText(shape.x + 4, shape.y + shape.h + 6, shape.w - 8, 16, [shape.note], {
+        fontSize: shape.bodyFontSize ?? 13,
+        fill: "#7A756E",
+        anchor: "start",
+        alignX: shape.x + 10,
+      }),
+    );
+  }
+
+  return lines.join("\n");
+}
+
 function svgDiamond(shape) {
   const tone = semanticStyles.decision;
   const x1 = shape.x + shape.w / 2;
@@ -3507,7 +3963,7 @@ function svgEdge(shape, diagram) {
   const tone = edgeStyles[shape.semantic] ?? edgeStyles.primary;
   const from = getConnectorPoint(diagram, shape.from, shape.fromAnchor ?? "right");
   const to = getConnectorPoint(diagram, shape.to, shape.toAnchor ?? "left");
-  const points = [from, ...(shape.points ?? []), to];
+  const points = orthogonalizePolyline([from, ...(shape.points ?? []), to], shape.fromAnchor, shape.toAnchor);
   const marker =
     shape.semantic === "optional"
       ? "arrow-optional"
@@ -3523,6 +3979,82 @@ function svgEdge(shape, diagram) {
   return `<polyline points="${points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${tone.stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"${
     tone.dasharray ? ` stroke-dasharray="${tone.dasharray}"` : ""
   }${startMarker ? ` marker-start="${startMarker}"` : ""} marker-end="${endMarker}"/>`;
+}
+
+function orthogonalizePolyline(points, fromAnchor, toAnchor) {
+  if (points.length <= 1) {
+    return points;
+  }
+
+  const orthogonal = [points[0]];
+
+  for (let index = 1; index < points.length; index += 1) {
+    const prev = orthogonal[orthogonal.length - 1];
+    const next = points[index];
+
+    if (prev.x === next.x || prev.y === next.y) {
+      orthogonal.push(next);
+      continue;
+    }
+
+    const corner = chooseCorner(prev, next, index === 1 ? fromAnchor : null, index === points.length - 1 ? toAnchor : null);
+    if (corner.x !== prev.x || corner.y !== prev.y) {
+      orthogonal.push(corner);
+    }
+    if (corner.x !== next.x || corner.y !== next.y) {
+      orthogonal.push(next);
+    }
+  }
+
+  return dedupeCollinearPoints(orthogonal);
+}
+
+function chooseCorner(prev, next, fromAnchor, toAnchor) {
+  if (fromAnchor === "left" || fromAnchor === "right") {
+    return { x: next.x, y: prev.y };
+  }
+
+  if (fromAnchor === "top" || fromAnchor === "bottom") {
+    return { x: prev.x, y: next.y };
+  }
+
+  if (toAnchor === "left" || toAnchor === "right") {
+    return { x: next.x, y: prev.y };
+  }
+
+  if (toAnchor === "top" || toAnchor === "bottom") {
+    return { x: prev.x, y: next.y };
+  }
+
+  const deltaX = Math.abs(next.x - prev.x);
+  const deltaY = Math.abs(next.y - prev.y);
+  return deltaX >= deltaY ? { x: next.x, y: prev.y } : { x: prev.x, y: next.y };
+}
+
+function dedupeCollinearPoints(points) {
+  const result = [];
+
+  for (const point of points) {
+    const last = result[result.length - 1];
+    if (last && last.x === point.x && last.y === point.y) {
+      continue;
+    }
+
+    result.push(point);
+
+    while (result.length >= 3) {
+      const a = result[result.length - 3];
+      const b = result[result.length - 2];
+      const c = result[result.length - 1];
+      const collinear = (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
+      if (!collinear) {
+        break;
+      }
+      result.splice(result.length - 2, 1);
+    }
+  }
+
+  return result;
 }
 
 function getConnectorPoint(diagram, id, mode) {
@@ -3638,6 +4170,83 @@ ${shape.points.map((point) => `      <mxPoint x="${point.x}" y="${point.y}"/>`).
   <mxGeometry relative="1" as="geometry">${points}
   </mxGeometry>
 </mxCell>`;
+}
+
+function tableEntityCells(shape) {
+  const style = tableStyles[shape.semantic] ?? tableStyles.primary;
+  const tableId = shape.id;
+  const headerHeight = Math.round((shape.titleFontSize ?? 16) * 1.5) + 10;
+  const rowHeight = Math.round((shape.bodyFontSize ?? 13) * 1.55) + 8;
+  const rows = [];
+  const colWidths = getTableColumnWidths(shape.w, shape.columns.length);
+  const colRatios = colWidths.map((width) => width / shape.w);
+  const tone =
+    shape.semantic === "secondary"
+      ? { fill: "#F7FBFF", stroke: "#6FA8D6" }
+      : shape.semantic === "tertiary"
+        ? { fill: "#F7F5FE", stroke: "#9A90D6" }
+        : shape.semantic === "inactive"
+          ? { fill: "#FAF8F4", stroke: "#B4AEA6" }
+          : { fill: "#FAF8F4", stroke: "#8C867F" };
+
+  rows.push(`<mxCell id="${tableId}" value="${escapeXml(shape.title)}" style="${style}" vertex="1" parent="1">
+  <mxGeometry x="${shape.x}" y="${shape.y}" width="${shape.w}" height="${shape.h}" as="geometry"/>
+</mxCell>`);
+
+  rows.push(`<mxCell id="${tableId}-header" value="" style="shape=tableRow;html=1;fillColor=${tone.fill};strokeColor=${tone.stroke};" vertex="1" parent="${tableId}">
+  <mxGeometry y="${headerHeight}" width="${shape.w}" height="${rowHeight}" as="geometry"/>
+</mxCell>`);
+
+  let ratioOffset = 0;
+  for (let index = 0; index < shape.columns.length; index += 1) {
+    const ratioWidth = colRatios[index];
+        rows.push(`<mxCell id="${tableId}-header-col-${index}" value="${escapeXml(shape.columns[index])}" style="shape=partialRectangle;html=1;connectable=0;fillColor=none;strokeColor=none;fontStyle=1;fontSize=${shape.headerFontSize ?? 12};align=center;verticalAlign=middle;" vertex="1" parent="${tableId}-header">
+  <mxGeometry x="${ratioOffset}" width="${ratioWidth}" height="${rowHeight}" as="geometry"/>
+</mxCell>`);
+    ratioOffset += ratioWidth;
+  }
+
+  shape.rows.forEach((row, rowIndex) => {
+    const rowId = `${tableId}-row-${rowIndex}`;
+    rows.push(`<mxCell id="${rowId}" value="" style="shape=tableRow;html=1;fillColor=#ffffff;strokeColor=${tone.stroke};" vertex="1" parent="${tableId}">
+  <mxGeometry y="${headerHeight + rowHeight * (rowIndex + 1)}" width="${shape.w}" height="${rowHeight}" as="geometry"/>
+</mxCell>`);
+    let cellRatioOffset = 0;
+    row.forEach((cell, cellIndex) => {
+      const ratioWidth = colRatios[cellIndex];
+      rows.push(`<mxCell id="${rowId}-col-${cellIndex}" value="${escapeXml(cell)}" style="shape=partialRectangle;html=1;connectable=0;fillColor=none;strokeColor=none;fontSize=${shape.bodyFontSize ?? 13};align=left;spacingLeft=8;verticalAlign=middle;" vertex="1" parent="${rowId}">
+  <mxGeometry x="${cellRatioOffset}" width="${ratioWidth}" height="${rowHeight}" as="geometry"/>
+</mxCell>`);
+      cellRatioOffset += ratioWidth;
+    });
+  });
+
+  if (shape.note) {
+    rows.push(textCell(`${tableId}-note`, [shape.note], shape.x, shape.y + shape.h + 8, shape.w, 20, 12, "#7A756E", "left", false));
+  }
+
+  return rows;
+}
+
+function getTableColumnWidths(totalWidth, columnCount) {
+  if (columnCount === 3) {
+    const first = Math.floor(totalWidth * 0.26);
+    const second = Math.floor(totalWidth * 0.52);
+    return [first, second, totalWidth - first - second];
+  }
+
+  if (columnCount === 2) {
+    const first = Math.floor(totalWidth * 0.54);
+    return [first, totalWidth - first];
+  }
+
+  if (columnCount <= 1) {
+    return [totalWidth];
+  }
+
+  const widths = Array(columnCount).fill(Math.floor(totalWidth / columnCount));
+  widths[widths.length - 1] += totalWidth - widths.reduce((sum, width) => sum + width, 0);
+  return widths;
 }
 
 function anchorStyle(anchor, prefix) {
