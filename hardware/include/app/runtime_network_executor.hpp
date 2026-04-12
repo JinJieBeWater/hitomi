@@ -15,6 +15,7 @@ enum class NetworkRequestType : uint8_t {
   None = 0,
   ApiProbe,
   Activation,
+  EnrollmentReport,
   Sync,
   Upload,
 };
@@ -26,6 +27,7 @@ struct PendingNetworkRequest {
   std::string baseUrl;
   core::DeviceCredentials credentials;
   infra::BootstrapHelloRequest activationRequest;
+  infra::EnrollmentReportRequest enrollmentReportRequest;
   std::vector<core::PendingAttendanceRecord> uploadBatch;
 };
 
@@ -33,9 +35,11 @@ struct CompletedNetworkRequest {
   NetworkRequestType type = NetworkRequestType::None;
   uint32_t generation = 0;
   uint32_t requestedAtMs = 0;
+  infra::EnrollmentReportRequest enrollmentReportRequest;
   std::vector<core::PendingAttendanceRecord> uploadBatch;
   infra::ApiResult<infra::ServerProbeResponse> probeResult;
   infra::ApiResult<infra::BootstrapActivationResponse> activationResult;
+  infra::ApiResult<infra::EnrollmentReportResponse> enrollmentReportResult;
   infra::ApiResult<core::SyncPayload> syncResult;
   infra::ApiResult<infra::AttendanceUploadResponse> uploadResult;
 };

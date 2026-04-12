@@ -22,6 +22,47 @@ core::ApiError makeTransportError(const std::string& code, const std::string& me
   };
 }
 
+const char* httpTransportErrorCode(int httpCode) {
+  switch (httpCode) {
+    case HTTPC_ERROR_CONNECTION_REFUSED:
+      return "HTTP_CONNECTION_REFUSED";
+    case HTTPC_ERROR_SEND_HEADER_FAILED:
+      return "HTTP_SEND_HEADER_FAILED";
+    case HTTPC_ERROR_SEND_PAYLOAD_FAILED:
+      return "HTTP_SEND_PAYLOAD_FAILED";
+    case HTTPC_ERROR_NOT_CONNECTED:
+      return "HTTP_NOT_CONNECTED";
+    case HTTPC_ERROR_CONNECTION_LOST:
+      return "HTTP_CONNECTION_LOST";
+    case HTTPC_ERROR_NO_STREAM:
+      return "HTTP_NO_STREAM";
+    case HTTPC_ERROR_NO_HTTP_SERVER:
+      return "HTTP_NO_HTTP_SERVER";
+    case HTTPC_ERROR_TOO_LESS_RAM:
+      return "HTTP_TOO_LESS_RAM";
+    case HTTPC_ERROR_ENCODING:
+      return "HTTP_ENCODING_ERROR";
+    case HTTPC_ERROR_STREAM_WRITE:
+      return "HTTP_STREAM_WRITE_FAILED";
+    case HTTPC_ERROR_READ_TIMEOUT:
+      return "HTTP_READ_TIMEOUT";
+    default:
+      return "HTTP_REQUEST_FAILED";
+  }
+}
+
+core::ApiError makeHttpRequestError(int httpCode, const std::string& url) {
+  String errorText = HTTPClient::errorToString(httpCode);
+  std::string message = "HTTP request failed for " + url + ": ";
+  if (errorText.length() > 0) {
+    message += errorText.c_str();
+  } else {
+    message += "Unknown HTTPClient transport error";
+  }
+  message += " (" + std::to_string(httpCode) + ")";
+  return makeTransportError(httpTransportErrorCode(httpCode), message, true);
+}
+
 std::optional<core::ApiError> parseApiError(JsonVariantConst root) {
   JsonVariantConst error = root["error"];
   if (error.isNull()) {
@@ -60,8 +101,7 @@ ApiResult<T> postJson(const std::string& url, const JsonDocument& requestDoc, Pa
   http.end();
 
   if (httpCode <= 0) {
-    result.error = makeTransportError(
-        "HTTP_REQUEST_FAILED", "HTTP request failed: " + std::to_string(httpCode), true);
+    result.error = makeHttpRequestError(httpCode, url);
     return result;
   }
 
@@ -213,8 +253,7 @@ ApiResult<ServerProbeResponse> HttpDeviceApiClient::probeServer() {
   http.end();
 
   if (httpCode <= 0) {
-    result.error = makeTransportError(
-        "HTTP_REQUEST_FAILED", "HTTP request failed: " + std::to_string(httpCode), true);
+    result.error = makeHttpRequestError(httpCode, endpointUrl("/rpc/healthCheck"));
     return result;
   }
 

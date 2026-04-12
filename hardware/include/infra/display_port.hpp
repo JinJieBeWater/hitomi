@@ -11,6 +11,8 @@ namespace infra {
 enum class DisplayCommandType : uint8_t {
   RefreshData = 0,
   StartEnrollmentTask,
+  CancelEnrollment,
+  DismissCapture,
 };
 
 struct DisplayCommand {
@@ -24,6 +26,19 @@ struct DisplayRgb565Frame {
   uint16_t height = 0;
 };
 
+enum class DisplayNotificationLevel : uint8_t {
+  Info = 0,
+  Success,
+  Warning,
+  Error,
+};
+
+struct DisplayNotification {
+  DisplayNotificationLevel level = DisplayNotificationLevel::Info;
+  std::string text;
+  uint32_t durationMs = 2200;
+};
+
 class DisplayPort {
  public:
   virtual ~DisplayPort() = default;
@@ -33,6 +48,7 @@ class DisplayPort {
   virtual void render(const ui::AppViewModel& viewModel) = 0;
   virtual void updateCameraPreview(const DisplayRgb565Frame& frame) = 0;
   virtual void clearCameraPreview() = 0;
+  virtual void showNotification(const DisplayNotification& notification) = 0;
   virtual void tick(uint32_t nowMs) = 0;
   virtual std::optional<DisplayCommand> consumeCommand() = 0;
 };

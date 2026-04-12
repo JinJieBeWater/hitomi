@@ -44,6 +44,14 @@ constexpr lv_coord_t kEnrollActionHeight = 34;
 constexpr lv_coord_t kEnrollActionGap = 10;
 constexpr lv_coord_t kEnrollStatusY = 228;
 
+constexpr lv_coord_t kCaptureHeaderY = 0;
+constexpr lv_coord_t kCapturePreviewY = 26;
+constexpr lv_coord_t kCapturePreviewHeight = 136;
+constexpr lv_coord_t kCaptureStatusY = 170;
+constexpr lv_coord_t kCaptureProgressY = 196;
+constexpr lv_coord_t kCaptureActionY = 218;
+constexpr lv_coord_t kCaptureActionHeight = 34;
+
 constexpr lv_coord_t kSystemRowHeight = 34;
 constexpr lv_coord_t kSystemRowGap = 8;
 
@@ -59,12 +67,19 @@ constexpr uint32_t kNavButtonActiveHex = 0xF0F3BD;
 constexpr uint32_t kNavButtonActiveTextHex = 0x0D3B2A;
 constexpr uint32_t kAccentHex = 0xF4A261;
 constexpr std::size_t kDisplayCommandQueueCapacity = 4;
+constexpr std::size_t kDisplayNotificationQueueCapacity = 4;
+constexpr lv_coord_t kNotificationWidth = 72;
+constexpr lv_coord_t kNotificationMinHeight = 44;
+constexpr lv_coord_t kNotificationBottomY = -10;
 
 enum class SidebarPage : std::size_t {
   Home = 0,
   Enroll,
+  Capture,
   System,
 };
+
+constexpr std::size_t kPageCount = 4;
 
 struct SidebarPageSpec {
   SidebarPage page;
@@ -89,18 +104,12 @@ struct StatusRow {
   lv_obj_t* valueLabel = nullptr;
 };
 
-struct EnrollTaskWidgets {
-  lv_obj_t* button = nullptr;
-  lv_obj_t* titleLabel = nullptr;
-  lv_obj_t* metaLabel = nullptr;
-};
-
 struct LvglStatusDisplayData {
   SzpiLvglDisplay driver;
   lv_display_t* display = nullptr;
   std::array<lv_obj_t*, kSidebarPages.size()> navButtons = {};
   std::array<SidebarBinding, kSidebarPages.size()> navBindings = {};
-  std::array<lv_obj_t*, kSidebarPages.size()> pageContainers = {};
+  std::array<lv_obj_t*, kPageCount> pageContainers = {};
 
   lv_obj_t* homePeriodLabel = nullptr;
   lv_obj_t* homeCameraImage = nullptr;
@@ -116,6 +125,12 @@ struct LvglStatusDisplayData {
   lv_obj_t* enrollStartButton = nullptr;
   lv_obj_t* enrollStatusLabel = nullptr;
 
+  lv_obj_t* capturePreviewImage = nullptr;
+  lv_obj_t* captureHintLabel = nullptr;
+  lv_obj_t* captureStatusLabel = nullptr;
+  lv_obj_t* captureProgressLabel = nullptr;
+  lv_obj_t* captureCancelButton = nullptr;
+
   std::array<StatusRow, 7> systemRows = {};
 
   ui::AppViewModel lastViewModel = {};
@@ -127,11 +142,20 @@ struct LvglStatusDisplayData {
   std::array<DisplayCommand, kDisplayCommandQueueCapacity> commandQueue = {};
   std::size_t commandHead = 0;
   std::size_t queuedCommandCount = 0;
+  lv_obj_t* notificationPanel = nullptr;
+  lv_obj_t* notificationLabel = nullptr;
+  std::array<DisplayNotification, kDisplayNotificationQueueCapacity> notificationQueue = {};
+  std::size_t notificationHead = 0;
+  std::size_t queuedNotificationCount = 0;
+  bool notificationVisible = false;
+  uint32_t notificationHideAtMs = 0;
 };
 
 void enrollTaskButtonEventCallback(lv_event_t* event);
 void enrollRefreshButtonEventCallback(lv_event_t* event);
+void captureCancelButtonEventCallback(lv_event_t* event);
 bool enqueueCommand(LvglStatusDisplayData& data, DisplayCommand command);
+bool enqueueNotification(LvglStatusDisplayData& data, DisplayNotification notification);
 
 constexpr std::size_t toIndex(SidebarPage page) {
   return static_cast<std::size_t>(page);
@@ -170,6 +194,32 @@ void applyCaptionStyle(lv_obj_t* label, lv_text_align_t align) {
   lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(label, lv_color_hex(kMutedTextHex), 0);
   lv_obj_set_style_text_align(label, align, 0);
+}
+
+uint32_t notificationColorHex(DisplayNotificationLevel level) {
+  switch (level) {
+    case DisplayNotificationLevel::Success:
+      return 0x2A9D50;
+    case DisplayNotificationLevel::Warning:
+      return 0xE9C46A;
+    case DisplayNotificationLevel::Error:
+      return 0xC44536;
+    case DisplayNotificationLevel::Info:
+    default:
+      return 0x145A32;
+  }
+}
+
+uint32_t notificationTextHex(DisplayNotificationLevel level) {
+  switch (level) {
+    case DisplayNotificationLevel::Warning:
+      return kSidebarBackgroundHex;
+    case DisplayNotificationLevel::Info:
+    case DisplayNotificationLevel::Success:
+    case DisplayNotificationLevel::Error:
+    default:
+      return kTextColorHex;
+  }
 }
 
 void applyNavButtonStyle(lv_obj_t* button, bool active) {
@@ -264,6 +314,19 @@ bool enqueueCommand(LvglStatusDisplayData& data, DisplayCommand command) {
   return true;
 }
 
+bool enqueueNotification(LvglStatusDisplayData& data, DisplayNotification notification) {
+  if (data.queuedNotificationCount >= data.notificationQueue.size()) {
+    Serial.println("[DISPLAY] notification queue full; dropping toast");
+    return false;
+  }
+
+  const std::size_t tail =
+      (data.notificationHead + data.queuedNotificationCount) % data.notificationQueue.size();
+  data.notificationQueue[tail] = std::move(notification);
+  data.queuedNotificationCount += 1;
+  return true;
+}
+
 void refreshNavButtons(const LvglStatusDisplayData& data) {
   for (std::size_t index = 0; index < data.navButtons.size(); index += 1) {
     if (data.navButtons[index] != nullptr) {
@@ -313,7 +376,7 @@ void refreshHomePage(LvglStatusDisplayData& data) {
       lv_obj_clear_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
       lv_obj_align(data.homeCameraLabel, LV_ALIGN_BOTTOM_LEFT, 10, -8);
       lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_LEFT, 0);
-      lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_DOT);
+      lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
     } else {
       lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
       lv_obj_center(data.homeCameraLabel);
@@ -368,17 +431,45 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
   applyActionButtonStyle(data.enrollStartButton, hasTask && selectedEnrollmentTask(data) != nullptr);
 
   std::string statusText;
-  if (!hasTask) {
-    statusText = "No enrollment tasks. Tap Refresh to sync now.";
+  if (data.lastViewModel.periodLine.rfind("Enroll:", 0) == 0) {
+    statusText = "Capture running.";
+  } else if (!hasTask) {
+    statusText = "No tasks. Tap Refresh.";
   } else if (data.enrollmentRequestQueued) {
     const auto* task = selectedEnrollmentTask(data);
-    statusText = task == nullptr ? "Please reselect a task" : "Enrollment requested for " + task->title;
+    statusText = task == nullptr ? "Reselect task." : "Starting " + task->title;
   } else if (selectedEnrollmentTask(data) != nullptr) {
-    statusText = "Task selected. Tap Start to request enrollment, or Refresh to sync now.";
+    statusText = "Task selected. Tap Start.";
   } else {
-    statusText = "Tap a task card to select it, or Refresh to sync now.";
+    statusText = "Pick a task.";
   }
   lv_label_set_text(data.enrollStatusLabel, statusText.c_str());
+}
+
+void refreshCapturePage(LvglStatusDisplayData& data) {
+  if (data.captureHintLabel != nullptr) {
+    lv_label_set_text(data.captureHintLabel, data.lastViewModel.captureTitleLine.c_str());
+  }
+  if (data.captureStatusLabel != nullptr) {
+    lv_label_set_text(data.captureStatusLabel, data.lastViewModel.captureStatusLine.c_str());
+  }
+  if (data.captureProgressLabel != nullptr) {
+    lv_label_set_text(data.captureProgressLabel, data.lastViewModel.captureProgressLine.c_str());
+  }
+  if (data.captureCancelButton != nullptr) {
+    applyActionButtonStyle(data.captureCancelButton, true);
+    if (lv_obj_t* label = lv_obj_get_child(data.captureCancelButton, 0); label != nullptr) {
+      lv_label_set_text(label, data.lastViewModel.captureActionLabel.c_str());
+    }
+  }
+
+  if (data.capturePreviewImage != nullptr) {
+    if (data.homeCameraPreviewReady) {
+      lv_obj_clear_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
 }
 
 void refreshSystemPage(LvglStatusDisplayData& data) {
@@ -399,6 +490,9 @@ void refreshCurrentPage(LvglStatusDisplayData& data) {
     case SidebarPage::Enroll:
       refreshEnrollPage(data);
       break;
+    case SidebarPage::Capture:
+      refreshCapturePage(data);
+      break;
     case SidebarPage::System:
       refreshSystemPage(data);
       break;
@@ -413,6 +507,13 @@ void refreshUi(LvglStatusDisplayData& data) {
   }
 
   refreshNavButtons(data);
+
+  if (data.lastViewModel.captureActive && data.currentPage != SidebarPage::Capture) {
+    data.currentPage = SidebarPage::Capture;
+  } else if (!data.lastViewModel.captureActive && data.currentPage == SidebarPage::Capture) {
+    data.currentPage = SidebarPage::Enroll;
+  }
+
   refreshCurrentPage(data);
   showCurrentPage(data);
 }
@@ -476,15 +577,25 @@ void enrollRefreshButtonEventCallback(lv_event_t* event) {
                                .type = DisplayCommandType::RefreshData,
                                .targetId = "",
                            })) {
+    enqueueNotification(*data, DisplayNotification{
+                                   .level = DisplayNotificationLevel::Warning,
+                                   .text = "Busy. Retry.",
+                                   .durationMs = 2200,
+                               });
     if (data->enrollStatusLabel != nullptr) {
-      lv_label_set_text(data->enrollStatusLabel, "Refresh is busy. Try again.");
+      lv_label_set_text(data->enrollStatusLabel, "Busy. Retry.");
     }
     return;
   }
 
   data->enrollmentRequestQueued = false;
+  enqueueNotification(*data, DisplayNotification{
+                                 .level = DisplayNotificationLevel::Info,
+                                 .text = "Refreshing...",
+                                 .durationMs = 1800,
+                             });
   if (data->enrollStatusLabel != nullptr) {
-    lv_label_set_text(data->enrollStatusLabel, "Refreshing enrollment tasks...");
+    lv_label_set_text(data->enrollStatusLabel, "Refreshing...");
   }
 }
 
@@ -507,14 +618,63 @@ void enrollStartButtonEventCallback(lv_event_t* event) {
                                .type = DisplayCommandType::StartEnrollmentTask,
                                .targetId = task->taskId,
                            })) {
+    enqueueNotification(*data, DisplayNotification{
+                                   .level = DisplayNotificationLevel::Warning,
+                                   .text = "Busy. Retry.",
+                                   .durationMs = 2200,
+                               });
     if (data->enrollStatusLabel != nullptr) {
-      lv_label_set_text(data->enrollStatusLabel, "Enrollment action is busy. Try again.");
+      lv_label_set_text(data->enrollStatusLabel, "Busy. Retry.");
     }
     return;
   }
 
   data->enrollmentRequestQueued = true;
-  refreshEnrollPage(*data);
+  enqueueNotification(*data, DisplayNotification{
+                                 .level = DisplayNotificationLevel::Info,
+                                 .text = "Capture started.",
+                                 .durationMs = 2000,
+                             });
+  data->currentPage = SidebarPage::Capture;
+  refreshUi(*data);
+}
+
+void captureCancelButtonEventCallback(lv_event_t* event) {
+  if (lv_event_get_code(event) != LV_EVENT_CLICKED) {
+    return;
+  }
+
+  auto* data = static_cast<LvglStatusDisplayData*>(lv_event_get_user_data(event));
+  if (data == nullptr || !data->hasViewModel || !data->lastViewModel.captureActive) {
+    return;
+  }
+
+  const DisplayCommand command = data->lastViewModel.captureRunning
+      ? DisplayCommand{
+            .type = DisplayCommandType::CancelEnrollment,
+            .targetId = "",
+        }
+      : DisplayCommand{
+            .type = DisplayCommandType::DismissCapture,
+            .targetId = "",
+        };
+
+  if (!enqueueCommand(*data, command)) {
+    enqueueNotification(*data, DisplayNotification{
+                                   .level = DisplayNotificationLevel::Warning,
+                                   .text = "Busy. Retry.",
+                                   .durationMs = 1800,
+                               });
+    return;
+  }
+
+  enqueueNotification(*data, DisplayNotification{
+                                 .level = data->lastViewModel.captureRunning ? DisplayNotificationLevel::Warning
+                                                                            : DisplayNotificationLevel::Info,
+                                 .text = data->lastViewModel.captureRunning ? "Cancelling..."
+                                                                           : "Back to tasks...",
+                                 .durationMs = 1600,
+                             });
 }
 
 void createSidebarButton(LvglStatusDisplayData& data, lv_obj_t* parent, const SidebarPageSpec& spec, std::size_t index) {
@@ -576,7 +736,7 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
 
   lv_obj_t* attendanceCaption = lv_label_create(attendanceCard);
   applyCaptionStyle(attendanceCaption, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(attendanceCaption, "Last Check-in");
+  lv_label_set_text(attendanceCaption, "Status");
   lv_obj_align(attendanceCaption, LV_ALIGN_TOP_LEFT, 0, 0);
 
   data.homeAttendanceLabel = lv_label_create(attendanceCard);
@@ -589,7 +749,7 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
 void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_t* header = lv_label_create(parent);
   applyCaptionStyle(header, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(header, "Enrollment tasks for this device");
+  lv_label_set_text(header, "Tasks");
   lv_obj_set_width(header, kPageWidth);
   lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, kEnrollHeaderY);
 
@@ -625,11 +785,56 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_style_radius(data.enrollStartButton, 14, 0);
   lv_obj_t* startLabel = lv_label_create(data.enrollStartButton);
   applyLabelStyle(startLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
-  lv_label_set_text(startLabel, "Start Enrollment");
+  lv_label_set_text(startLabel, "Start");
   lv_obj_center(startLabel);
 
   data.enrollStatusLabel = createPageLabel(parent, kEnrollStatusY, kPageWidth, kMutedTextHex);
   lv_label_set_long_mode(data.enrollStatusLabel, LV_LABEL_LONG_DOT);
+}
+
+void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
+  lv_obj_t* header = lv_label_create(parent);
+  applyCaptionStyle(header, LV_TEXT_ALIGN_LEFT);
+  lv_label_set_text(header, "Capture");
+  lv_obj_set_width(header, kPageWidth);
+  lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, kCaptureHeaderY);
+
+  lv_obj_t* previewFrame = lv_obj_create(parent);
+  lv_obj_set_size(previewFrame, kPageWidth, kCapturePreviewHeight);
+  lv_obj_align(previewFrame, LV_ALIGN_TOP_LEFT, 0, kCapturePreviewY);
+  lv_obj_set_style_bg_color(previewFrame, lv_color_hex(kCameraPlaceholderHex), 0);
+  lv_obj_set_style_bg_opa(previewFrame, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(previewFrame, 0, 0);
+  lv_obj_set_style_radius(previewFrame, 18, 0);
+  lv_obj_remove_flag(previewFrame, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollbar_mode(previewFrame, LV_SCROLLBAR_MODE_OFF);
+
+  data.capturePreviewImage = lv_image_create(previewFrame);
+  lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_center(data.capturePreviewImage);
+
+  data.captureHintLabel = lv_label_create(previewFrame);
+  lv_obj_set_width(data.captureHintLabel, kPageWidth - 24);
+  lv_label_set_long_mode(data.captureHintLabel, LV_LABEL_LONG_WRAP);
+  applyLabelStyle(data.captureHintLabel, LV_TEXT_ALIGN_CENTER, kMutedTextHex);
+  lv_obj_align(data.captureHintLabel, LV_ALIGN_TOP_MID, 0, 10);
+
+  data.captureStatusLabel = createPageLabel(parent, kCaptureStatusY, kPageWidth, kTextColorHex);
+  lv_label_set_long_mode(data.captureStatusLabel, LV_LABEL_LONG_WRAP);
+
+  data.captureProgressLabel = createPageLabel(parent, kCaptureProgressY, kPageWidth, kMutedTextHex);
+  lv_label_set_long_mode(data.captureProgressLabel, LV_LABEL_LONG_WRAP);
+
+  data.captureCancelButton = lv_button_create(parent);
+  lv_obj_set_size(data.captureCancelButton, kPageWidth, kCaptureActionHeight);
+  lv_obj_align(data.captureCancelButton, LV_ALIGN_TOP_LEFT, 0, kCaptureActionY);
+  lv_obj_add_event_cb(data.captureCancelButton, captureCancelButtonEventCallback, LV_EVENT_CLICKED, &data);
+  lv_obj_set_style_border_width(data.captureCancelButton, 0, 0);
+  lv_obj_set_style_radius(data.captureCancelButton, 14, 0);
+  lv_obj_t* cancelLabel = lv_label_create(data.captureCancelButton);
+  applyLabelStyle(cancelLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  lv_label_set_text(cancelLabel, "Cancel");
+  lv_obj_center(cancelLabel);
 }
 
 void createSystemPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
@@ -673,6 +878,9 @@ void createUi(LvglStatusDisplayData& data) {
   data.pageContainers[toIndex(SidebarPage::Enroll)] = createPageContainer(screen);
   createEnrollPage(data, data.pageContainers[toIndex(SidebarPage::Enroll)]);
 
+  data.pageContainers[toIndex(SidebarPage::Capture)] = createPageContainer(screen);
+  createCapturePage(data, data.pageContainers[toIndex(SidebarPage::Capture)]);
+
   data.pageContainers[toIndex(SidebarPage::System)] = createPageContainer(screen);
   lv_obj_add_flag(data.pageContainers[toIndex(SidebarPage::System)], LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scroll_dir(data.pageContainers[toIndex(SidebarPage::System)], LV_DIR_VER);
@@ -681,6 +889,30 @@ void createUi(LvglStatusDisplayData& data) {
 
   refreshNavButtons(data);
   showCurrentPage(data);
+
+  lv_obj_t* notificationPanel = lv_obj_create(lv_layer_top());
+  data.notificationPanel = notificationPanel;
+  lv_obj_remove_style_all(notificationPanel);
+  lv_obj_set_size(notificationPanel, kNotificationWidth, LV_SIZE_CONTENT);
+  lv_obj_set_style_min_height(notificationPanel, kNotificationMinHeight, 0);
+  lv_obj_set_style_radius(notificationPanel, 12, 0);
+  lv_obj_set_style_pad_left(notificationPanel, 8, 0);
+  lv_obj_set_style_pad_right(notificationPanel, 8, 0);
+  lv_obj_set_style_pad_top(notificationPanel, 8, 0);
+  lv_obj_set_style_pad_bottom(notificationPanel, 8, 0);
+  lv_obj_set_style_bg_opa(notificationPanel, LV_OPA_90, 0);
+  lv_obj_set_style_bg_color(notificationPanel, lv_color_hex(notificationColorHex(DisplayNotificationLevel::Info)), 0);
+  lv_obj_set_style_border_width(notificationPanel, 0, 0);
+  lv_obj_align(notificationPanel, LV_ALIGN_BOTTOM_LEFT, 6, kNotificationBottomY);
+  lv_obj_add_flag(notificationPanel, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_clear_flag(notificationPanel, LV_OBJ_FLAG_SCROLLABLE);
+
+  data.notificationLabel = lv_label_create(notificationPanel);
+  lv_obj_set_width(data.notificationLabel, kNotificationWidth - 16);
+  lv_label_set_long_mode(data.notificationLabel, LV_LABEL_LONG_WRAP);
+  applyCaptionStyle(data.notificationLabel, LV_TEXT_ALIGN_CENTER);
+  lv_obj_set_style_text_color(data.notificationLabel, lv_color_hex(notificationTextHex(DisplayNotificationLevel::Info)), 0);
+  lv_obj_center(data.notificationLabel);
 }
 
 }  // namespace
@@ -688,6 +920,47 @@ void createUi(LvglStatusDisplayData& data) {
 struct LvglStatusDisplay::Impl : LvglStatusDisplayData {};
 
 namespace {
+
+void hideNotification(LvglStatusDisplayData& data) {
+  if (data.notificationPanel == nullptr) {
+    return;
+  }
+
+  data.notificationVisible = false;
+  data.notificationHideAtMs = 0;
+  lv_obj_add_flag(data.notificationPanel, LV_OBJ_FLAG_HIDDEN);
+}
+
+void showNotificationNow(LvglStatusDisplayData& data, const DisplayNotification& notification, uint32_t nowMs) {
+  if (data.notificationPanel == nullptr || data.notificationLabel == nullptr) {
+    return;
+  }
+
+  lv_obj_set_style_bg_color(data.notificationPanel, lv_color_hex(notificationColorHex(notification.level)), 0);
+  lv_obj_set_style_text_color(data.notificationLabel, lv_color_hex(notificationTextHex(notification.level)), 0);
+  lv_label_set_text(data.notificationLabel, notification.text.c_str());
+  lv_obj_update_layout(data.notificationPanel);
+  lv_obj_align(data.notificationPanel, LV_ALIGN_BOTTOM_LEFT, 6, kNotificationBottomY);
+  lv_obj_clear_flag(data.notificationPanel, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(data.notificationPanel);
+  data.notificationVisible = true;
+  data.notificationHideAtMs = nowMs + (notification.durationMs == 0 ? 2200 : notification.durationMs);
+}
+
+void processNotificationQueue(LvglStatusDisplayData& data, uint32_t nowMs) {
+  if (data.notificationVisible && data.notificationHideAtMs != 0 && nowMs >= data.notificationHideAtMs) {
+    hideNotification(data);
+  }
+
+  if (data.notificationVisible || data.queuedNotificationCount == 0) {
+    return;
+  }
+
+  const DisplayNotification notification = std::move(data.notificationQueue[data.notificationHead]);
+  data.notificationHead = (data.notificationHead + 1) % data.notificationQueue.size();
+  data.queuedNotificationCount -= 1;
+  showNotificationNow(data, notification, nowMs);
+}
 
 void updatePreviewDescriptor(LvglStatusDisplayData& data, lv_coord_t width, lv_coord_t height) {
   data.homeCameraImageDsc.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -785,7 +1058,7 @@ void LvglStatusDisplay::updateCameraPreview(const DisplayRgb565Frame& frame) {
   if (!ready() || frame.data == nullptr || frame.width == 0 || frame.height == 0 || impl_->homeCameraImage == nullptr) {
     return;
   }
-  if (impl_->currentPage != SidebarPage::Home) {
+  if (impl_->currentPage != SidebarPage::Home && impl_->currentPage != SidebarPage::Capture) {
     return;
   }
 
@@ -811,8 +1084,17 @@ void LvglStatusDisplay::updateCameraPreview(const DisplayRgb565Frame& frame) {
   lv_obj_center(impl_->homeCameraImage);
   lv_obj_clear_flag(impl_->homeCameraImage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_invalidate(impl_->homeCameraImage);
+  if (impl_->capturePreviewImage != nullptr) {
+    lv_image_set_src(impl_->capturePreviewImage, &impl_->homeCameraImageDsc);
+    lv_obj_set_size(impl_->capturePreviewImage, targetWidth, targetHeight);
+    lv_obj_center(impl_->capturePreviewImage);
+    lv_obj_clear_flag(impl_->capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(impl_->capturePreviewImage);
+  }
   if (impl_->currentPage == SidebarPage::Home && impl_->hasViewModel) {
     refreshHomePage(*impl_);
+  } else if (impl_->currentPage == SidebarPage::Capture && impl_->hasViewModel) {
+    refreshCapturePage(*impl_);
   }
 }
 
@@ -823,9 +1105,27 @@ void LvglStatusDisplay::clearCameraPreview() {
 
   impl_->homeCameraPreviewReady = false;
   lv_obj_add_flag(impl_->homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+  if (impl_->capturePreviewImage != nullptr) {
+    lv_obj_add_flag(impl_->capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
+  }
   if (impl_->currentPage == SidebarPage::Home && impl_->hasViewModel) {
     refreshHomePage(*impl_);
+  } else if (impl_->currentPage == SidebarPage::Capture && impl_->hasViewModel) {
+    refreshCapturePage(*impl_);
   }
+}
+
+void LvglStatusDisplay::showNotification(const DisplayNotification& notification) {
+  if (!ready() || notification.text.empty()) {
+    return;
+  }
+
+  if (!impl_->notificationVisible && impl_->queuedNotificationCount == 0) {
+    showNotificationNow(*impl_, notification, millis());
+    return;
+  }
+
+  enqueueNotification(*impl_, notification);
 }
 
 void LvglStatusDisplay::tick(uint32_t nowMs) {
@@ -835,6 +1135,7 @@ void LvglStatusDisplay::tick(uint32_t nowMs) {
 
   lv_tick_inc(nowMs - impl_->lastLvglTickMs);
   impl_->lastLvglTickMs = nowMs;
+  processNotificationQueue(*impl_, nowMs);
   lv_timer_handler_run_in_period(board::kLvglHandlerPeriodMs);
 }
 

@@ -14,6 +14,7 @@ void initializeTemplateStore(const RuntimeContext& context, RuntimeState& state)
 void loadPersistedState(const RuntimeContext& context, RuntimeState& state);
 void persistDeviceConfig(const RuntimeContext& context, const RuntimeState& state);
 void persistSnapshots(const RuntimeContext& context, const RuntimeState& state);
+void persistPendingEnrollmentReports(const RuntimeContext& context, const RuntimeState& state);
 void persistPendingAttendanceRecords(const RuntimeContext& context, const RuntimeState& state);
 void persistFailureLogs(const RuntimeContext& context, const RuntimeState& state);
 void persistStorageAux(const RuntimeContext& context, const RuntimeState& state);

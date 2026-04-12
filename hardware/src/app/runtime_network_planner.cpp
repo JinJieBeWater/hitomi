@@ -19,6 +19,10 @@ bool syncEligible(const RuntimeState& state) {
   return state.connectivity == ConnectivityState::Connected && state.credentials.configured() && apiConfigured(state);
 }
 
+bool enrollmentReportEligible(const RuntimeState& state) {
+  return syncEligible(state) && !state.pendingEnrollmentReports.empty();
+}
+
 bool uploadEligible(const RuntimeState& state) {
   return syncEligible(state) && !state.pendingAttendanceRecords.empty() && state.snapshots.attendanceConfig.has_value();
 }
@@ -26,7 +30,8 @@ bool uploadEligible(const RuntimeState& state) {
 }  // namespace
 
 bool hasNetworkRequestInFlight(const RuntimeState& state) {
-  return state.apiProbeInFlight || state.activationInFlight || state.syncInFlight || state.uploadInFlight;
+  return state.apiProbeInFlight || state.activationInFlight || state.enrollmentReportInFlight ||
+      state.syncInFlight || state.uploadInFlight;
 }
 
 NetworkRequestType nextNetworkRequestType(const RuntimeState& state, uint32_t nowMs) {
@@ -59,6 +64,12 @@ NetworkRequestType nextNetworkRequestType(const RuntimeState& state, uint32_t no
       (state.lastActivationAttemptMs == 0 ||
        nowMs - state.lastActivationAttemptMs >= board::kActivationRetryIntervalMs)) {
     return NetworkRequestType::Activation;
+  }
+
+  if (!state.enrollmentReportInFlight && enrollmentReportEligible(state) &&
+      (state.lastEnrollmentReportAttemptMs == 0 ||
+       nowMs - state.lastEnrollmentReportAttemptMs >= board::kUploadRetryIntervalMs)) {
+    return NetworkRequestType::EnrollmentReport;
   }
 
   if (!state.syncInFlight && syncEligible(state) &&

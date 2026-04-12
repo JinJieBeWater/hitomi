@@ -15,10 +15,10 @@
 namespace app {
 namespace {
 
-constexpr uint32_t kNetworkRequestTaskStackSize = 16 * 1024;
+constexpr uint32_t kNetworkRequestTaskStackSize = 8 * 1024;
 constexpr UBaseType_t kNetworkRequestTaskPriority = 1;
 constexpr BaseType_t kNetworkRequestTaskCore = 0;
-constexpr std::size_t kMaxConcurrentNetworkRequests = 2;
+constexpr std::size_t kPendingRequestQueueCapacity = 4;
 
 class FreeRtosRuntimeNetworkExecutor final : public RuntimeNetworkExecutor {
  public:
@@ -43,6 +43,25 @@ class FreeRtosRuntimeNetworkExecutor final : public RuntimeNetworkExecutor {
       return false;
     }
 
+    const BaseType_t created = xTaskCreatePinnedToCore(
+        &FreeRtosRuntimeNetworkExecutor::taskEntry,
+        "hitomi_request",
+        kNetworkRequestTaskStackSize,
+        this,
+        kNetworkRequestTaskPriority,
+        &impl_->workerHandle,
+        kNetworkRequestTaskCore);
+    if (created != pdPASS) {
+      Serial.printf(
+          "[APP] failed to create network executor worker stack=%lu freeHeap=%lu minFreeHeap=%lu\n",
+          static_cast<unsigned long>(kNetworkRequestTaskStackSize),
+          static_cast<unsigned long>(ESP.getFreeHeap()),
+          static_cast<unsigned long>(ESP.getMinFreeHeap()));
+      vSemaphoreDelete(impl_->mutex);
+      impl_->mutex = nullptr;
+      return false;
+    }
+
     impl_->started = true;
     return true;
   }
@@ -52,52 +71,22 @@ class FreeRtosRuntimeNetworkExecutor final : public RuntimeNetworkExecutor {
       return false;
     }
 
-    std::unique_ptr<infra::DeviceApiClient> requestClient =
-        impl_->deviceApiClient.cloneWithBaseUrl(request.baseUrl);
-    if (requestClient == nullptr) {
-      Serial.println("[APP] failed to clone request-scoped device API client");
-      return false;
-    }
-
     if (xSemaphoreTake(impl_->mutex, portMAX_DELAY) != pdTRUE) {
       return false;
     }
 
-    const bool hasCapacity = impl_->activeRequestCount < kMaxConcurrentNetworkRequests;
+    const bool hasCapacity = impl_->pendingRequests.size() < kPendingRequestQueueCapacity;
     if (hasCapacity) {
-      impl_->activeRequestCount += 1;
+      impl_->pendingRequests.push_back(std::move(request));
     }
     xSemaphoreGive(impl_->mutex);
 
     if (!hasCapacity) {
+      Serial.println("[APP] network request queue full");
       return false;
     }
 
-    auto* taskContext = new (std::nothrow) RequestTaskContext{
-        .executor = this,
-        .request = std::move(request),
-        .requestClient = std::move(requestClient),
-    };
-    if (taskContext == nullptr) {
-      releaseActiveRequestSlot();
-      Serial.println("[APP] failed to allocate network request task context");
-      return false;
-    }
-
-    const BaseType_t created = xTaskCreatePinnedToCore(
-        &FreeRtosRuntimeNetworkExecutor::taskEntry,
-        "hitomi_request",
-        kNetworkRequestTaskStackSize,
-        taskContext,
-        kNetworkRequestTaskPriority,
-        nullptr,
-        kNetworkRequestTaskCore);
-    if (created != pdPASS) {
-      delete taskContext;
-      releaseActiveRequestSlot();
-      Serial.println("[APP] failed to create network request task");
-      return false;
-    }
+    xTaskNotifyGive(impl_->workerHandle);
 
     return true;
   }
@@ -121,60 +110,55 @@ class FreeRtosRuntimeNetworkExecutor final : public RuntimeNetworkExecutor {
   }
 
  private:
-  struct RequestTaskContext {
-    FreeRtosRuntimeNetworkExecutor* executor = nullptr;
-    PendingNetworkRequest request = {};
-    std::unique_ptr<infra::DeviceApiClient> requestClient;
-  };
-
   struct Impl {
     explicit Impl(infra::DeviceApiClient& client) : deviceApiClient(client) {}
 
     infra::DeviceApiClient& deviceApiClient;
     SemaphoreHandle_t mutex = nullptr;
+    TaskHandle_t workerHandle = nullptr;
+    std::deque<PendingNetworkRequest> pendingRequests;
     std::deque<CompletedNetworkRequest> completedRequests;
-    std::size_t activeRequestCount = 0;
     bool started = false;
   };
 
   static void taskEntry(void* userData) {
-    std::unique_ptr<RequestTaskContext> context(static_cast<RequestTaskContext*>(userData));
-    if (context == nullptr || context->executor == nullptr || context->requestClient == nullptr) {
+    auto* executor = static_cast<FreeRtosRuntimeNetworkExecutor*>(userData);
+    if (executor == nullptr) {
       vTaskDelete(nullptr);
       return;
     }
 
-    context->executor->runRequestTask(*context);
-    vTaskDelete(nullptr);
-  }
+    while (true) {
+      ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-  void runRequestTask(RequestTaskContext& context) {
-    CompletedNetworkRequest completed = execute(*context.requestClient, std::move(context.request));
+      while (true) {
+        std::optional<PendingNetworkRequest> request;
+        if (xSemaphoreTake(executor->impl_->mutex, portMAX_DELAY) == pdTRUE) {
+          if (!executor->impl_->pendingRequests.empty()) {
+            request = std::move(executor->impl_->pendingRequests.front());
+            executor->impl_->pendingRequests.pop_front();
+          }
+          xSemaphoreGive(executor->impl_->mutex);
+        }
 
-    if (xSemaphoreTake(impl_->mutex, portMAX_DELAY) == pdTRUE) {
-      impl_->completedRequests.push_back(std::move(completed));
-      if (impl_->activeRequestCount > 0) {
-        impl_->activeRequestCount -= 1;
+        if (!request.has_value()) {
+          break;
+        }
+
+        std::unique_ptr<infra::DeviceApiClient> requestClient =
+            executor->impl_->deviceApiClient.cloneWithBaseUrl(request->baseUrl);
+        if (requestClient == nullptr) {
+          Serial.println("[APP] failed to clone request-scoped device API client");
+          continue;
+        }
+
+        CompletedNetworkRequest completed = executor->execute(*requestClient, std::move(request.value()));
+        if (xSemaphoreTake(executor->impl_->mutex, portMAX_DELAY) == pdTRUE) {
+          executor->impl_->completedRequests.push_back(std::move(completed));
+          xSemaphoreGive(executor->impl_->mutex);
+        }
       }
-      xSemaphoreGive(impl_->mutex);
-      return;
     }
-
-    releaseActiveRequestSlot();
-  }
-
-  void releaseActiveRequestSlot() {
-    if (impl_->mutex == nullptr) {
-      return;
-    }
-
-    if (xSemaphoreTake(impl_->mutex, portMAX_DELAY) != pdTRUE) {
-      return;
-    }
-    if (impl_->activeRequestCount > 0) {
-      impl_->activeRequestCount -= 1;
-    }
-    xSemaphoreGive(impl_->mutex);
   }
 
   CompletedNetworkRequest execute(infra::DeviceApiClient& deviceApiClient, PendingNetworkRequest request) {
@@ -182,6 +166,7 @@ class FreeRtosRuntimeNetworkExecutor final : public RuntimeNetworkExecutor {
     completed.type = request.type;
     completed.generation = request.generation;
     completed.requestedAtMs = request.requestedAtMs;
+    completed.enrollmentReportRequest = request.enrollmentReportRequest;
     completed.uploadBatch = std::move(request.uploadBatch);
 
     switch (request.type) {
@@ -190,6 +175,10 @@ class FreeRtosRuntimeNetworkExecutor final : public RuntimeNetworkExecutor {
         return completed;
       case NetworkRequestType::Activation:
         completed.activationResult = deviceApiClient.bootstrapHello(request.activationRequest);
+        return completed;
+      case NetworkRequestType::EnrollmentReport:
+        completed.enrollmentReportResult =
+            deviceApiClient.reportEnrollment(request.credentials, request.enrollmentReportRequest);
         return completed;
       case NetworkRequestType::Sync:
         completed.syncResult = deviceApiClient.sync(request.credentials);

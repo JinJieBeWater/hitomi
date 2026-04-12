@@ -6,8 +6,8 @@
 namespace app {
 
 bool facePortsReady(const RuntimeContext& context) {
-  return context.camera.available() && context.enrollmentService.available() &&
-      context.recognitionService.available();
+  return context.camera.available() &&
+      (context.enrollmentService.available() || context.recognitionService.available());
 }
 
 RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeState& state) {
@@ -25,7 +25,9 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.faceEngineReady = state.faceEngineReady;
   status.faceDetectReady = state.faceDetectReady;
   status.faceDetected = state.faceDetected;
+  status.enrollmentReportInFlight = state.enrollmentReportInFlight;
   status.templateStoreStatusCode = state.storageAux.templateStoreHealth.statusCode;
+  status.templateStoreDetail = state.storageAux.templateStoreHealth.detail;
   status.templateCount = state.storageAux.templateLibrarySummary.templateCount;
   status.sdTotalBytes = state.storageAux.templateStoreHealth.totalBytes;
   status.sdUsedBytes = state.storageAux.templateStoreHealth.usedBytes;
@@ -40,6 +42,14 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.activationInFlight = state.activationInFlight;
   status.syncInFlight = state.syncInFlight;
   status.uploadInFlight = state.uploadInFlight;
+  status.enrollmentState = state.enrollmentState;
+  status.enrollmentPendingCount = state.pendingEnrollmentReports.size();
+  status.enrollmentCapturedSamples = state.enrollmentCapturedSamples;
+  status.enrollmentRequiredSamples = state.enrollmentRequiredSamples;
+  status.activeEnrollmentTaskId = state.activeEnrollmentTaskId;
+  status.activeEnrollmentEmployeeName = state.activeEnrollmentEmployeeName;
+  status.enrollmentFailureReason = state.enrollmentFailureReason;
+  status.enrollmentStatusDetail = state.enrollmentStatusDetail;
   status.faceEngineStatusDetail = state.faceEngineStatusDetail;
   status.faceDetectStatusDetail = state.faceDetectStatusDetail;
   status.faceTopScore = state.faceTopScore;

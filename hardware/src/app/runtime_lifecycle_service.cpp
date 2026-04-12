@@ -21,6 +21,12 @@ namespace app {
 
 namespace {
 
+enum class WifiActionResult {
+  NotStarted,
+  Started,
+  Deferred,
+};
+
 std::string buildDefaultDeviceSerial() {
   char serial[32] = {};
   std::snprintf(serial, sizeof(serial), "SZPI-%llX", static_cast<unsigned long long>(ESP.getEfuseMac()));
@@ -53,6 +59,16 @@ bool isAuthFailureReason(uint8_t reason) {
     case WIFI_REASON_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT:
     case WIFI_REASON_802_1X_AUTH_FAILED:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool isTransientReconnectReason(uint8_t reason) {
+  switch (reason) {
+    case WIFI_REASON_ASSOC_LEAVE:
+    case WIFI_REASON_STA_LEAVING:
       return true;
     default:
       return false;
@@ -117,6 +133,17 @@ bool wifiProfileInCooldown(const RuntimeState& state, std::size_t profileIndex, 
 void clearWifiCandidates(RuntimeState& state) {
   state.wifiCandidates.clear();
   state.wifiCandidateCursor = 0;
+}
+
+void deferWifiRetry(RuntimeState& state, uint32_t nowMs, const char* reason) {
+  state.wifiConnectInProgress = false;
+  state.wifiReconnectBlockedUntilMs = nowMs + board::kWifiReconnectCooldownMs;
+  if (reason != nullptr && reason[0] != '\0') {
+    Serial.printf(
+        "[APP] WiFi retry deferred reason=%s until=%lu\n",
+        reason,
+        static_cast<unsigned long>(state.wifiReconnectBlockedUntilMs));
+  }
 }
 
 void resetWifiAttemptRound(RuntimeState& state) {
@@ -293,6 +320,7 @@ void applyConnectedState(const RuntimeContext& context, RuntimeState& state, uin
   const bool wasConnected = state.connectivity == ConnectivityState::Connected;
   state.wifiConnectInProgress = false;
   state.wifiScanInProgress = false;
+  state.wifiReconnectBlockedUntilMs = 0;
   state.wifiShouldTryLastKnownGood = true;
   state.wifiConfiguredFallbackAttempted = false;
   state.lastWifiRetryRoundMs = 0;
@@ -366,6 +394,11 @@ void applyDisconnectedState(RuntimeState& state, uint32_t nowMs, std::optional<u
   invalidatePendingNetworkRequests(state);
   state.wifiConnectInProgress = false;
   state.lastWifiDisconnectReason = reason;
+  if (reason.has_value() && isTransientReconnectReason(reason.value())) {
+    state.wifiReconnectBlockedUntilMs = nowMs + board::kWifiReconnectCooldownMs;
+  } else {
+    state.wifiReconnectBlockedUntilMs = 0;
+  }
 
   if (state.activeWifiSsid.has_value()) {
     state.activeWifiSsid.reset();
@@ -377,7 +410,7 @@ void applyDisconnectedState(RuntimeState& state, uint32_t nowMs, std::optional<u
   }
 }
 
-void startWifiConnectionAttempt(
+WifiActionResult startWifiConnectionAttempt(
     RuntimeState& state,
     std::size_t profileIndex,
     uint32_t nowMs,
@@ -386,11 +419,10 @@ void startWifiConnectionAttempt(
     const uint8_t* bssid = nullptr) {
   const auto& profile = state.deviceConfig.wifiProfiles[profileIndex];
   state.lastWifiConnectAttemptMs = nowMs;
-  state.wifiConnectInProgress = true;
-  state.activeWifiProfileIndex = profileIndex;
   state.lastWifiDisconnectReason.reset();
   state.renderDirty = true;
 
+  wl_status_t beginStatus = WL_CONNECT_FAILED;
   if (bssid != nullptr || channel != 0) {
     Serial.printf(
         "[APP] connecting WiFi strategy=%s SSID=%s channel=%u bssid=%s\n",
@@ -398,38 +430,45 @@ void startWifiConnectionAttempt(
         profile.ssid.c_str(),
         static_cast<unsigned>(channel),
         formatBssid(bssid).c_str());
-    WiFi.begin(profile.ssid.c_str(), profile.password.c_str(), channel, bssid);
-    return;
+    beginStatus = WiFi.begin(profile.ssid.c_str(), profile.password.c_str(), channel, bssid);
+  } else {
+    Serial.printf("[APP] connecting WiFi strategy=%s SSID=%s\n", strategy, profile.ssid.c_str());
+    beginStatus = WiFi.begin(profile.ssid.c_str(), profile.password.c_str());
   }
 
-  Serial.printf("[APP] connecting WiFi strategy=%s SSID=%s\n", strategy, profile.ssid.c_str());
-  WiFi.begin(profile.ssid.c_str(), profile.password.c_str());
+  if (beginStatus == WL_CONNECT_FAILED) {
+    deferWifiRetry(state, nowMs, "driver rejected begin");
+    return WifiActionResult::Deferred;
+  }
+
+  state.wifiConnectInProgress = true;
+  state.activeWifiProfileIndex = profileIndex;
+  return WifiActionResult::Started;
 }
 
-bool tryLastKnownGoodConnection(RuntimeState& state, uint32_t nowMs) {
+WifiActionResult tryLastKnownGoodConnection(RuntimeState& state, uint32_t nowMs) {
   if (!state.wifiShouldTryLastKnownGood) {
-    return false;
+    return WifiActionResult::NotStarted;
   }
 
   const auto profileIndex = findSuccessfulWifiProfile(state, nowMs);
   state.wifiShouldTryLastKnownGood = false;
   if (!profileIndex.has_value()) {
-    return false;
+    return WifiActionResult::NotStarted;
   }
 
   const auto& profile = state.deviceConfig.wifiProfiles[profileIndex.value()];
   const auto bssid = parseBssid(profile.lastSuccessBssid);
-  startWifiConnectionAttempt(
+  return startWifiConnectionAttempt(
       state,
       profileIndex.value(),
       nowMs,
       "last-known-good",
       profile.lastSuccessChannel,
       bssid.has_value() ? bssid->data() : nullptr);
-  return true;
 }
 
-bool tryNextWifiCandidate(RuntimeState& state, uint32_t nowMs) {
+WifiActionResult tryNextWifiCandidate(RuntimeState& state, uint32_t nowMs) {
   while (state.wifiCandidateCursor < state.wifiCandidates.size()) {
     const WifiScanCandidate candidate = state.wifiCandidates[state.wifiCandidateCursor++];
     if (!state.deviceConfig.wifiProfiles[candidate.profileIndex].configured() ||
@@ -437,53 +476,52 @@ bool tryNextWifiCandidate(RuntimeState& state, uint32_t nowMs) {
       continue;
     }
 
-    startWifiConnectionAttempt(
+    return startWifiConnectionAttempt(
         state,
         candidate.profileIndex,
         nowMs,
         "scan-candidate",
         candidate.channel,
         candidate.hasBssid ? candidate.bssid.data() : nullptr);
-    return true;
   }
 
-  return false;
+  return WifiActionResult::NotStarted;
 }
 
-bool tryConfiguredFallbackConnection(RuntimeState& state, uint32_t nowMs) {
+WifiActionResult tryConfiguredFallbackConnection(RuntimeState& state, uint32_t nowMs) {
   if (state.wifiConfiguredFallbackAttempted) {
-    return false;
+    return WifiActionResult::NotStarted;
   }
 
   state.wifiConfiguredFallbackAttempted = true;
   const auto profileIndex = findConfiguredFallbackProfile(state, nowMs);
   if (!profileIndex.has_value()) {
-    return false;
+    return WifiActionResult::NotStarted;
   }
 
-  startWifiConnectionAttempt(state, profileIndex.value(), nowMs, "configured-fallback");
-  return true;
+  return startWifiConnectionAttempt(state, profileIndex.value(), nowMs, "configured-fallback");
 }
 
-bool requestWifiScan(RuntimeState& state, uint32_t nowMs) {
+WifiActionResult requestWifiScan(RuntimeState& state, uint32_t nowMs) {
   if (state.wifiScanInProgress) {
-    return true;
+    return WifiActionResult::Started;
   }
   if (state.lastWifiScanRequestMs != 0 &&
       nowMs - state.lastWifiScanRequestMs < board::kWifiScanRetryIntervalMs) {
-    return false;
+    return WifiActionResult::NotStarted;
   }
 
   const int scanResult = WiFi.scanNetworks(true, false);
   state.lastWifiScanRequestMs = nowMs;
   if (scanResult == WIFI_SCAN_FAILED) {
     Serial.println("[APP] WiFi scan request failed");
-    return false;
+    deferWifiRetry(state, nowMs, "scan rejected while driver busy");
+    return WifiActionResult::Deferred;
   }
 
   Serial.println("[APP] WiFi scan requested");
   state.wifiScanInProgress = true;
-  return true;
+  return WifiActionResult::Started;
 }
 
 }  // namespace
@@ -587,6 +625,13 @@ void ensureWifiConnection(const RuntimeContext& context, RuntimeState& state, ui
     return;
   }
 
+  if (state.wifiReconnectBlockedUntilMs != 0 && nowMs < state.wifiReconnectBlockedUntilMs) {
+    return;
+  }
+  if (state.wifiReconnectBlockedUntilMs != 0 && nowMs >= state.wifiReconnectBlockedUntilMs) {
+    state.wifiReconnectBlockedUntilMs = 0;
+  }
+
   if (state.wifiConnectInProgress) {
     if (nowMs - state.lastWifiConnectAttemptMs < board::kWifiConnectAttemptTimeoutMs) {
       return;
@@ -596,6 +641,8 @@ void ensureWifiConnection(const RuntimeContext& context, RuntimeState& state, ui
     WiFi.disconnect(false, false);
     state.wifiConnectInProgress = false;
     applyDisconnectedState(state, nowMs, std::nullopt);
+    deferWifiRetry(state, nowMs, "connect timeout");
+    return;
   }
 
   if (state.wifiScanInProgress) {
@@ -606,19 +653,21 @@ void ensureWifiConnection(const RuntimeContext& context, RuntimeState& state, ui
     refreshWifiScanCandidates(state, nowMs);
   }
 
-  if (tryLastKnownGoodConnection(state, nowMs)) {
+  if (tryLastKnownGoodConnection(state, nowMs) != WifiActionResult::NotStarted) {
     return;
   }
 
-  if (tryNextWifiCandidate(state, nowMs)) {
+  if (tryNextWifiCandidate(state, nowMs) != WifiActionResult::NotStarted) {
     return;
   }
 
-  if (state.wifiCandidates.empty() && requestWifiScan(state, nowMs)) {
-    return;
+  if (state.wifiCandidates.empty()) {
+    if (requestWifiScan(state, nowMs) != WifiActionResult::NotStarted) {
+      return;
+    }
   }
 
-  if (tryConfiguredFallbackConnection(state, nowMs)) {
+  if (tryConfiguredFallbackConnection(state, nowMs) != WifiActionResult::NotStarted) {
     return;
   }
 

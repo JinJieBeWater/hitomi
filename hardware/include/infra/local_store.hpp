@@ -21,6 +21,7 @@ struct StoredRuntimeState {
   core::DeviceConfig deviceConfig;
   core::DeviceCredentials credentials;
   core::SnapshotBundle snapshots;
+  std::vector<core::PendingEnrollmentReport> pendingEnrollmentReports;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
   std::vector<core::FailureLogEntry> failureLogs;
   StorageAuxState storageAux;
@@ -36,6 +37,8 @@ class LocalStore {
   virtual bool clearDeviceConfig() = 0;
   virtual bool saveCredentials(const core::DeviceCredentials& credentials) = 0;
   virtual bool saveSnapshots(const core::SnapshotBundle& snapshots) = 0;
+  virtual bool savePendingEnrollmentReports(
+      const std::vector<core::PendingEnrollmentReport>& reports) = 0;
   virtual bool savePendingAttendanceRecords(
       const std::vector<core::PendingAttendanceRecord>& records) = 0;
   virtual bool saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) = 0;

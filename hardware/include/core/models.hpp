@@ -130,6 +130,16 @@ struct EnrollmentTaskSnapshot {
   uint64_t updatedAt = 0;
 };
 
+struct PendingEnrollmentReport {
+  std::string taskId;
+  std::string employeeId;
+  std::string result;
+  uint64_t finishedAt = 0;
+  std::optional<std::string> failureReason;
+  std::optional<uint64_t> lastAttemptAt;
+  std::optional<std::string> lastResultCode;
+};
+
 struct PendingAttendanceRecord {
   std::string clientRecordId;
   std::string employeeId;

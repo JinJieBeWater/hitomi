@@ -3,7 +3,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace face {
 
@@ -49,6 +51,29 @@ struct CameraStatus {
   std::string lastError;
 };
 
+struct EnrollmentRequest {
+  std::string taskId;
+  std::string employeeId;
+  std::string employeeName;
+};
+
+struct EnrollmentProgress {
+  bool active = false;
+  std::size_t capturedSamples = 0;
+  std::size_t requiredSamples = 0;
+  std::size_t detectedFaceCount = 0;
+  std::string detail;
+};
+
+struct EnrollmentResult {
+  std::string taskId;
+  std::string employeeId;
+  bool success = false;
+  uint64_t finishedAt = 0;
+  std::vector<uint8_t> templateBytes;
+  std::optional<std::string> failureReason;
+};
+
 class CameraFrameLease {
  public:
   virtual ~CameraFrameLease() = default;
@@ -70,6 +95,12 @@ class EnrollmentServicePort {
  public:
   virtual ~EnrollmentServicePort() = default;
   virtual bool available() const = 0;
+  virtual bool active() const = 0;
+  virtual bool start(const EnrollmentRequest& request) = 0;
+  virtual void cancel() = 0;
+  virtual EnrollmentProgress progress() const = 0;
+  virtual void processFrame(const CameraFrameInfo& frameInfo, const uint8_t* frameData, uint32_t nowMs) = 0;
+  virtual std::optional<EnrollmentResult> takeResult() = 0;
 };
 
 class RecognitionServicePort {
@@ -105,6 +136,31 @@ class NoopEnrollmentServicePort final : public EnrollmentServicePort {
  public:
   bool available() const override {
     return false;
+  }
+
+  bool active() const override {
+    return false;
+  }
+
+  bool start(const EnrollmentRequest& request) override {
+    (void)request;
+    return false;
+  }
+
+  void cancel() override {}
+
+  EnrollmentProgress progress() const override {
+    return EnrollmentProgress{};
+  }
+
+  void processFrame(const CameraFrameInfo& frameInfo, const uint8_t* frameData, uint32_t nowMs) override {
+    (void)frameInfo;
+    (void)frameData;
+    (void)nowMs;
+  }
+
+  std::optional<EnrollmentResult> takeResult() override {
+    return std::nullopt;
   }
 };
 

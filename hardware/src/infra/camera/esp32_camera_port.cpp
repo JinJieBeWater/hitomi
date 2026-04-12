@@ -97,7 +97,8 @@ camera_config_t buildCameraConfig() {
   config.pixel_format = PIXFORMAT_RGB565;
   config.frame_size = FRAMESIZE_QVGA;
   config.jpeg_quality = 12;
-  config.fb_count = 2;
+  // One extra buffer absorbs short stalls from RGB565 face detection and Wi-Fi activity.
+  config.fb_count = board::kCameraFrameBufferCount;
   config.fb_location = CAMERA_FB_IN_PSRAM;
   config.grab_mode = CAMERA_GRAB_LATEST;
   return config;

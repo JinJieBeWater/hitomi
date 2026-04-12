@@ -19,6 +19,12 @@ std::optional<AttendanceRecordType> classifyAttendanceType(
 QueueMutationResult enqueueAttendanceRecord(
     std::vector<PendingAttendanceRecord>& queue, const PendingAttendanceRecord& candidate);
 
+void upsertPendingEnrollmentReport(
+    std::vector<PendingEnrollmentReport>& queue, const PendingEnrollmentReport& candidate);
+
+bool removeEnrollmentTask(
+    std::vector<EnrollmentTaskSnapshot>& tasks, const std::string& taskId);
+
 UploadApplicationResult applyUploadResults(
     const std::vector<PendingAttendanceRecord>& queue,
     const std::vector<FailureLogEntry>& logs,

@@ -7,13 +7,27 @@
 #include <utility>
 
 #include "app/api_probe_policy.hpp"
+#include "app/runtime_enrollment_ops.hpp"
 #include "app/runtime_network_planner.hpp"
 #include "app/runtime_storage_ops.hpp"
 #include "board/app_config.hpp"
 #include "core/use_cases.hpp"
+#include "infra/display_port.hpp"
 
 namespace app {
 namespace {
+
+void notify(
+    const RuntimeContext& context,
+    infra::DisplayNotificationLevel level,
+    const std::string& text,
+    uint32_t durationMs) {
+  context.display.showNotification(infra::DisplayNotification{
+      .level = level,
+      .text = text,
+      .durationMs = durationMs,
+  });
+}
 
 void clearManualRefreshRequests(RuntimeState& state) {
   state.manualApiProbeRequested = false;
@@ -74,6 +88,17 @@ PendingNetworkRequest buildNetworkRequest(const RuntimeState& state, NetworkRequ
           .wifiSsid = state.activeWifiSsid,
       };
       return request;
+    case NetworkRequestType::EnrollmentReport:
+      if (!state.pendingEnrollmentReports.empty()) {
+        request.enrollmentReportRequest = {
+            .taskId = state.pendingEnrollmentReports.front().taskId,
+            .employeeId = state.pendingEnrollmentReports.front().employeeId,
+            .result = state.pendingEnrollmentReports.front().result,
+            .finishedAt = state.pendingEnrollmentReports.front().finishedAt,
+            .failureReason = state.pendingEnrollmentReports.front().failureReason,
+        };
+      }
+      return request;
     case NetworkRequestType::Upload: {
       const std::size_t batchSize =
           std::min<std::size_t>(state.pendingAttendanceRecords.size(), board::kUploadBatchSize);
@@ -100,6 +125,10 @@ void markRequestSubmitted(RuntimeState& state, NetworkRequestType type, uint32_t
       state.activationInFlight = true;
       state.lastActivationAttemptMs = nowMs;
       break;
+    case NetworkRequestType::EnrollmentReport:
+      state.enrollmentReportInFlight = true;
+      state.lastEnrollmentReportAttemptMs = nowMs;
+      break;
     case NetworkRequestType::Sync:
       state.syncInFlight = true;
       state.lastSyncAttemptMs = nowMs;
@@ -113,6 +142,29 @@ void markRequestSubmitted(RuntimeState& state, NetworkRequestType type, uint32_t
       break;
   }
   state.renderDirty = true;
+}
+
+void markRequestDeferred(RuntimeState& state, NetworkRequestType type, uint32_t nowMs) {
+  switch (type) {
+    case NetworkRequestType::ApiProbe:
+      state.lastApiProbeAttemptMs = nowMs;
+      break;
+    case NetworkRequestType::Activation:
+      state.lastActivationAttemptMs = nowMs;
+      break;
+    case NetworkRequestType::EnrollmentReport:
+      state.lastEnrollmentReportAttemptMs = nowMs;
+      break;
+    case NetworkRequestType::Sync:
+      state.lastSyncAttemptMs = nowMs;
+      break;
+    case NetworkRequestType::Upload:
+      state.lastUploadAttemptMs = nowMs;
+      break;
+    case NetworkRequestType::None:
+    default:
+      break;
+  }
 }
 
 void applyApiProbeResult(RuntimeState& state, const infra::ApiResult<infra::ServerProbeResponse>& result) {
@@ -209,6 +261,99 @@ void applySyncResult(const RuntimeContext& context, RuntimeState& state, const C
   state.renderDirty = true;
 }
 
+void applyEnrollmentReportResult(
+    const RuntimeContext& context,
+    RuntimeState& state,
+    const CompletedNetworkRequest& completed) {
+  static constexpr char kApiPath[] = "/api/device/enrollment/report";
+
+  state.enrollmentReportInFlight = false;
+  if (state.pendingEnrollmentReports.empty()) {
+    state.renderDirty = true;
+    return;
+  }
+
+  auto& report = state.pendingEnrollmentReports.front();
+  const auto& result = completed.enrollmentReportResult;
+  if (!result.success || !result.data.has_value()) {
+    setLastError(state, result.error);
+    if (result.error.has_value()) {
+      Serial.printf(
+          "[APP] enrollment report failed task=%s code=%s message=%s\n",
+          report.taskId.c_str(),
+          result.error->code.c_str(),
+          result.error->message.c_str());
+      report.lastAttemptAt = completed.requestedAtMs;
+      report.lastResultCode = result.error->code;
+      persistPendingEnrollmentReports(context, state);
+      appendApiFailureLog(context, state, kApiPath, completed.requestedAtMs, result.error.value(), report.taskId);
+    }
+    state.renderDirty = true;
+    return;
+  }
+
+  state.apiProbeSucceeded = true;
+  state.apiProbeStatusCode = std::nullopt;
+
+  const bool terminalStatus =
+      result.data->status == "success" || result.data->status == "failed" || result.data->status == "cancelled";
+  if (result.data->applied || terminalStatus) {
+    const std::string employeeName =
+        state.activeEnrollmentEmployeeName.value_or(report.employeeId.empty() ? "selected employee" : report.employeeId);
+    const bool cancelledByServer = result.data->status == "cancelled";
+    const bool cancelledLocally =
+        report.failureReason.has_value() && report.failureReason.value() == "ENROLLMENT_CANCELLED";
+    const bool failedByServer = result.data->status == "failed";
+    Serial.printf(
+        "[APP] enrollment report applied task=%s status=%s applied=%d\n",
+        report.taskId.c_str(),
+        result.data->status.c_str(),
+        result.data->applied ? 1 : 0);
+    core::removeEnrollmentTask(state.snapshots.enrollmentTasks, report.taskId);
+    persistSnapshots(context, state);
+    state.pendingEnrollmentReports.erase(state.pendingEnrollmentReports.begin());
+    persistPendingEnrollmentReports(context, state);
+    if (state.enrollmentState == EnrollmentRunState::Reporting) {
+      state.enrollmentState =
+          (cancelledByServer || cancelledLocally) ? EnrollmentRunState::Cancelled
+          : failedByServer ? EnrollmentRunState::Failed
+                           : EnrollmentRunState::Done;
+      state.enrollmentStatusDetail =
+          (cancelledByServer || cancelledLocally) ? std::optional<std::string>("Cancelled")
+          : failedByServer ? std::optional<std::string>("Failed")
+                           : std::optional<std::string>("Applied");
+      state.enrollmentFailureReason =
+          (cancelledByServer || cancelledLocally) ? std::optional<std::string>("ENROLLMENT_CANCELLED")
+          : failedByServer ? std::optional<std::string>("ENROLLMENT_FAILED")
+                           : std::nullopt;
+    }
+    setLastError(
+        state,
+        (result.data->status == "cancelled" || cancelledLocally) ? std::optional<core::ApiError>(core::ApiError{
+                                                 .code = "TASK_CANCELLED",
+                                                 .message = "enrollment task was cancelled",
+                                                 .retryable = false,
+                                             })
+                                           : std::nullopt);
+    notify(
+        context,
+        (cancelledByServer || cancelledLocally) ? infra::DisplayNotificationLevel::Warning
+        : failedByServer ? infra::DisplayNotificationLevel::Error
+                         : infra::DisplayNotificationLevel::Success,
+        (cancelledByServer || cancelledLocally) ? ("Cancelled: " + employeeName)
+        : failedByServer ? ("Failed: " + employeeName)
+                         : ("Done: " + employeeName),
+        (cancelledByServer || cancelledLocally) ? 2800 : 2200);
+    state.renderDirty = true;
+    return;
+  }
+
+  report.lastAttemptAt = completed.requestedAtMs;
+  report.lastResultCode = result.data->status;
+  persistPendingEnrollmentReports(context, state);
+  state.renderDirty = true;
+}
+
 void applyUploadResult(const RuntimeContext& context, RuntimeState& state, const CompletedNetworkRequest& completed) {
   state.uploadInFlight = false;
 
@@ -254,6 +399,7 @@ void applyUploadResult(const RuntimeContext& context, RuntimeState& state, const
 void resetNetworkTaskSchedule(RuntimeState& state) {
   state.lastApiProbeAttemptMs = 0;
   state.lastActivationAttemptMs = 0;
+  state.lastEnrollmentReportAttemptMs = 0;
   state.lastSyncAttemptMs = 0;
   state.lastUploadAttemptMs = 0;
 }
@@ -262,6 +408,7 @@ void invalidatePendingNetworkRequests(RuntimeState& state) {
   state.networkRequestGeneration += 1;
   state.apiProbeInFlight = false;
   state.activationInFlight = false;
+  state.enrollmentReportInFlight = false;
   state.syncInFlight = false;
   state.uploadInFlight = false;
   clearManualRefreshRequests(state);
@@ -297,8 +444,13 @@ void handleDisplayCommand(
       requestManualRefresh(context, state, nowMs);
       return;
     case infra::DisplayCommandType::StartEnrollmentTask:
-      Serial.printf("[APP] Enrollment start requested taskId=%s\n", command.targetId.c_str());
-      state.renderDirty = true;
+      startEnrollmentTask(context, state, command.targetId, nowMs);
+      return;
+    case infra::DisplayCommandType::CancelEnrollment:
+      cancelEnrollmentTask(context, state, nowMs);
+      return;
+    case infra::DisplayCommandType::DismissCapture:
+      dismissCaptureSummary(state);
       return;
     default:
       return;
@@ -328,6 +480,9 @@ void consumeCompletedNetworkRequest(const RuntimeContext& context, RuntimeState&
     case NetworkRequestType::Activation:
       applyActivationResult(context, state, *completed);
       return;
+    case NetworkRequestType::EnrollmentReport:
+      applyEnrollmentReportResult(context, state, *completed);
+      return;
     case NetworkRequestType::Sync:
       applySyncResult(context, state, *completed);
       return;
@@ -352,8 +507,12 @@ void dispatchNetworkRequest(const RuntimeContext& context, RuntimeState& state, 
   if (type == NetworkRequestType::Upload && request.uploadBatch.empty()) {
     return;
   }
+  const std::size_t uploadBatchSize = request.uploadBatch.size();
+  const std::string enrollmentTaskId = request.enrollmentReportRequest.taskId;
+  const std::string enrollmentEmployeeId = request.enrollmentReportRequest.employeeId;
 
   if (!context.networkExecutor.submit(std::move(request))) {
+    markRequestDeferred(state, type, nowMs);
     return;
   }
 
@@ -362,6 +521,13 @@ void dispatchNetworkRequest(const RuntimeContext& context, RuntimeState& state, 
         "[APP] Activation attempt path=%s serial=%s\n",
         "/api/device/bootstrap/hello",
         state.deviceConfig.bootstrapIdentity.deviceSerial.c_str());
+  } else if (type == NetworkRequestType::EnrollmentReport) {
+    Serial.printf(
+        "[APP] Enrollment report taskId=%s employeeId=%s\n",
+        enrollmentTaskId.c_str(),
+        enrollmentEmployeeId.c_str());
+  } else if (type == NetworkRequestType::Upload) {
+    Serial.printf("[APP] Upload request submitted batch=%u\n", static_cast<unsigned>(uploadBatchSize));
   }
   markRequestSubmitted(state, type, nowMs);
 }

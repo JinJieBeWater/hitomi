@@ -15,6 +15,17 @@ enum class ConnectivityState {
   Connected,
 };
 
+enum class EnrollmentRunState : uint8_t {
+  Idle = 0,
+  Preparing,
+  Capturing,
+  SavingTemplate,
+  Reporting,
+  Done,
+  Failed,
+  Cancelled,
+};
+
 struct RuntimeStatus {
   std::string firmwareTag;
   core::DeviceCredentials credentials;
@@ -28,7 +39,9 @@ struct RuntimeStatus {
   bool faceEngineReady = false;
   bool faceDetectReady = false;
   bool faceDetected = false;
+  bool enrollmentReportInFlight = false;
   std::string templateStoreStatusCode;
+  std::string templateStoreDetail;
   std::size_t templateCount = 0;
   uint64_t sdTotalBytes = 0;
   uint64_t sdUsedBytes = 0;
@@ -44,6 +57,14 @@ struct RuntimeStatus {
   std::optional<std::string> apiProbeStatusCode;
   bool syncInFlight = false;
   bool uploadInFlight = false;
+  EnrollmentRunState enrollmentState = EnrollmentRunState::Idle;
+  std::size_t enrollmentPendingCount = 0;
+  std::size_t enrollmentCapturedSamples = 0;
+  std::size_t enrollmentRequiredSamples = 0;
+  std::optional<std::string> activeEnrollmentTaskId;
+  std::optional<std::string> activeEnrollmentEmployeeName;
+  std::optional<std::string> enrollmentFailureReason;
+  std::optional<std::string> enrollmentStatusDetail;
   std::optional<std::string> faceEngineStatusDetail;
   std::optional<std::string> faceDetectStatusDetail;
   std::optional<float> faceTopScore;

@@ -22,6 +22,8 @@ class JsonLocalStore final : public LocalStore {
   bool clearDeviceConfig() override;
   bool saveCredentials(const core::DeviceCredentials& credentials) override;
   bool saveSnapshots(const core::SnapshotBundle& snapshots) override;
+  bool savePendingEnrollmentReports(
+      const std::vector<core::PendingEnrollmentReport>& reports) override;
   bool savePendingAttendanceRecords(
       const std::vector<core::PendingAttendanceRecord>& records) override;
   bool saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) override;

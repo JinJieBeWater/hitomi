@@ -3158,23 +3158,31 @@ semanticStyles.warning = {
 mkdirSync(figuresDir, { recursive: true });
 mkdirSync(figureSrcDir, { recursive: true });
 
-for (const diagram of diagrams) {
-  const preparedDiagram = prepareDiagram(diagram);
-  const drawio = renderDrawio(preparedDiagram);
-  const svg = renderSvg(preparedDiagram);
-  const html = renderHtml(preparedDiagram);
-  const drawioPath = join(figureSrcDir, `${preparedDiagram.slug}.drawio`);
-  const svgPath = join(figuresDir, `${preparedDiagram.slug}.svg`);
-  const htmlPath = join(figureSrcDir, `${preparedDiagram.slug}.html`);
+export { diagrams, prepareDiagram };
 
-  writeFileSync(drawioPath, drawio, "utf8");
-  writeFileSync(svgPath, svg, "utf8");
-  writeFileSync(htmlPath, html, "utf8");
+if (isMainModule()) {
+  for (const diagram of diagrams) {
+    const preparedDiagram = prepareDiagram(diagram);
+    const drawio = renderDrawio(preparedDiagram);
+    const svg = renderSvg(preparedDiagram);
+    const html = renderHtml(preparedDiagram);
+    const drawioPath = join(figureSrcDir, `${preparedDiagram.slug}.drawio`);
+    const svgPath = join(figuresDir, `${preparedDiagram.slug}.svg`);
+    const htmlPath = join(figureSrcDir, `${preparedDiagram.slug}.html`);
+
+    writeFileSync(drawioPath, drawio, "utf8");
+    writeFileSync(svgPath, svg, "utf8");
+    writeFileSync(htmlPath, html, "utf8");
+  }
+
+  console.log(`Rendered ${diagrams.length} thesis figures with anthropic-diagram styling.`);
+  console.log(`SVG files: ${figuresDir}`);
+  console.log(`Drawio files: ${figureSrcDir}`);
 }
 
-console.log(`Rendered ${diagrams.length} thesis figures with anthropic-diagram styling.`);
-console.log(`SVG files: ${figuresDir}`);
-console.log(`Drawio files: ${figureSrcDir}`);
+function isMainModule() {
+  return Boolean(process.argv[1]) && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+}
 
 function prepareDiagram(diagram) {
   const prepared = structuredClone(diagram);
@@ -3236,7 +3244,11 @@ function prepareDiagram(diagram) {
 }
 
 function autoRouteEdge(diagram, edge) {
-  if (["Swimlane Sequence", "Linear Workflow", "Feedback Loop Workflow"].includes(diagram.spec?.pattern ?? "")) {
+  if (
+    ["Swimlane Sequence", "Linear Workflow", "Feedback Loop Workflow"].includes(
+      diagram.spec?.pattern ?? "",
+    )
+  ) {
     return edge.points ?? [];
   }
 
@@ -3257,7 +3269,8 @@ function autoRouteEdge(diagram, edge) {
   const margin = 20;
 
   if (edge.fromAnchor === "left" || edge.fromAnchor === "right") {
-    const exitX = edge.fromAnchor === "left" ? sourcePanel.x - margin : sourcePanel.x + sourcePanel.w + margin;
+    const exitX =
+      edge.fromAnchor === "left" ? sourcePanel.x - margin : sourcePanel.x + sourcePanel.w + margin;
     return [
       { x: exitX, y: from.y },
       { x: exitX, y: to.y },
@@ -3265,7 +3278,8 @@ function autoRouteEdge(diagram, edge) {
   }
 
   if (edge.fromAnchor === "top" || edge.fromAnchor === "bottom") {
-    const exitY = edge.fromAnchor === "top" ? sourcePanel.y - margin : sourcePanel.y + sourcePanel.h + margin;
+    const exitY =
+      edge.fromAnchor === "top" ? sourcePanel.y - margin : sourcePanel.y + sourcePanel.h + margin;
     return [
       { x: from.x, y: exitY },
       { x: to.x, y: exitY },
@@ -3296,9 +3310,14 @@ function fitBlockShape(shape, options) {
   let wrappedLines = originalLines;
 
   while (fontSize >= options.minFontSize) {
-    wrappedLines = originalLines.flatMap((line) => wrapText(line, shape.w - options.paddingX * 2, fontSize));
+    wrappedLines = originalLines.flatMap((line) =>
+      wrapText(line, shape.w - options.paddingX * 2, fontSize),
+    );
     const lineHeight = Math.round(fontSize * options.lineHeightRatio);
-    const requiredHeight = Math.max(options.minHeight, wrappedLines.length * lineHeight + options.paddingY * 2);
+    const requiredHeight = Math.max(
+      options.minHeight,
+      wrappedLines.length * lineHeight + options.paddingY * 2,
+    );
 
     if (requiredHeight <= shape.h || fontSize === options.minFontSize) {
       const nextHeight = Math.max(options.minHeight, requiredHeight);
@@ -3875,7 +3894,9 @@ function svgTableEntity(shape) {
   ];
 
   if (x3 !== null) {
-    lines.push(`<line x1="${x3}" y1="${shape.y + headerHeight}" x2="${x3}" y2="${shape.y + shape.h}" stroke="${tone.stroke}" stroke-width="1"/>`);
+    lines.push(
+      `<line x1="${x3}" y1="${shape.y + headerHeight}" x2="${x3}" y2="${shape.y + shape.h}" stroke="${tone.stroke}" stroke-width="1"/>`,
+    );
   }
 
   shape.columns.forEach((column, index) => {
@@ -3891,7 +3912,9 @@ function svgTableEntity(shape) {
 
   shape.rows.forEach((row, index) => {
     const rowY = shape.y + headerHeight + columnHeaderHeight + index * rowHeight;
-    lines.push(`<line x1="${shape.x}" y1="${rowY}" x2="${shape.x + shape.w}" y2="${rowY}" stroke="${tone.stroke}" stroke-width="0.9"/>`);
+    lines.push(
+      `<line x1="${shape.x}" y1="${rowY}" x2="${shape.x + shape.w}" y2="${rowY}" stroke="${tone.stroke}" stroke-width="0.9"/>`,
+    );
     row.forEach((cell, cellIndex) => {
       const offsetX = cellIndex === 0 ? shape.x : cellIndex === 1 ? x2 : x3;
       const width = colWidths[cellIndex];
@@ -3963,7 +3986,11 @@ function svgEdge(shape, diagram) {
   const tone = edgeStyles[shape.semantic] ?? edgeStyles.primary;
   const from = getConnectorPoint(diagram, shape.from, shape.fromAnchor ?? "right");
   const to = getConnectorPoint(diagram, shape.to, shape.toAnchor ?? "left");
-  const points = orthogonalizePolyline([from, ...(shape.points ?? []), to], shape.fromAnchor, shape.toAnchor);
+  const points = orthogonalizePolyline(
+    [from, ...(shape.points ?? []), to],
+    shape.fromAnchor,
+    shape.toAnchor,
+  );
   const marker =
     shape.semantic === "optional"
       ? "arrow-optional"
@@ -3997,7 +4024,12 @@ function orthogonalizePolyline(points, fromAnchor, toAnchor) {
       continue;
     }
 
-    const corner = chooseCorner(prev, next, index === 1 ? fromAnchor : null, index === points.length - 1 ? toAnchor : null);
+    const corner = chooseCorner(
+      prev,
+      next,
+      index === 1 ? fromAnchor : null,
+      index === points.length - 1 ? toAnchor : null,
+    );
     if (corner.x !== prev.x || corner.y !== prev.y) {
       orthogonal.push(corner);
     }
@@ -4200,7 +4232,7 @@ function tableEntityCells(shape) {
   let ratioOffset = 0;
   for (let index = 0; index < shape.columns.length; index += 1) {
     const ratioWidth = colRatios[index];
-        rows.push(`<mxCell id="${tableId}-header-col-${index}" value="${escapeXml(shape.columns[index])}" style="shape=partialRectangle;html=1;connectable=0;fillColor=none;strokeColor=none;fontStyle=1;fontSize=${shape.headerFontSize ?? 12};align=center;verticalAlign=middle;" vertex="1" parent="${tableId}-header">
+    rows.push(`<mxCell id="${tableId}-header-col-${index}" value="${escapeXml(shape.columns[index])}" style="shape=partialRectangle;html=1;connectable=0;fillColor=none;strokeColor=none;fontStyle=1;fontSize=${shape.headerFontSize ?? 12};align=center;verticalAlign=middle;" vertex="1" parent="${tableId}-header">
   <mxGeometry x="${ratioOffset}" width="${ratioWidth}" height="${rowHeight}" as="geometry"/>
 </mxCell>`);
     ratioOffset += ratioWidth;
@@ -4222,7 +4254,20 @@ function tableEntityCells(shape) {
   });
 
   if (shape.note) {
-    rows.push(textCell(`${tableId}-note`, [shape.note], shape.x, shape.y + shape.h + 8, shape.w, 20, 12, "#7A756E", "left", false));
+    rows.push(
+      textCell(
+        `${tableId}-note`,
+        [shape.note],
+        shape.x,
+        shape.y + shape.h + 8,
+        shape.w,
+        20,
+        12,
+        "#7A756E",
+        "left",
+        false,
+      ),
+    );
   }
 
   return rows;

@@ -114,6 +114,30 @@ QueueMutationResult enqueueAttendanceRecord(
   };
 }
 
+void upsertPendingEnrollmentReport(
+    std::vector<PendingEnrollmentReport>& queue, const PendingEnrollmentReport& candidate) {
+  auto it = std::find_if(queue.begin(), queue.end(), [&](const PendingEnrollmentReport& current) {
+    return current.taskId == candidate.taskId;
+  });
+  if (it == queue.end()) {
+    queue.push_back(candidate);
+    return;
+  }
+  *it = candidate;
+}
+
+bool removeEnrollmentTask(
+    std::vector<EnrollmentTaskSnapshot>& tasks, const std::string& taskId) {
+  auto it = std::find_if(tasks.begin(), tasks.end(), [&](const EnrollmentTaskSnapshot& task) {
+    return task.taskId == taskId;
+  });
+  if (it == tasks.end()) {
+    return false;
+  }
+  tasks.erase(it);
+  return true;
+}
+
 UploadApplicationResult applyUploadResults(
     const std::vector<PendingAttendanceRecord>& queue,
     const std::vector<FailureLogEntry>& logs,

@@ -17,6 +17,12 @@ struct AppViewModel {
   std::string periodLine;
   std::string cameraHintLine;
   std::string attendanceResultLine;
+  bool captureActive = false;
+  bool captureRunning = false;
+  std::string captureTitleLine;
+  std::string captureStatusLine;
+  std::string captureProgressLine;
+  std::string captureActionLabel;
   std::vector<EnrollmentTaskItemViewModel> enrollmentTasks;
   std::string enrollmentTaskSummaryLine;
   std::string credentialsLine;

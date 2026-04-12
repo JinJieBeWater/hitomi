@@ -1,5 +1,5 @@
 import "@hitomi/env/web";
-import { resolveAppListenHost, resolveAppPort } from "@hitomi/env/app";
+import { resolveAppListenHost, resolveAppOrigin, resolveAppPort } from "@hitomi/env/app";
 
 export default defineNuxtConfig({
   compatibilityDate: "latest",
@@ -19,7 +19,7 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      serverUrl: process.env.NUXT_PUBLIC_SERVER_URL || "",
+      serverUrl: resolveAppOrigin(process.env),
     },
   },
 });

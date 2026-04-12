@@ -30,8 +30,17 @@ void initializeTemplateStore(const RuntimeContext& context, RuntimeState& state)
   applyTemplateStoreStatus(context, state, initStatus, initStatus.ready);
   persistStorageAux(context, state);
 
-  if (!state.templateStoreReady) {
-    Serial.println("[APP] template store unavailable");
+  if (state.templateStoreReady) {
+    Serial.printf(
+        "[APP] template dir ready path=%s/templates status=%s detail=%s\n",
+        board::kSdMountPoint,
+        initStatus.health.statusCode.c_str(),
+        initStatus.health.detail.c_str());
+  } else {
+    Serial.printf(
+        "[APP] template store unavailable status=%s detail=%s\n",
+        initStatus.health.statusCode.c_str(),
+        initStatus.health.detail.c_str());
   }
 }
 
@@ -42,6 +51,7 @@ void loadPersistedState(const RuntimeContext& context, RuntimeState& state) {
       ? state.deviceConfig.runtimeCredentials
       : std::move(stored.credentials);
   state.snapshots = std::move(stored.snapshots);
+  state.pendingEnrollmentReports = std::move(stored.pendingEnrollmentReports);
   state.pendingAttendanceRecords = std::move(stored.pendingAttendanceRecords);
   state.failureLogs = std::move(stored.failureLogs);
   state.storageAux = std::move(stored.storageAux);
@@ -59,6 +69,13 @@ void persistSnapshots(const RuntimeContext& context, const RuntimeState& state) 
     return;
   }
   context.localStore.saveSnapshots(state.snapshots);
+}
+
+void persistPendingEnrollmentReports(const RuntimeContext& context, const RuntimeState& state) {
+  if (!state.filesystemReady) {
+    return;
+  }
+  context.localStore.savePendingEnrollmentReports(state.pendingEnrollmentReports);
 }
 
 void persistPendingAttendanceRecords(const RuntimeContext& context, const RuntimeState& state) {

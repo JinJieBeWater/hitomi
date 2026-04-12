@@ -31,6 +31,7 @@ struct RuntimeState {
   core::DeviceConfig deviceConfig;
   core::DeviceCredentials credentials;
   core::SnapshotBundle snapshots;
+  std::vector<core::PendingEnrollmentReport> pendingEnrollmentReports;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
   std::vector<core::FailureLogEntry> failureLogs;
   infra::StorageAuxState storageAux;
@@ -45,6 +46,7 @@ struct RuntimeState {
   bool faceModuleEnabled = false;
   bool apiProbeInFlight = false;
   bool apiProbeSucceeded = false;
+  bool enrollmentReportInFlight = false;
   bool syncInFlight = false;
   bool uploadInFlight = false;
   bool renderDirty = true;
@@ -61,10 +63,13 @@ struct RuntimeState {
   uint32_t lastApiProbeAttemptMs = 0;
   uint32_t lastCameraPollMs = 0;
   uint32_t lastCameraStatusRenderMs = 0;
+  uint32_t lastEnrollmentReportAttemptMs = 0;
+  uint32_t lastEnrollmentFrameSampleMs = 0;
   uint32_t lastFaceDetectionMs = 0;
   uint32_t lastNetworkProbeMs = 0;
   uint32_t lastTemplateStoreProbeMs = 0;
   uint32_t lastWifiConnectAttemptMs = 0;
+  uint32_t wifiReconnectBlockedUntilMs = 0;
   uint32_t lastWifiRetryRoundMs = 0;
   uint32_t lastWifiScanRequestMs = 0;
   uint32_t lastWifiScanCompletedMs = 0;
@@ -75,7 +80,14 @@ struct RuntimeState {
   uint32_t lastWifiEventSequence = 0;
   std::size_t wifiCandidateCursor = 0;
   std::size_t detectedFaceCount = 0;
+  std::size_t enrollmentCapturedSamples = 0;
+  std::size_t enrollmentRequiredSamples = 0;
   std::optional<std::string> apiProbeStatusCode;
+  std::optional<std::string> activeEnrollmentTaskId;
+  std::optional<std::string> activeEnrollmentEmployeeId;
+  std::optional<std::string> activeEnrollmentEmployeeName;
+  std::optional<std::string> enrollmentFailureReason;
+  std::optional<std::string> enrollmentStatusDetail;
   std::optional<std::string> faceEngineStatusDetail;
   std::optional<std::string> faceDetectStatusDetail;
   std::optional<float> faceTopScore;
@@ -86,6 +98,7 @@ struct RuntimeState {
   std::string serialCommandBuffer;
   std::vector<WifiScanCandidate> wifiCandidates;
   std::vector<WifiProfileRuntimeState> wifiProfileRuntime;
+  EnrollmentRunState enrollmentState = EnrollmentRunState::Idle;
 };
 
 bool facePortsReady(const RuntimeContext& context);

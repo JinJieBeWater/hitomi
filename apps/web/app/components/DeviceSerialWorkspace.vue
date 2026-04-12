@@ -45,8 +45,13 @@ const backendOrigin = ref("");
 const backendStatus = ref<"unknown" | "checking" | "ok" | "error">("unknown");
 const wifiProfiles = ref<WifiProfileFormItem[]>([]);
 
+const runtimeConfig = useRuntimeConfig();
+const configuredServerUrl =
+  typeof runtimeConfig.public.serverUrl === "string" ? runtimeConfig.public.serverUrl.trim() : "";
+
 const deviceId = computed(() => createdDevice.value?.id ?? dbDevice.value?.id ?? null);
 const currentOrigin = computed(() => (import.meta.client ? window.location.origin : ""));
+const preferredBackendOrigin = computed(() => configuredServerUrl || currentOrigin.value);
 const hasConfiguredWifiProfile = computed(() =>
   wifiProfiles.value.some((profile) => profile.ssid.trim() && profile.password.trim()),
 );
@@ -174,6 +179,13 @@ const summaryItems = computed(() => [
 const showReloadAction = computed(
   () => serial.connected.value && view.value !== "idle" && view.value !== "connecting",
 );
+const backendOriginDescription = computed(() => {
+  if (preferredBackendOrigin.value) {
+    return `默认优先填充当前 Web 应用地址 ${preferredBackendOrigin.value}，可按需修改。`;
+  }
+
+  return "默认会优先使用当前 Web 应用地址，可按需修改。";
+});
 const logCount = computed(() => serial.serialLogs.value.length);
 const lastLogPreview = computed(() => serial.lastRawLine.value || "等待新的串口输出");
 
@@ -245,11 +257,22 @@ function resetState() {
   dbDevice.value = null;
   createdDevice.value = null;
   newDeviceName.value = "";
-  backendOrigin.value = import.meta.client ? window.location.origin : "";
+  backendOrigin.value = preferredBackendOrigin.value;
   backendStatus.value = "unknown";
   wifiProfiles.value = [createWifiProfileForm({}, 0)];
   if (import.meta.client && backendOrigin.value) {
     checkBackendOrigin();
+  }
+}
+
+async function detectBackendOriginDefault() {
+  if (!import.meta.client || !configuredServerUrl || summary.value?.backendOrigin?.trim()) {
+    return;
+  }
+
+  const current = backendOrigin.value.trim();
+  if (!current || current === currentOrigin.value) {
+    backendOrigin.value = configuredServerUrl;
   }
 }
 
@@ -593,6 +616,8 @@ async function executeReset(type: "credentials" | "full") {
 
 onMounted(async () => {
   try {
+    await detectBackendOriginDefault();
+
     if (!serial.connected.value) {
       const restoreResult = await serial.restoreAuthorizedPort();
 
@@ -865,7 +890,7 @@ onBeforeUnmount(() => {
                   </ol>
                 </div>
                 <div class="text-amber-700 dark:text-amber-400">
-                  或者直接在运行服务的机器上用 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">http://localhost</code> 访问，无需额外配置。
+                  或者直接在运行服务的机器上用 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">http://localhost</code> 访问浏览器端，无需额外配置；设备端后台地址会默认优先填充当前 Web 应用地址 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">{{ preferredBackendOrigin || "（未配置）" }}</code>。
                 </div>
               </div>
             </div>
@@ -926,7 +951,7 @@ onBeforeUnmount(() => {
                 v-model:backend-origin="backendOrigin"
                 :wifi-profiles="wifiProfiles"
                 title="首配参数"
-                description="支持动态添加、删除和修改设备当前保存的 Wi-Fi 与后台地址。"
+                :description="`支持动态添加、删除和修改设备当前保存的 Wi-Fi 与后台地址。${backendOriginDescription}`"
                 :empty-message="wifiEmptyMessage"
                 submit-label="写入配置并激活"
                 submit-icon="i-lucide-zap"
@@ -986,7 +1011,7 @@ onBeforeUnmount(() => {
                     v-model:backend-origin="backendOrigin"
                     :wifi-profiles="wifiProfiles"
                     title="当前待写入配置"
-                    description="可直接调整设备上已保存的 Wi-Fi 列表，再重新激活。"
+                    :description="`可直接调整设备上已保存的 Wi-Fi 列表，再重新激活。${backendOriginDescription}`"
                     :empty-message="wifiEmptyMessage"
                     submit-label="写入配置并激活"
                     submit-icon="i-lucide-zap"
@@ -1040,7 +1065,7 @@ onBeforeUnmount(() => {
               v-model:backend-origin="backendOrigin"
               :wifi-profiles="wifiProfiles"
               title="设备配置表单"
-              description="读取当前设备配置后可直接修改，支持动态添加和删除 Wi-Fi 项。"
+              :description="`读取当前设备配置后可直接修改，支持动态添加和删除 Wi-Fi 项。${backendOriginDescription}`"
               :empty-message="wifiEmptyMessage"
               submit-label="保存到设备"
               submit-icon="i-lucide-save"

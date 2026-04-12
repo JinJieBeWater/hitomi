@@ -244,6 +244,64 @@ void testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected() {
   expect(applied.logs.front().code == "ATTENDANCE_NOT_IN_WINDOW", "failure log should preserve server code");
 }
 
+void testPendingEnrollmentReportUpsertReplacesByTaskId() {
+  std::vector<core::PendingEnrollmentReport> reports = {
+      core::PendingEnrollmentReport{
+          .taskId = "fp_001",
+          .employeeId = "emp_001",
+          .result = "failed",
+          .finishedAt = 1,
+          .failureReason = std::optional<std::string>("OLD"),
+          .lastAttemptAt = std::nullopt,
+          .lastResultCode = std::nullopt,
+      },
+  };
+
+  core::upsertPendingEnrollmentReport(
+      reports,
+      core::PendingEnrollmentReport{
+          .taskId = "fp_001",
+          .employeeId = "emp_001",
+          .result = "success",
+          .finishedAt = 2,
+          .failureReason = std::nullopt,
+          .lastAttemptAt = std::optional<uint64_t>(3),
+          .lastResultCode = std::optional<std::string>("HTTP_200"),
+      });
+
+  expect(reports.size() == 1, "upsert should replace existing report");
+  expect(reports.front().result == "success", "report result should update");
+  expect(reports.front().finishedAt == 2, "finishedAt should update");
+}
+
+void testRemoveEnrollmentTaskErasesMatchingTask() {
+  std::vector<EnrollmentTaskSnapshot> tasks = {
+      EnrollmentTaskSnapshot{
+          .taskId = "fp_001",
+          .employeeId = "emp_001",
+          .employeeCode = "20230001",
+          .employeeName = "张三",
+          .status = "pending",
+          .createdAt = 1,
+          .updatedAt = 2,
+      },
+      EnrollmentTaskSnapshot{
+          .taskId = "fp_002",
+          .employeeId = "emp_002",
+          .employeeCode = "20230002",
+          .employeeName = "李四",
+          .status = "pending",
+          .createdAt = 3,
+          .updatedAt = 4,
+      },
+  };
+
+  const bool removed = core::removeEnrollmentTask(tasks, "fp_001");
+  expect(removed, "matching task should be removed");
+  expect(tasks.size() == 1, "task list should shrink");
+  expect(tasks.front().taskId == "fp_002", "remaining task should be preserved");
+}
+
 void testBuildShanghaiLocalDateUsesUtcPlusEight() {
   expect(core::buildShanghaiLocalDate(1'743'158'400'000ULL) == "2025-03-28", "local date should use Asia/Shanghai");
 }
@@ -538,6 +596,30 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   expect(view.footer == "fw-tag", "view footer should use firmware tag");
 }
 
+void testPresenterShowsEnrollmentProgressAndPendingReport() {
+  app::RuntimeStatus status = {};
+  status.credentials = DeviceCredentials{
+      .deviceCode = "DEV-001",
+      .apiKey = "secret",
+  };
+  status.credentialsReady = true;
+  status.filesystemReady = true;
+  status.templateStoreReady = true;
+  status.enrollmentState = app::EnrollmentRunState::Capturing;
+  status.enrollmentCapturedSamples = 2;
+  status.enrollmentRequiredSamples = 3;
+  status.activeEnrollmentEmployeeName = std::optional<std::string>("张三");
+  status.enrollmentPendingCount = 1;
+
+  const AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.taskLine.find("enrolling") != std::string::npos, "task line should surface enrollment progress");
+  expect(view.taskLine.find("2/3") != std::string::npos, "task line should surface enrollment sample count");
+  expect(
+      view.enrollmentTaskSummaryLine.find("pending") != std::string::npos,
+      "summary should surface pending enrollment report");
+}
+
 void testChooseWifiProfilePrefersAvailableHighPriorityNetwork() {
   std::vector<WifiProfile> profiles = {
       WifiProfile{.ssid = "Dorm", .password = "pw1", .priority = 1, .lastSuccessAt = 10, .disabled = false},
@@ -567,6 +649,8 @@ int main() {
     testClassifyAttendanceTypeUsesShanghaiWindows();
     testEnqueueAttendanceRecordKeepsEarlierDuplicate();
     testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected();
+    testPendingEnrollmentReportUpsertReplacesByTaskId();
+    testRemoveEnrollmentTaskErasesMatchingTask();
     testBuildShanghaiLocalDateUsesUtcPlusEight();
     testFailureLogHelpersCapRetention();
     testChooseWifiProfilePrefersPriorityThenRecentSuccess();
@@ -577,6 +661,7 @@ int main() {
     testDecodeTemplateManifestRejectsMissingSchemaVersion();
     testEncodeDecodeTemplateManifestRoundTrips();
     testRuntimeDiagnosticsAndPresenterExposeStatusLines();
+    testPresenterShowsEnrollmentProgressAndPendingReport();
     testChooseWifiProfilePrefersAvailableHighPriorityNetwork();
     testMarkWifiProfileSuccessUpdatesLastSuccessAt();
     std::cout << "[PASS] core rules" << '\n';

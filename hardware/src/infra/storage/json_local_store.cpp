@@ -19,6 +19,7 @@ namespace {
 
 constexpr char kLittleFsMountPath[] = "/littlefs";
 constexpr char kSnapshotsPath[] = "/snapshots.json";
+constexpr char kEnrollmentReportsPath[] = "/enrollment_reports.json";
 constexpr char kAttendanceQueuePath[] = "/attendance_queue.json";
 constexpr char kFailureLogsPath[] = "/failure_logs.json";
 constexpr char kStorageAuxPath[] = "/storage_aux.json";
@@ -378,6 +379,66 @@ class AttendanceQueueStore {
   }
 };
 
+class EnrollmentReportStore {
+ public:
+  std::vector<core::PendingEnrollmentReport> load() {
+    std::vector<core::PendingEnrollmentReport> reports;
+    JsonDocument doc;
+    if (!readJsonFile(kEnrollmentReportsPath, doc)) {
+      return reports;
+    }
+
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    for (JsonVariantConst item : items) {
+      reports.push_back(core::PendingEnrollmentReport{
+          .taskId = item["taskId"] | "",
+          .employeeId = item["employeeId"] | "",
+          .result = item["result"] | "",
+          .finishedAt = item["finishedAt"] | 0ULL,
+          .failureReason = item["failureReason"].isNull()
+              ? std::nullopt
+              : std::optional<std::string>(item["failureReason"].as<const char*>()),
+          .lastAttemptAt = item["lastAttemptAt"].isNull()
+              ? std::nullopt
+              : std::optional<uint64_t>(item["lastAttemptAt"] | 0ULL),
+          .lastResultCode = item["lastResultCode"].isNull()
+              ? std::nullopt
+              : std::optional<std::string>(item["lastResultCode"].as<const char*>()),
+      });
+    }
+
+    return reports;
+  }
+
+  bool save(const std::vector<core::PendingEnrollmentReport>& reports) {
+    JsonDocument doc;
+    JsonArray items = doc["items"].to<JsonArray>();
+    for (const auto& report : reports) {
+      JsonObject item = items.add<JsonObject>();
+      item["taskId"] = report.taskId;
+      item["employeeId"] = report.employeeId;
+      item["result"] = report.result;
+      item["finishedAt"] = report.finishedAt;
+      if (report.failureReason.has_value()) {
+        item["failureReason"] = report.failureReason.value();
+      } else {
+        item["failureReason"] = nullptr;
+      }
+      if (report.lastAttemptAt.has_value()) {
+        item["lastAttemptAt"] = report.lastAttemptAt.value();
+      } else {
+        item["lastAttemptAt"] = nullptr;
+      }
+      if (report.lastResultCode.has_value()) {
+        item["lastResultCode"] = report.lastResultCode.value();
+      } else {
+        item["lastResultCode"] = nullptr;
+      }
+    }
+    return writeJsonFile(kEnrollmentReportsPath, doc);
+  }
+};
+
 class FailureLogStore {
  public:
   std::vector<core::FailureLogEntry> load() {
@@ -448,6 +509,7 @@ struct JsonLocalStore::Impl {
   DeviceConfigStore deviceConfigStore;
   CredentialsStore credentialsStore;
   SnapshotStore snapshotStore;
+  EnrollmentReportStore enrollmentReportStore;
   AttendanceQueueStore attendanceQueueStore;
   FailureLogStore failureLogStore;
   StorageAuxStore storageAuxStore;
@@ -482,6 +544,7 @@ StoredRuntimeState JsonLocalStore::load() {
   }
   if (impl_->initStatus.filesystemReady) {
     state.snapshots = impl_->snapshotStore.load();
+    state.pendingEnrollmentReports = impl_->enrollmentReportStore.load();
     state.pendingAttendanceRecords = impl_->attendanceQueueStore.load();
     state.failureLogs = impl_->failureLogStore.load();
     state.storageAux = impl_->storageAuxStore.load();
@@ -525,6 +588,14 @@ bool JsonLocalStore::savePendingAttendanceRecords(
     return false;
   }
   return impl_->attendanceQueueStore.save(records);
+}
+
+bool JsonLocalStore::savePendingEnrollmentReports(
+    const std::vector<core::PendingEnrollmentReport>& reports) {
+  if (!impl_->initStatus.filesystemReady) {
+    return false;
+  }
+  return impl_->enrollmentReportStore.save(reports);
 }
 
 bool JsonLocalStore::saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) {

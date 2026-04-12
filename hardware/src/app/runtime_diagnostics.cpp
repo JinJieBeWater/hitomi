@@ -21,10 +21,20 @@ std::string storageLine(const RuntimeStatus& status) {
   if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
     return "Storage: SD invalid manifest";
   }
+  if (status.templateStoreStatusCode == infra::kTemplateStoreIoError) {
+    return "Storage: SD io_error (" + status.templateStoreDetail + ")";
+  }
+  if (status.templateStoreStatusCode == infra::kTemplateStoreMountFailed) {
+    return "Storage: SD mount_failed (" + status.templateStoreDetail + ")";
+  }
+  if (status.templateStoreStatusCode == infra::kTemplateStoreCardMissing) {
+    return "Storage: SD card_missing";
+  }
   if (infra::templateStoreMounted(status.templateStoreStatusCode)) {
     return "Storage: SD ready (templates=" + std::to_string(status.templateCount) + ")";
   }
-  return "Storage: SD unavailable";
+  return status.templateStoreStatusCode.empty() ? "Storage: SD unavailable"
+                                                : "Storage: " + status.templateStoreStatusCode;
 }
 
 bool hasLocalCache(const RuntimeStatus& status) {

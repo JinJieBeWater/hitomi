@@ -133,6 +133,10 @@ bool writeBinaryFileAtomically(const std::string& tempPath, const std::string& f
   return true;
 }
 
+std::string errnoDetail(const char* action, const std::string& path) {
+  return std::string(action) + " " + path + " failed: " + std::strerror(errno);
+}
+
 const TemplateManifestItem* findManifestItem(const std::optional<TemplateManifest>& manifest, const std::string& employeeId) {
   if (!manifest.has_value()) {
     return nullptr;
@@ -154,50 +158,53 @@ std::string templateStatusCodeForCount(std::size_t templateCount) {
 }  // namespace
 
 TemplateStoreInitStatus SdMmcTemplateStore::begin() {
-  endMount();
   manifest_.reset();
   status_.ready = false;
 
-  sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-  host.slot = SDMMC_HOST_SLOT_1;
-  host.flags = SDMMC_HOST_FLAG_1BIT;
-  host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+  if (!mounted_ || card_ == nullptr) {
+    endMount();
 
-  sdmmc_slot_config_t slotConfig = SDMMC_SLOT_CONFIG_DEFAULT();
-  slotConfig.width = 1;
-  slotConfig.clk = board::kSdMmcClkPin;
-  slotConfig.cmd = board::kSdMmcCmdPin;
-  slotConfig.d0 = board::kSdMmcD0Pin;
-  slotConfig.d1 = GPIO_NUM_NC;
-  slotConfig.d2 = GPIO_NUM_NC;
-  slotConfig.d3 = GPIO_NUM_NC;
-  slotConfig.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
+    sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+    host.slot = SDMMC_HOST_SLOT_1;
+    host.flags = SDMMC_HOST_FLAG_1BIT;
+    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
 
-  esp_vfs_fat_sdmmc_mount_config_t mountConfig = {
-      .format_if_mount_failed = board::kSdFormatIfMountFailed,
-      .max_files = board::kSdMaxOpenFiles,
-      .allocation_unit_size = 0,
-      .disk_status_check_enable = false,
-      .use_one_fat = false,
-  };
+    sdmmc_slot_config_t slotConfig = SDMMC_SLOT_CONFIG_DEFAULT();
+    slotConfig.width = 1;
+    slotConfig.clk = board::kSdMmcClkPin;
+    slotConfig.cmd = board::kSdMmcCmdPin;
+    slotConfig.d0 = board::kSdMmcD0Pin;
+    slotConfig.d1 = GPIO_NUM_NC;
+    slotConfig.d2 = GPIO_NUM_NC;
+    slotConfig.d3 = GPIO_NUM_NC;
+    slotConfig.flags |= SDMMC_SLOT_FLAG_INTERNAL_PULLUP;
 
-  sdmmc_card_t* mountedCard = nullptr;
-  const esp_err_t err = esp_vfs_fat_sdmmc_mount(
-      board::kSdMountPoint,
-      &host,
-      &slotConfig,
-      &mountConfig,
-      &mountedCard);
-  if (err != ESP_OK) {
-    setUnavailableState(
-        kTemplateStoreMountFailed,
-        std::string("esp_vfs_fat_sdmmc_mount failed: ") + esp_err_to_name(err),
-        true);
-    return status_;
+    esp_vfs_fat_sdmmc_mount_config_t mountConfig = {
+        .format_if_mount_failed = board::kSdFormatIfMountFailed,
+        .max_files = board::kSdMaxOpenFiles,
+        .allocation_unit_size = 0,
+        .disk_status_check_enable = false,
+        .use_one_fat = false,
+    };
+
+    sdmmc_card_t* mountedCard = nullptr;
+    const esp_err_t err = esp_vfs_fat_sdmmc_mount(
+        board::kSdMountPoint,
+        &host,
+        &slotConfig,
+        &mountConfig,
+        &mountedCard);
+    if (err != ESP_OK) {
+      setUnavailableState(
+          kTemplateStoreMountFailed,
+          std::string("esp_vfs_fat_sdmmc_mount failed: ") + esp_err_to_name(err),
+          true);
+      return status_;
+    }
+
+    mounted_ = true;
+    card_ = mountedCard;
   }
-
-  mounted_ = true;
-  card_ = mountedCard;
   refreshCapacityMetrics();
 
   if (card_ == nullptr) {
@@ -208,6 +215,11 @@ TemplateStoreInitStatus SdMmcTemplateStore::begin() {
   const ManifestLoadResult manifestLoad = loadManifest();
   if (templateStoreManifestBroken(manifestLoad.statusCode)) {
     setUnavailableState(manifestLoad.statusCode, manifestLoad.detail, false);
+    return status_;
+  }
+
+  if (!ensureTemplateDirectory()) {
+    setUnavailableState(kTemplateStoreIoError, errnoDetail("mkdir", mountedPath(kTemplatesDirPath)), false);
     return status_;
   }
 
@@ -254,7 +266,7 @@ bool SdMmcTemplateStore::upsertTemplate(
     return false;
   }
   if (!ensureTemplateDirectory()) {
-    setUnavailableState(kTemplateStoreIoError, "failed to create template directory", true);
+    setUnavailableState(kTemplateStoreIoError, errnoDetail("mkdir", mountedPath(kTemplatesDirPath)), true);
     return false;
   }
 
@@ -416,8 +428,15 @@ SdMmcTemplateStore::ManifestLoadResult SdMmcTemplateStore::loadManifest() const 
 
 bool SdMmcTemplateStore::ensureTemplateDirectory() {
   const std::string mountedDir = mountedPath(kTemplatesDirPath);
-  if (::access(mountedDir.c_str(), F_OK) == 0) {
-    return true;
+  struct stat dirInfo = {};
+  if (::stat(mountedDir.c_str(), &dirInfo) == 0) {
+    if (S_ISDIR(dirInfo.st_mode)) {
+      return true;
+    }
+
+    if (std::remove(mountedDir.c_str()) != 0) {
+      return false;
+    }
   }
   return ::mkdir(mountedDir.c_str(), 0755) == 0 || errno == EEXIST;
 }

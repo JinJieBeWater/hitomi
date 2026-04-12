@@ -49,12 +49,70 @@ void testStatusScreenShowsFaceDetectState() {
       "face detect line should surface detection count and score");
 }
 
+void testStatusScreenShowsEnrollmentGuidance() {
+  app::RuntimeStatus status = {};
+  status.enrollmentState = app::EnrollmentRunState::Capturing;
+  status.activeEnrollmentEmployeeName = std::optional<std::string>("Alice");
+  status.enrollmentCapturedSamples = 1;
+  status.enrollmentRequiredSamples = 3;
+  status.enrollmentStatusDetail = std::optional<std::string>("Hold still for enrollment");
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.periodLine.find("Enroll: Alice (1/3)") != std::string::npos, "period line should show enrollment progress");
+  expect(
+      view.cameraHintLine.find("Sample 1/3. Hold still.") != std::string::npos,
+      "camera hint should show operator-facing enrollment guidance");
+  expect(
+      view.attendanceResultLine.find("Rec Alice (1/3)") != std::string::npos,
+      "status card should show active enrollment progress");
+  expect(view.captureActive, "capture page should activate during enrollment");
+  expect(
+      view.captureTitleLine.find("Capture: Alice") != std::string::npos,
+      "capture page title should show active employee");
+  expect(
+      view.captureProgressLine.find("1/3") != std::string::npos,
+      "capture page should expose sample progress");
+  expect(view.captureActionLabel == "Cancel", "active capture should offer cancel action");
+}
+
+void testStatusScreenShowsEnrollmentFailureState() {
+  app::RuntimeStatus status = {};
+  status.enrollmentState = app::EnrollmentRunState::Failed;
+  status.enrollmentFailureReason = std::optional<std::string>("ENROLLMENT_FAILED");
+  status.enrollmentStatusDetail = std::optional<std::string>("Failed");
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.periodLine == "Enroll: failed", "period line should show failed enrollment state");
+  expect(view.attendanceResultLine == "Failed", "status card should show failed enrollment state");
+  expect(view.captureActive, "capture page should stay visible for terminal failure confirmation");
+  expect(view.captureActionLabel == "Back", "terminal failure should offer a return action");
+}
+
+void testStatusScreenShowsEnrollmentCancelledState() {
+  app::RuntimeStatus status = {};
+  status.enrollmentState = app::EnrollmentRunState::Cancelled;
+  status.enrollmentFailureReason = std::optional<std::string>("ENROLLMENT_CANCELLED");
+  status.enrollmentStatusDetail = std::optional<std::string>("Cancelled");
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.periodLine == "Enroll: cancelled", "period line should show cancelled enrollment state");
+  expect(view.attendanceResultLine == "Cancelled", "status card should show cancelled enrollment state");
+  expect(view.captureActive, "capture page should stay visible after cancellation");
+  expect(view.captureActionLabel == "Back", "cancelled state should offer a return action");
+}
+
 }  // namespace
 
 int main() {
   try {
     testStatusScreenShowsApiProbeState();
     testStatusScreenShowsFaceDetectState();
+    testStatusScreenShowsEnrollmentGuidance();
+    testStatusScreenShowsEnrollmentFailureState();
+    testStatusScreenShowsEnrollmentCancelledState();
     std::cout << "[PASS] status screen api probe" << '\n';
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

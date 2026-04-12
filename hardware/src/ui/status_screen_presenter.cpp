@@ -63,6 +63,21 @@ std::string syncLabel(const app::RuntimeStatus& status) {
   return oss.str();
 }
 
+std::string activeEnrollmentSubject(const app::RuntimeStatus& status) {
+  return status.activeEnrollmentEmployeeName.value_or(
+      status.activeEnrollmentTaskId.value_or("pending"));
+}
+
+std::string enrollmentProgressSuffix(const app::RuntimeStatus& status) {
+  if (status.enrollmentRequiredSamples == 0) {
+    return "";
+  }
+
+  std::ostringstream oss;
+  oss << " (" << status.enrollmentCapturedSamples << "/" << status.enrollmentRequiredSamples << ")";
+  return oss.str();
+}
+
 std::string subtitleLabel(const app::RuntimeStatus& status) {
   if (status.snapshots.deviceName.empty()) {
     return "SZPI ESP32-S3";
@@ -80,7 +95,149 @@ std::string credentialsLabel(const app::RuntimeStatus& status) {
   return "Missing";
 }
 
+std::string friendlyEnrollmentDetail(const app::RuntimeStatus& status) {
+  const std::string detail = status.enrollmentStatusDetail.value_or("");
+
+  switch (status.enrollmentState) {
+    case app::EnrollmentRunState::Preparing:
+    case app::EnrollmentRunState::Capturing:
+      if (detail == "No face detected") {
+        return "Move closer. One face.";
+      }
+      if (detail == "Multiple faces detected") {
+        return "Only one face.";
+      }
+      if (detail == "Hold still for enrollment") {
+        if (status.enrollmentRequiredSamples > 0 && status.enrollmentCapturedSamples < status.enrollmentRequiredSamples) {
+          return "Sample " + std::to_string(status.enrollmentCapturedSamples) + "/" +
+              std::to_string(status.enrollmentRequiredSamples) + ". Hold still.";
+        }
+        return "Hold still.";
+      }
+      if (detail == "Waiting for single face" || detail == "Look at the camera") {
+        return "Look at camera.";
+      }
+      if (!detail.empty()) {
+        return detail;
+      }
+      return "Center one face.";
+    case app::EnrollmentRunState::SavingTemplate:
+      return detail.empty() ? "Saving to SD..." : detail;
+    case app::EnrollmentRunState::Reporting:
+      return detail.empty() ? "Reporting..." : detail;
+    case app::EnrollmentRunState::Done:
+      return detail.empty() ? "Done." : detail;
+    case app::EnrollmentRunState::Failed:
+      if (status.enrollmentFailureReason.has_value()) {
+        return "Failed: " + status.enrollmentFailureReason.value();
+      }
+      return detail.empty() ? "Failed." : detail;
+    case app::EnrollmentRunState::Cancelled:
+      return detail.empty() ? "Cancelled." : detail;
+    case app::EnrollmentRunState::Idle:
+    default:
+      return "";
+  }
+}
+
+bool capturePageActive(const app::RuntimeStatus& status) {
+  switch (status.enrollmentState) {
+    case app::EnrollmentRunState::Preparing:
+    case app::EnrollmentRunState::Capturing:
+    case app::EnrollmentRunState::SavingTemplate:
+    case app::EnrollmentRunState::Reporting:
+    case app::EnrollmentRunState::Done:
+    case app::EnrollmentRunState::Failed:
+    case app::EnrollmentRunState::Cancelled:
+      return true;
+    case app::EnrollmentRunState::Idle:
+    default:
+      return false;
+  }
+}
+
+bool captureRunning(const app::RuntimeStatus& status) {
+  switch (status.enrollmentState) {
+    case app::EnrollmentRunState::Preparing:
+    case app::EnrollmentRunState::Capturing:
+    case app::EnrollmentRunState::SavingTemplate:
+      return true;
+    case app::EnrollmentRunState::Reporting:
+      return false;
+    case app::EnrollmentRunState::Idle:
+    case app::EnrollmentRunState::Done:
+    case app::EnrollmentRunState::Failed:
+    case app::EnrollmentRunState::Cancelled:
+    default:
+      return false;
+  }
+}
+
+std::string captureTitle(const app::RuntimeStatus& status) {
+  const std::string subject = activeEnrollmentSubject(status);
+
+  switch (status.enrollmentState) {
+    case app::EnrollmentRunState::Preparing:
+    case app::EnrollmentRunState::Capturing:
+      return "Capture: " + subject;
+    case app::EnrollmentRunState::SavingTemplate:
+      return "Saving";
+    case app::EnrollmentRunState::Reporting:
+      return "Reporting";
+    case app::EnrollmentRunState::Done:
+      return "Done";
+    case app::EnrollmentRunState::Failed:
+      return "Failed";
+    case app::EnrollmentRunState::Cancelled:
+      return "Cancelled";
+    default:
+      return subject.empty() ? "Enrollment capture" : subject;
+  }
+}
+
+std::string captureProgress(const app::RuntimeStatus& status) {
+  if (status.enrollmentRequiredSamples > 0) {
+    return std::to_string(status.enrollmentCapturedSamples) + "/" +
+        std::to_string(status.enrollmentRequiredSamples) + "  face " +
+        std::to_string(status.detectedFaceCount);
+  }
+
+  if (status.detectedFaceCount > 0) {
+    return std::to_string(status.detectedFaceCount) + " face";
+  }
+
+  return "";
+}
+
+std::string captureActionLabel(const app::RuntimeStatus& status) {
+  return captureRunning(status) ? "Cancel" : "Back";
+}
+
 std::string taskLabel(const app::RuntimeStatus& status) {
+  if (status.enrollmentState == app::EnrollmentRunState::Capturing ||
+      status.enrollmentState == app::EnrollmentRunState::Preparing) {
+    std::ostringstream oss;
+    oss << "Task: enrolling "
+        << status.activeEnrollmentEmployeeName.value_or(
+               status.activeEnrollmentTaskId.value_or("pending"));
+    if (status.enrollmentRequiredSamples > 0) {
+      oss << " (" << status.enrollmentCapturedSamples << "/" << status.enrollmentRequiredSamples << ")";
+    }
+    return oss.str();
+  }
+  if (status.enrollmentState == app::EnrollmentRunState::Reporting) {
+    return "Task: reporting enrollment";
+  }
+  if (status.enrollmentState == app::EnrollmentRunState::Failed) {
+    return "Task: enrollment failed";
+  }
+  if (status.enrollmentState == app::EnrollmentRunState::Done) {
+    return "Task: enrollment complete";
+  }
+  if (status.enrollmentState == app::EnrollmentRunState::Cancelled) {
+    return "Task: enrollment cancelled";
+  }
+
   if (!status.credentials.configured()) {
     return "Task: unavailable";
   }
@@ -111,13 +268,22 @@ std::string storageLabel(const app::RuntimeStatus& status) {
   if (infra::templateStoreManifestBroken(status.templateStoreStatusCode)) {
     return "SD invalid manifest";
   }
+  if (status.templateStoreStatusCode == infra::kTemplateStoreIoError) {
+    return "SD io_error";
+  }
+  if (status.templateStoreStatusCode == infra::kTemplateStoreMountFailed) {
+    return "SD mount_failed";
+  }
+  if (status.templateStoreStatusCode == infra::kTemplateStoreCardMissing) {
+    return "SD card_missing";
+  }
   if (infra::templateStoreMounted(status.templateStoreStatusCode)) {
     std::ostringstream oss;
     oss << "SD ready (templates=" << status.templateCount << ")";
     return oss.str();
   }
   if (!status.templateStoreReady) {
-    return "SD unavailable";
+    return status.templateStoreStatusCode.empty() ? "SD not ready" : "SD " + status.templateStoreStatusCode;
   }
   return "Ready";
 }
@@ -158,6 +324,25 @@ uint64_t effectiveStatusTime(const app::RuntimeStatus& status) {
 }
 
 std::string periodLabel(const app::RuntimeStatus& status) {
+  switch (status.enrollmentState) {
+    case app::EnrollmentRunState::Preparing:
+    case app::EnrollmentRunState::Capturing:
+      return "Enroll: " + activeEnrollmentSubject(status) + enrollmentProgressSuffix(status);
+    case app::EnrollmentRunState::SavingTemplate:
+      return "Enroll: saving";
+    case app::EnrollmentRunState::Reporting:
+      return "Enroll: reporting";
+    case app::EnrollmentRunState::Done:
+      return "Enroll: complete";
+    case app::EnrollmentRunState::Failed:
+      return "Enroll: failed";
+    case app::EnrollmentRunState::Cancelled:
+      return "Enroll: cancelled";
+    case app::EnrollmentRunState::Idle:
+    default:
+      break;
+  }
+
   if (!status.snapshots.attendanceConfig.has_value()) {
     return "Period: not configured";
   }
@@ -172,6 +357,25 @@ std::string periodLabel(const app::RuntimeStatus& status) {
 }
 
 std::string attendanceResultLabel(const app::RuntimeStatus& status) {
+  switch (status.enrollmentState) {
+    case app::EnrollmentRunState::Preparing:
+    case app::EnrollmentRunState::Capturing:
+      return "Rec " + activeEnrollmentSubject(status) + enrollmentProgressSuffix(status);
+    case app::EnrollmentRunState::SavingTemplate:
+      return "Saving...";
+    case app::EnrollmentRunState::Reporting:
+      return "Reporting...";
+    case app::EnrollmentRunState::Done:
+      return "Done";
+    case app::EnrollmentRunState::Failed:
+      return "Failed";
+    case app::EnrollmentRunState::Cancelled:
+      return "Cancelled";
+    case app::EnrollmentRunState::Idle:
+    default:
+      break;
+  }
+
   if (status.pendingQueueSize > 0) {
     return std::to_string(status.pendingQueueSize) + " record(s) queued";
   }
@@ -201,14 +405,22 @@ std::vector<EnrollmentTaskItemViewModel> enrollmentTasks(const app::RuntimeStatu
 }
 
 std::string enrollmentTaskSummary(const app::RuntimeStatus& status) {
+  if (status.enrollmentPendingCount > 0) {
+    return "Report pending";
+  }
   if (status.snapshots.enrollmentTasks.empty()) {
-    return "No enrollment tasks";
+    return "No tasks";
   }
 
-  return "Enrollment tasks: " + std::to_string(status.snapshots.enrollmentTasks.size()) + " pending";
+  return std::to_string(status.snapshots.enrollmentTasks.size()) + " task(s)";
 }
 
 std::string cameraLabel(const app::RuntimeStatus& status) {
+  const std::string enrollmentDetail = friendlyEnrollmentDetail(status);
+  if (!enrollmentDetail.empty()) {
+    return enrollmentDetail;
+  }
+
   if (!status.cameraAvailable) {
     return "Camera unavailable";
   }
@@ -240,6 +452,12 @@ AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
   view.periodLine = periodLabel(status);
   view.cameraHintLine = cameraLabel(status);
   view.attendanceResultLine = attendanceResultLabel(status);
+  view.captureActive = capturePageActive(status);
+  view.captureRunning = captureRunning(status);
+  view.captureTitleLine = captureTitle(status);
+  view.captureStatusLine = friendlyEnrollmentDetail(status);
+  view.captureProgressLine = captureProgress(status);
+  view.captureActionLabel = captureActionLabel(status);
   view.enrollmentTasks = enrollmentTasks(status);
   view.enrollmentTaskSummaryLine = enrollmentTaskSummary(status);
   view.credentialsLine = credentialsLabel(status);

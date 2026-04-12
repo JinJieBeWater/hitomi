@@ -1,11 +1,14 @@
 #include "app/bootstrap.hpp"
 
+#include <string>
+
 #include "app/app_runtime.hpp"
 #include "app/runtime_network_executor.hpp"
 #include "board/app_config.hpp"
 #include "face/ports.hpp"
 #include "infra/camera/esp32_camera_port.hpp"
 #include "infra/display/lvgl_status_display.hpp"
+#include "infra/face/esp_who_enrollment_service.hpp"
 #include "infra/network/http_device_api_client.hpp"
 #include "infra/storage/json_local_store.hpp"
 #include "infra/storage/sd_mmc_template_store.hpp"
@@ -15,13 +18,14 @@ namespace app {
 namespace {
 
 AppRuntime& runtime() {
+  static constexpr char kEnrollmentTempDbPath[] = "/littlefs/hitomi_enroll.db";
   static infra::LvglStatusDisplay display;
   static infra::JsonLocalStore localStore;
   static infra::HttpDeviceApiClient deviceApiClient(board::apiBaseUrl());
   static std::unique_ptr<RuntimeNetworkExecutor> networkExecutor = createRuntimeNetworkExecutor(deviceApiClient);
   static infra::SdMmcTemplateStore templateStore;
   static infra::Esp32CameraPort camera;
-  static face::NoopEnrollmentServicePort enrollmentService;
+  static infra::EspWhoEnrollmentService enrollmentService(kEnrollmentTempDbPath);
   static face::NoopRecognitionServicePort recognitionService;
   static AppRuntime appRuntime(
       display,
