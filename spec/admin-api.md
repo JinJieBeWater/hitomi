@@ -20,9 +20,14 @@
 - `employee.list`
 - `employee.create`
 - `employee.update`
+- `employee.getDeleteImpact`
+- `employee.remove`
 - `device.list`
 - `device.create`
 - `device.update`
+- `device.getDeleteImpact`
+- `device.findByBootstrapSerial`
+- `device.remove`
 - `attendanceConfig.get`
 - `attendanceConfig.save`
 - `faceProfile.list`
@@ -35,7 +40,6 @@
 - 单管理员
 - 单设备演示场景
 - 默认使用 `Asia/Shanghai`
-- 不处理员工删除
 - 不处理 `apiKey` 重置
 - 当前 MVP 不额外校验员工与设备绑定关系
 
@@ -115,8 +119,10 @@ type AdminBusinessError = {
 | ---------------------------------- | ------------------------------- | ------------- |
 | `EMPLOYEE_NOT_FOUND`               | 员工不存在                      | `NOT_FOUND`   |
 | `EMPLOYEE_CODE_CONFLICT`           | 员工编号重复                    | `CONFLICT`    |
+| `EMPLOYEE_DELETE_CONFIRMATION_MISMATCH` | 员工删除确认信息不匹配     | `CONFLICT`    |
 | `DEVICE_NOT_FOUND`                 | 设备不存在                      | `NOT_FOUND`   |
 | `DEVICE_DISABLED`                  | 设备已禁用                      | `CONFLICT`    |
+| `DEVICE_DELETE_CONFIRMATION_MISMATCH` | 设备删除确认信息不匹配      | `CONFLICT`    |
 | `ATTENDANCE_CONFIG_INVALID_MINUTE` | 分钟值不在 `0-1439` 范围内      | `BAD_REQUEST` |
 | `ATTENDANCE_CONFIG_INVALID_RANGE`  | 时间段开始结束关系不合法        | `BAD_REQUEST` |
 | `ATTENDANCE_CONFIG_OVERLAPPED`     | 上下班时间段重叠或相互包含      | `BAD_REQUEST` |
@@ -381,7 +387,90 @@ type AdminBusinessError = {
 
 ---
 
-## 5. `device.list`
+## 5. `employee.getDeleteImpact`
+
+### 作用
+
+获取删除员工前的影响摘要，用于二次确认弹窗。
+
+### 输入
+
+```json
+{
+  "id": "emp_001"
+}
+```
+
+### 输出
+
+```json
+{
+  "id": "emp_001",
+  "code": "20230001",
+  "name": "张三",
+  "faceProfileCount": 1,
+  "attendanceRecordCount": 12,
+  "confirmText": "20230001"
+}
+```
+
+### 处理规则
+
+- 若员工不存在，直接报错
+- `confirmText` 固定返回员工编号，前端用于二次确认输入
+- 影响统计至少包含关联录脸任务数量与考勤记录数量
+
+### 可能错误
+
+- `EMPLOYEE_NOT_FOUND`
+
+---
+
+## 6. `employee.remove`
+
+### 作用
+
+删除一个员工，并级联清理其关联录脸任务和考勤记录。
+
+### 输入
+
+```json
+{
+  "id": "emp_001",
+  "confirmText": "20230001"
+}
+```
+
+### 输入规则
+
+- `id` 必填
+- `confirmText` 必填
+- `confirmText` 必须与当前员工编号完全一致
+
+### 输出
+
+```json
+{
+  "id": "emp_001",
+  "deletedFaceProfileCount": 1,
+  "deletedAttendanceRecordCount": 12
+}
+```
+
+### 处理规则
+
+- 删除前先校验员工存在
+- 删除操作在事务中执行
+- 先删除该员工关联的考勤记录与录脸任务，再删除员工本体
+
+### 可能错误
+
+- `EMPLOYEE_NOT_FOUND`
+- `EMPLOYEE_DELETE_CONFIRMATION_MISMATCH`
+
+---
+
+## 7. `device.list`
 
 ### 作用
 
@@ -438,7 +527,7 @@ type AdminBusinessError = {
 
 ---
 
-## 6. `device.create`
+## 8. `device.create`
 
 ### 作用
 
@@ -485,7 +574,7 @@ type AdminBusinessError = {
 
 ---
 
-## 7. `device.update`
+## 9. `device.update`
 
 ### 作用
 
@@ -519,7 +608,125 @@ type AdminBusinessError = {
 
 ---
 
-## 8. `attendanceConfig.get`
+## 10. `device.getDeleteImpact`
+
+### 作用
+
+获取删除设备前的影响摘要，用于二次确认弹窗。
+
+### 输入
+
+```json
+{
+  "id": "dev_001"
+}
+```
+
+### 输出
+
+```json
+{
+  "id": "dev_001",
+  "deviceCode": "DEV-001",
+  "name": "一号设备",
+  "faceProfileCount": 2,
+  "attendanceRecordCount": 36,
+  "confirmText": "DEV-001"
+}
+```
+
+### 处理规则
+
+- 若设备不存在，直接报错
+- `confirmText` 固定返回设备码，前端用于二次确认输入
+- 影响统计至少包含关联录脸任务数量与考勤记录数量
+
+### 可能错误
+
+- `DEVICE_NOT_FOUND`
+
+---
+
+## 11. `device.findByBootstrapSerial`
+
+### 作用
+
+在串口配置页中，按设备当前上报的 `bootstrapSerial` 反查后台记录。
+
+### 输入
+
+```json
+{
+  "serial": "BOOT-001"
+}
+```
+
+### 输出
+
+```json
+{
+  "id": "dev_001",
+  "deviceCode": "DEV-001",
+  "name": "一号设备",
+  "status": "active",
+  "lastSeenAt": 1743158400000,
+  "createdAt": 1743158400000,
+  "updatedAt": 1743158400000
+}
+```
+
+补充说明：
+
+- 若后台没有匹配记录，则返回 `null`
+- 该接口主要服务于 `/devices/serial` 页面，不返回明文 `apiKey`
+
+---
+
+## 12. `device.remove`
+
+### 作用
+
+删除一个设备，并级联清理其关联录脸任务和考勤记录。
+
+### 输入
+
+```json
+{
+  "id": "dev_001",
+  "confirmText": "DEV-001"
+}
+```
+
+### 输入规则
+
+- `id` 必填
+- `confirmText` 必填
+- `confirmText` 必须与当前设备码完全一致
+
+### 输出
+
+```json
+{
+  "id": "dev_001",
+  "deletedFaceProfileCount": 2,
+  "deletedAttendanceRecordCount": 36
+}
+```
+
+### 处理规则
+
+- 删除前先校验设备存在
+- 删除操作在事务中执行
+- 先删除该设备关联的考勤记录与录脸任务，再删除设备本体
+
+### 可能错误
+
+- `DEVICE_NOT_FOUND`
+- `DEVICE_DELETE_CONFIRMATION_MISMATCH`
+
+---
+
+## 13. `attendanceConfig.get`
 
 ### 作用
 
@@ -550,7 +757,7 @@ type AdminBusinessError = {
 
 ---
 
-## 9. `attendanceConfig.save`
+## 14. `attendanceConfig.save`
 
 ### 作用
 
@@ -602,7 +809,7 @@ type AdminBusinessError = {
 
 ---
 
-## 10. `faceProfile.list`
+## 15. `faceProfile.list`
 
 ### 作用
 
@@ -671,7 +878,7 @@ type AdminBusinessError = {
 
 ---
 
-## 11. `faceProfile.enqueue`
+## 16. `faceProfile.enqueue`
 
 ### 作用
 
@@ -714,7 +921,7 @@ type AdminBusinessError = {
 
 ---
 
-## 12. `faceProfile.cancel`
+## 17. `faceProfile.cancel`
 
 ### 作用
 
@@ -745,7 +952,7 @@ type AdminBusinessError = {
 
 ---
 
-## 13. `attendanceRecord.list`
+## 18. `attendanceRecord.list`
 
 ### 作用
 
@@ -819,21 +1026,19 @@ type AdminBusinessError = {
 
 ## 页面与接口对应关系
 
-| 页面       | 主要接口                                                        |
-| ---------- | --------------------------------------------------------------- |
-| Dashboard  | `dashboard.summary`                                             |
-| 员工管理页 | `employee.list`、`employee.create`、`employee.update`           |
-| 设备管理页 | `device.list`、`device.create`、`device.update`                 |
-| 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save`                 |
-| 录脸记录页 | `faceProfile.list`、`faceProfile.enqueue`、`faceProfile.cancel` |
-| 考勤记录页 | `attendanceRecord.list`                                         |
+| 页面       | 主要接口                                                                                                  |
+| ---------- | --------------------------------------------------------------------------------------------------------- |
+| Dashboard  | `dashboard.summary`                                                                                       |
+| 员工管理页 | `employee.list`、`employee.create`、`employee.update`、`employee.getDeleteImpact`、`employee.remove`     |
+| 设备管理页 | `device.list`、`device.create`、`device.update`、`device.getDeleteImpact`、`device.findByBootstrapSerial`、`device.remove` |
+| 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save`                                                           |
+| 录脸记录页 | `faceProfile.list`、`faceProfile.enqueue`、`faceProfile.cancel`                                           |
+| 考勤记录页 | `attendanceRecord.list`                                                                                   |
 
 ---
 
 ## 当前不做
 
-- 员工删除接口
-- 设备删除接口
 - `apiKey` 重置接口
 - 批量导入员工接口
 - 批量操作录脸任务接口

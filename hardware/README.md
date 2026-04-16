@@ -120,12 +120,23 @@ If `platformio` is not on `PATH`, the same `python3 -m platformio ...` invocatio
 - Supports USB-C serial provisioning for Wi-Fi profiles, backend origin, and bootstrap identity
 - Reconnects to known Wi-Fi profiles using last-known-good directed connect, scan-ranked candidates, and auth-failure cooldown
 - Supports bootstrap activation against the local backend before switching to runtime device credentials
-- Renders a single LVGL status screen
+- Renders the LVGL status screen plus the enrollment capture / result flow
 - Registers FT6336 touch as an LVGL pointer input on the shared I2C bus
+- Initializes the onboard camera and exposes live preview / frame diagnostics
+- Integrates ESP-WHO face detection and enrollment on the current camera frame stream
+- Persists enrollment templates through the SD-backed template store and reloads template metadata at runtime
 - Periodically probes Wi-Fi state
 - Syncs `/api/device/sync` on startup / reconnect / interval when configured
+- Pulls and manages pending enrollment tasks from sync snapshots
+- Reports enrollment results through `/api/device/enrollment/report`
 - Uploads pending attendance records in batches when configured
-- Leaves camera / enrollment / recognition implementations as abstract ports
+- Surfaces activation, sync, camera, face-detect, enrollment, and attendance feedback on the device UI
+
+## Real Device Demo
+
+For a reproducible board demo flow, see:
+
+- `hardware/docs/real-device-demo-checklist.md`
 
 ## Touchscreen
 

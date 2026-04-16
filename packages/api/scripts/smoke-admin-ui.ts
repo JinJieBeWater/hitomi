@@ -289,6 +289,11 @@ async function clickRefresh(page: any) {
   await page.getByRole("button", { name: "刷新" }).click();
 }
 
+async function selectRowAction(page: any, row: any, actionLabel: string) {
+  await row.getByRole("button", { name: "更多操作" }).click();
+  await page.getByRole("menuitem", { name: actionLabel, exact: true }).click();
+}
+
 async function cleanupData(input: {
   email: string;
   employeeCode: string;
@@ -447,7 +452,7 @@ try {
   });
 
   await employeeRow.waitFor();
-  await employeeRow.getByRole("button", { name: "编辑" }).click();
+  await selectRowAction(page, employeeRow, "编辑");
   await page.getByTestId("employee-name-input").fill(employeeUpdatedName);
   await page.getByTestId("employee-submit-button").click();
   await clickRefresh(page);
@@ -494,7 +499,7 @@ try {
 
   await faceProfileRow.waitFor();
   await faceProfileRow.getByText("待录入").waitFor();
-  await faceProfileRow.getByRole("button", { name: "取消" }).click();
+  await selectRowAction(page, faceProfileRow, "取消任务");
   await faceProfileRow.getByText("已取消").waitFor();
 
   const recognizedAt = dateAtMinute(510).getTime();
@@ -525,7 +530,7 @@ try {
   });
 
   await deletableEmployeeRow.waitFor();
-  await deletableEmployeeRow.getByRole("button", { name: "删除" }).click();
+  await selectRowAction(page, deletableEmployeeRow, "删除");
   await page.getByText(`员工编号: ${employeeCode}`).waitFor();
   await page.getByTestId("delete-confirm-input").fill("WRONG_EMPLOYEE_CODE");
   assert(
@@ -543,7 +548,7 @@ try {
   });
 
   await deletableDeviceRow.waitFor();
-  await deletableDeviceRow.getByRole("button", { name: "删除" }).click();
+  await selectRowAction(page, deletableDeviceRow, "删除");
   await page.getByText(`设备码: ${deviceCode}`).waitFor();
   await page.getByTestId("delete-confirm-input").fill("WRONG_DEVICE_CODE");
   assert(
