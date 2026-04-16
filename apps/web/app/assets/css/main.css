@@ -2,18 +2,57 @@
 @import "@nuxt/ui";
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+  --workspace-bg: oklch(0.93 0.006 255);
+  --workspace-grid-major: rgba(15, 23, 42, 0.08);
+  --workspace-grid-minor: rgba(15, 23, 42, 0.035);
+  --workspace-panel: oklch(0.975 0.002 255);
+  --workspace-panel-muted: oklch(0.94 0.004 255);
+  --workspace-border: oklch(0.77 0.008 255);
+  --workspace-border-strong: oklch(0.64 0.012 255);
+  --workspace-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 12px 24px rgba(15, 23, 42, 0.08);
+  --workspace-accent: oklch(0.75 0.16 80);
+  --workspace-accent-soft: rgba(245, 158, 11, 0.14);
+}
+
+.dark {
+  --workspace-bg: oklch(0.22 0.012 255);
+  --workspace-grid-major: rgba(148, 163, 184, 0.16);
+  --workspace-grid-minor: rgba(148, 163, 184, 0.06);
+  --workspace-panel: oklch(0.26 0.012 255);
+  --workspace-panel-muted: oklch(0.3 0.014 255);
+  --workspace-border: oklch(0.39 0.014 255);
+  --workspace-border-strong: oklch(0.56 0.02 255);
+  --workspace-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 0 0 1px rgba(255, 255, 255, 0.035),
+    0 18px 30px rgba(0, 0, 0, 0.28);
+  --workspace-accent: oklch(0.8 0.14 82);
+  --workspace-accent-soft: rgba(251, 191, 36, 0.12);
 }
 
 html {
-  @apply bg-neutral-100 dark:bg-neutral-950;
+  background-color: var(--workspace-bg);
 }
 
 body {
-  font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", sans-serif;
-  background-image: radial-gradient(circle at top left, rgba(16, 185, 129, 0.05), transparent 26%);
+  font-family:
+    "DIN Alternate",
+    "Avenir Next",
+    "PingFang SC",
+    "Hiragino Sans GB",
+    "Microsoft YaHei UI",
+    sans-serif;
+  background-color: var(--workspace-bg);
+  background-image:
+    linear-gradient(to right, var(--workspace-grid-minor) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--workspace-grid-major) 1px, transparent 1px);
+  background-size: 32px 32px;
   background-attachment: fixed;
-  @apply bg-neutral-100 text-highlighted antialiased dark:bg-neutral-950;
+  @apply text-highlighted antialiased;
 }
 
 #__nuxt {
@@ -21,7 +60,53 @@ body {
 }
 
 ::selection {
-  @apply bg-primary/20;
+  background-color: var(--workspace-accent-soft);
+}
+
+.workspace-industrial .rounded-2xl,
+.workspace-industrial .rounded-\[22px\],
+.workspace-industrial .rounded-\[18px\],
+.workspace-industrial .rounded-\[24px\] {
+  border-radius: 0.28rem;
+}
+
+.workspace-industrial .rounded-full {
+  border-radius: 0.16rem;
+}
+
+.workspace-industrial :is(button, a, input, select, textarea, [role="button"]) {
+  border-radius: 0.22rem;
+}
+
+.workspace-industrial :is(input, select, textarea) {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.workspace-industrial :is(input, select, textarea)::placeholder {
+  color: color-mix(in oklab, currentColor 52%, transparent);
+}
+
+.workspace-industrial :is(input, select, textarea):focus {
+  border-color: var(--workspace-accent);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 0 0 1px color-mix(in oklab, var(--workspace-accent) 60%, transparent);
+  outline: none;
+}
+
+.workspace-industrial label {
+  @apply text-[10px] font-semibold tracking-[0.22em] text-neutral-500 uppercase dark:text-neutral-400;
+}
+
+.workspace-industrial button {
+  font-weight: 600;
+}
+
+.workspace-industrial .backdrop-blur,
+.workspace-industrial .backdrop-blur-sm {
+  backdrop-filter: none !important;
 }
 
 .workspace-page-stack {
@@ -35,16 +120,9 @@ body {
 .workspace-mobile-card,
 .workspace-empty-state,
 .workspace-auth-card {
-  @apply border border-neutral-200/80 bg-white/92 backdrop-blur-sm dark:border-neutral-800/80 dark:bg-neutral-900/82;
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 12px 32px rgba(15, 23, 42, 0.05);
-}
-
-.workspace-surface,
-.workspace-inline-banner,
-.workspace-auth-card {
-  @apply rounded-[22px];
+  border: 1px solid var(--workspace-border);
+  background-color: var(--workspace-panel);
+  box-shadow: var(--workspace-shadow);
 }
 
 .workspace-form-surface {
@@ -52,7 +130,9 @@ body {
 }
 
 .workspace-surface-header {
-  @apply flex flex-col gap-3 border-b border-neutral-200/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-neutral-800/80;
+  @apply flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between;
+  border-bottom: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
 }
 
 .workspace-surface-body {
@@ -64,11 +144,14 @@ body {
 }
 
 .workspace-surface-footer {
-  @apply border-t border-neutral-200/80 px-5 py-4 dark:border-neutral-800/80;
+  @apply px-5 py-4;
+  border-top: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
 }
 
 .workspace-filter-bar {
-  @apply rounded-[18px] px-4 py-4;
+  @apply px-4 py-4;
+  background-color: var(--workspace-panel-muted);
 }
 
 .workspace-inline-banner {
@@ -76,7 +159,8 @@ body {
 }
 
 .workspace-empty-state {
-  @apply min-h-56 space-y-4 p-8 text-center;
+  @apply min-h-56 space-y-4 p-8;
+  background-color: var(--workspace-panel-muted);
 }
 
 .workspace-metric-grid {
@@ -84,19 +168,20 @@ body {
 }
 
 .workspace-metric-item {
-  @apply flex items-center gap-4 rounded-[18px] px-4 py-4 transition-transform duration-200;
+  @apply flex items-center gap-4 px-4 py-4 transition-colors duration-150;
+  background-color: var(--workspace-panel-muted);
 }
 
 .workspace-metric-item:hover {
-  transform: translateY(-2px);
+  border-color: var(--workspace-border-strong);
 }
 
 .workspace-metric-label {
-  @apply text-[11px] font-medium tracking-[0.16em] text-neutral-500 uppercase dark:text-neutral-400;
+  @apply text-[10px] font-semibold tracking-[0.22em] text-neutral-500 uppercase dark:text-neutral-400;
 }
 
 .workspace-metric-value {
-  @apply text-2xl font-semibold tracking-tight text-highlighted sm:text-[1.9rem];
+  @apply text-2xl font-bold tracking-tight text-highlighted sm:text-[1.9rem];
 }
 
 .workspace-metric-meta {
@@ -104,9 +189,319 @@ body {
 }
 
 .workspace-mobile-card {
-  @apply rounded-[18px] p-4;
+  @apply p-4;
 }
 
 .workspace-auth-shell {
-  background-image: radial-gradient(circle at top, rgba(16, 185, 129, 0.08), transparent 32%);
+  background-image:
+    linear-gradient(to right, var(--workspace-grid-minor) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--workspace-grid-major) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+.workspace-panel-icon {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  color: var(--workspace-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.workspace-tag {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  color: inherit;
+}
+
+.workspace-action-button {
+  @apply text-[11px] font-semibold tracking-[0.16em] uppercase;
+}
+
+.workspace-primary-action {
+  @apply text-[11px] font-semibold tracking-[0.16em] uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.workspace-secondary-action {
+  @apply text-[11px] font-semibold tracking-[0.16em] uppercase;
+}
+
+.workspace-section-label {
+  @apply text-[10px] font-semibold tracking-[0.22em] text-neutral-500 uppercase dark:text-neutral-400;
+}
+
+.workspace-data-value {
+  @apply mt-1 text-sm font-semibold text-highlighted;
+}
+
+.workspace-code-value {
+  @apply mt-1 break-all text-[12px] font-semibold tracking-[0.14em] text-highlighted;
+}
+
+.workspace-status-chip {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  @apply px-2.5 py-1 text-[10px] font-semibold tracking-[0.18em] uppercase;
+}
+
+.workspace-inline-stat {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  @apply px-4 py-4;
+}
+
+.workspace-dialog-content {
+  border: 1px solid var(--workspace-border-strong) !important;
+  background-color: var(--workspace-panel) !important;
+  box-shadow: var(--workspace-shadow) !important;
+  border-radius: 0.22rem !important;
+}
+
+.workspace-dialog-header {
+  border-bottom: 1px solid var(--workspace-border-strong) !important;
+  background-color: var(--workspace-panel-muted) !important;
+}
+
+.workspace-dialog-body {
+  background-color: var(--workspace-panel) !important;
+}
+
+.workspace-dialog-footer {
+  border-top: 1px solid var(--workspace-border-strong) !important;
+  background-color: var(--workspace-panel-muted) !important;
+}
+
+.workspace-dialog-title {
+  @apply text-[11px] font-semibold tracking-[0.18em] uppercase text-highlighted;
+}
+
+.workspace-dialog-description {
+  @apply mt-1 text-sm leading-5 text-toned;
+}
+
+.workspace-dialog-close {
+  border: 1px solid var(--workspace-border-strong) !important;
+  background-color: var(--workspace-panel) !important;
+  border-radius: 0.22rem !important;
+}
+
+.workspace-dialog-stack {
+  @apply space-y-4;
+}
+
+.workspace-dialog-panel {
+  border: 1px solid var(--workspace-border);
+  background-color: var(--workspace-panel-muted);
+  @apply p-4;
+}
+
+.workspace-danger-panel {
+  border: 1px solid rgba(225, 29, 72, 0.35);
+  background-color: color-mix(in oklab, var(--workspace-panel-muted) 86%, rgba(225, 29, 72, 0.12));
+  @apply p-4;
+}
+
+.workspace-dropdown-content {
+  border: 1px solid var(--workspace-border-strong) !important;
+  background-color: var(--workspace-panel) !important;
+  box-shadow: var(--workspace-shadow) !important;
+  border-radius: 0.22rem !important;
+}
+
+.workspace-ui-field {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.workspace-ui-field-icon {
+  color: color-mix(in oklab, currentColor 60%, transparent);
+}
+
+.workspace-ui-menu-content {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel);
+  box-shadow: var(--workspace-shadow);
+  border-radius: 0.22rem;
+}
+
+.workspace-ui-menu-label {
+  @apply px-2.5 py-2 text-[10px] font-semibold tracking-[0.22em] text-neutral-500 uppercase dark:text-neutral-400;
+}
+
+.workspace-ui-menu-separator {
+  margin: 0.2rem 0;
+  height: 1px;
+  background-color: var(--workspace-border);
+}
+
+.workspace-ui-menu-item {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.55rem 0.625rem;
+  @apply text-[12px] font-semibold tracking-[0.08em] text-default outline-none;
+}
+
+.workspace-ui-menu-item::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background-color: transparent;
+}
+
+.workspace-ui-menu-item[data-highlighted]::before,
+.workspace-ui-menu-item[data-state="open"]::before {
+  background-color: var(--workspace-panel-muted);
+}
+
+.workspace-ui-menu-item[data-disabled] {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.workspace-ui-menu-description {
+  @apply text-xs normal-case tracking-normal text-toned;
+}
+
+.workspace-ui-badge {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  border-radius: 0.16rem;
+  @apply px-2.5 py-1 text-[10px] font-semibold tracking-[0.18em];
+}
+
+.workspace-ui-alert-root {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  box-shadow: var(--workspace-shadow);
+  border-radius: 0.22rem;
+  @apply w-full p-4;
+}
+
+.workspace-ui-alert-title {
+  @apply text-[11px] font-semibold tracking-[0.16em] text-highlighted;
+}
+
+.workspace-ui-alert-description {
+  @apply mt-1 text-sm leading-5 text-toned;
+}
+
+.workspace-ui-alert-icon {
+  color: var(--workspace-accent);
+}
+
+.workspace-ui-page-card {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel);
+  box-shadow: var(--workspace-shadow);
+  border-radius: 0.22rem;
+  overflow: hidden;
+}
+
+.workspace-dropdown-item {
+  @apply text-[11px] font-semibold tracking-[0.14em] uppercase;
+}
+
+.workspace-dropdown-label {
+  @apply px-2 py-1 text-[10px] font-semibold tracking-[0.22em] uppercase text-muted;
+}
+
+.workspace-dropdown-separator {
+  background-color: var(--workspace-border) !important;
+}
+
+.workspace-table-shell {
+  border-block: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel);
+}
+
+.workspace-table-shell table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.workspace-table-shell thead tr {
+  background-color: var(--workspace-panel-muted);
+}
+
+.workspace-table-shell th {
+  border-bottom: 1px solid var(--workspace-border-strong);
+  @apply px-4 py-3 text-left text-[10px] font-semibold tracking-[0.22em] text-neutral-500 uppercase dark:text-neutral-400;
+}
+
+.workspace-table-shell td {
+  border-bottom: 1px solid var(--workspace-border);
+  @apply px-4 py-4 align-top;
+}
+
+.workspace-table-shell tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.workspace-table-shell tbody tr:hover td {
+  background-color: color-mix(in oklab, var(--workspace-panel-muted) 72%, transparent);
+}
+
+.workspace-pagination {
+  @apply flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between;
+}
+
+.workspace-sidebar-control {
+  border: 1px solid var(--workspace-border-strong);
+  background-color: var(--workspace-panel-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.workspace-sidebar-control:hover {
+  border-color: var(--workspace-border-strong);
+  background-color: color-mix(in oklab, var(--workspace-panel-muted) 78%, white 22%);
+}
+
+.dark .workspace-sidebar-control:hover {
+  background-color: color-mix(in oklab, var(--workspace-panel-muted) 84%, white 8%);
+}
+
+.workspace-sidebar-control-inline {
+  min-height: 2.75rem;
+  width: 100%;
+  justify-content: flex-start;
+  padding-inline: 0.75rem;
+}
+
+.workspace-sidebar-control-square {
+  height: 2.75rem;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  padding: 0;
+  justify-content: center;
+}
+
+.workspace-sidebar-brand-mark {
+  height: 2rem;
+  width: 2rem;
+  border: 1px solid color-mix(in oklab, var(--workspace-accent) 45%, var(--workspace-border-strong));
+  background-color: color-mix(in oklab, var(--workspace-accent-soft) 64%, var(--workspace-panel));
+  color: var(--workspace-accent);
+}
+
+.workspace-sidebar-nav-link {
+  min-height: 2.75rem;
+  width: 100%;
+  border: 1px solid transparent;
+  padding-inline: 0.75rem;
+}
+
+.workspace-sidebar-nav-link-collapsed {
+  height: 2.75rem;
+  width: 2.75rem;
+  min-width: 2.75rem;
+  justify-content: center;
+  padding: 0;
+}
+
+.workspace-sidebar-nav-label {
+  @apply text-[11px] font-semibold tracking-[0.12em];
 }

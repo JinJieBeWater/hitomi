@@ -97,10 +97,27 @@ async function handleSubmit() {
     :open="open"
     :title="device ? '编辑设备' : '创建设备'"
     side="right"
+    :ui="{
+      content: 'workspace-dialog-content',
+      header: 'workspace-dialog-header',
+      body: 'workspace-dialog-body',
+      footer: 'workspace-dialog-footer',
+      title: 'workspace-dialog-title',
+      description: 'workspace-dialog-description',
+      close: 'workspace-dialog-close',
+    }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
-      <form class="space-y-5" @submit.prevent="handleSubmit">
+      <form class="workspace-dialog-stack" @submit.prevent="handleSubmit">
+        <div class="workspace-dialog-panel">
+          <div class="workspace-section-label">设备配置</div>
+          <div class="workspace-data-value">{{ device ? "在线终端维护" : "注册新终端" }}</div>
+          <div class="mt-1 text-sm text-toned">
+            {{ device ? "修改名称或启停状态，不改动历史凭据。" : "创建后会生成 bootstrap 凭据并进入首配流程。" }}
+          </div>
+        </div>
+
         <UFormField label="设备名称" required>
           <UInput
             v-model="form.name"
@@ -133,7 +150,7 @@ async function handleSubmit() {
             type="submit"
             data-testid="device-submit-button"
             :loading="isSaving"
-            class="w-full rounded-2xl"
+            class="workspace-primary-action w-full"
             icon="i-lucide-save"
           >
             {{ device ? "保存修改" : "创建设备" }}
@@ -141,23 +158,25 @@ async function handleSubmit() {
 
           <UButton
             type="button"
-            variant="ghost"
+            variant="outline"
             color="neutral"
-            class="w-full"
+            class="workspace-secondary-action w-full"
             @click="emit('update:open', false)"
             >取消</UButton
           >
         </div>
 
-        <div
-          v-if="device"
-          class="border-t border-neutral-200/70 pt-5 dark:border-neutral-800/80"
-        >
+        <div v-if="device" class="workspace-danger-panel space-y-3">
+          <div>
+            <div class="workspace-section-label text-rose-600 dark:text-rose-300">危险操作</div>
+            <div class="mt-1 text-sm text-toned">删除设备会一并清理其相关录脸任务和考勤记录。</div>
+          </div>
+
           <UButton
             type="button"
             color="error"
             variant="outline"
-            class="w-full rounded-2xl"
+            class="workspace-secondary-action w-full"
             icon="i-lucide-trash-2"
             @click="emit('request-delete')"
           >

@@ -62,6 +62,7 @@ class TemplateStorePort {
   virtual TemplateStoreInitStatus begin() = 0;
   virtual TemplateStoreStatus status() const = 0;
   virtual TemplateLibrarySummary loadSummary() const = 0;
+  virtual std::vector<std::string> listTemplateEmployeeIds() const = 0;
   virtual std::optional<TemplateBlob> readTemplate(const std::string& employeeId) = 0;
   virtual bool upsertTemplate(const std::string& employeeId, const std::vector<uint8_t>& bytes, uint64_t updatedAt) = 0;
   virtual bool removeTemplate(const std::string& employeeId) = 0;
@@ -82,6 +83,10 @@ class NoopTemplateStorePort final : public TemplateStorePort {
 
   TemplateLibrarySummary loadSummary() const override {
     return status_.summary;
+  }
+
+  std::vector<std::string> listTemplateEmployeeIds() const override {
+    return {};
   }
 
   std::optional<TemplateBlob> readTemplate(const std::string& employeeId) override {

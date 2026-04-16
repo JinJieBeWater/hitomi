@@ -91,7 +91,7 @@ const shortcuts = [
               :to="item.to"
               color="neutral"
               variant="outline"
-              class="h-12 justify-between rounded-2xl"
+              class="workspace-secondary-action h-12 justify-between"
               :icon="item.icon"
             >
               {{ item.label }}

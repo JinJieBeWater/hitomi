@@ -13,6 +13,7 @@
 #include <lvgl.h>
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "board/pins.hpp"
@@ -41,18 +42,32 @@ struct Ft6336Sample {
   uint16_t rawY = 0;
 };
 
+enum class PendingTransferType : uint8_t {
+  Lvgl,
+  Preview,
+};
+
+struct PendingTransfer {
+  PendingTransferType type = PendingTransferType::Lvgl;
+};
+
 struct SzpiLvglDisplayImpl {
   esp_lcd_panel_io_handle_t io = nullptr;
   esp_lcd_panel_handle_t panel = nullptr;
   lv_display_t* display = nullptr;
   lv_indev_t* touchIndev = nullptr;
-  uint16_t* drawBuffer = nullptr;
+  uint16_t* drawBufferA = nullptr;
+  uint16_t* drawBufferB = nullptr;
   infra::TouchReadState touchState = {};
   uint32_t touchTapCount = 0;
   uint32_t lastTouchErrorLogMs = 0;
   bool spiInitialized = false;
   bool touchReady = false;
   bool ready = false;
+  std::array<PendingTransfer, 8> pendingTransfers = {};
+  std::size_t pendingTransferHead = 0;
+  std::size_t pendingTransferCount = 0;
+  portMUX_TYPE pendingTransferMux = portMUX_INITIALIZER_UNLOCKED;
 };
 
 bool logEspError(esp_err_t err, const char* action) {
@@ -68,9 +83,55 @@ lv_point_t toLvPoint(const infra::TouchPoint& point) {
   return lv_point_t{point.x, point.y};
 }
 
+bool enqueuePendingTransfer(
+    SzpiLvglDisplayImpl& impl,
+    PendingTransferType type) {
+  taskENTER_CRITICAL(&impl.pendingTransferMux);
+  if (impl.pendingTransferCount >= impl.pendingTransfers.size()) {
+    taskEXIT_CRITICAL(&impl.pendingTransferMux);
+    Serial.println("[SZPI.ESP_LCD] pending transfer queue full");
+    return false;
+  }
+
+  const std::size_t tail = (impl.pendingTransferHead + impl.pendingTransferCount) % impl.pendingTransfers.size();
+  impl.pendingTransfers[tail] = PendingTransfer{
+      .type = type,
+  };
+  impl.pendingTransferCount += 1;
+  taskEXIT_CRITICAL(&impl.pendingTransferMux);
+  return true;
+}
+
+std::optional<PendingTransfer> dequeuePendingTransferFromIsr(SzpiLvglDisplayImpl& impl) {
+  taskENTER_CRITICAL_ISR(&impl.pendingTransferMux);
+  if (impl.pendingTransferCount == 0) {
+    taskEXIT_CRITICAL_ISR(&impl.pendingTransferMux);
+    return std::nullopt;
+  }
+
+  PendingTransfer transfer = std::move(impl.pendingTransfers[impl.pendingTransferHead]);
+  impl.pendingTransferHead = (impl.pendingTransferHead + 1) % impl.pendingTransfers.size();
+  impl.pendingTransferCount -= 1;
+  taskEXIT_CRITICAL_ISR(&impl.pendingTransferMux);
+  return transfer;
+}
+
+void dropNewestPendingTransfer(SzpiLvglDisplayImpl& impl) {
+  taskENTER_CRITICAL(&impl.pendingTransferMux);
+  if (impl.pendingTransferCount > 0) {
+    impl.pendingTransferCount -= 1;
+  }
+  taskEXIT_CRITICAL(&impl.pendingTransferMux);
+}
+
 void flushCallback(lv_display_t* display, const lv_area_t* area, uint8_t* pxMap) {
   auto* impl = static_cast<SzpiLvglDisplayImpl*>(lv_display_get_driver_data(display));
   if (impl == nullptr || impl->panel == nullptr) {
+    lv_display_flush_ready(display);
+    return;
+  }
+
+  if (!enqueuePendingTransfer(*impl, PendingTransferType::Lvgl)) {
     lv_display_flush_ready(display);
     return;
   }
@@ -79,6 +140,7 @@ void flushCallback(lv_display_t* display, const lv_area_t* area, uint8_t* pxMap)
       esp_lcd_panel_draw_bitmap(impl->panel, area->x1, area->y1, area->x2 + 1, area->y2 + 1, pxMap);
   if (err != ESP_OK) {
     Serial.printf("[SZPI.ESP_LCD] draw_bitmap failed: %s\n", esp_err_to_name(err));
+    dropNewestPendingTransfer(*impl);
     lv_display_flush_ready(display);
   }
 }
@@ -89,7 +151,16 @@ bool onColorTransferDone(
   static_cast<void>(eventData);
 
   auto* impl = static_cast<SzpiLvglDisplayImpl*>(userCtx);
-  if (impl != nullptr && impl->display != nullptr) {
+  if (impl == nullptr) {
+    return false;
+  }
+
+  const auto completed = dequeuePendingTransferFromIsr(*impl);
+  if (!completed.has_value()) {
+    return false;
+  }
+
+  if (completed->type == PendingTransferType::Lvgl && impl->display != nullptr) {
     lv_display_flush_ready(impl->display);
   }
 
@@ -211,7 +282,7 @@ bool initPanel(SzpiLvglDisplayImpl& impl) {
   ioCfg.lcd_cmd_bits = 8;
   ioCfg.lcd_param_bits = 8;
   ioCfg.spi_mode = 2;
-  ioCfg.trans_queue_depth = 1;
+  ioCfg.trans_queue_depth = 4;
   ioCfg.on_color_trans_done = onColorTransferDone;
   ioCfg.user_ctx = &impl;
 
@@ -259,11 +330,14 @@ bool initPanel(SzpiLvglDisplayImpl& impl) {
 }
 
 bool initLvglDisplay(SzpiLvglDisplayImpl& impl) {
-  impl.drawBuffer = static_cast<uint16_t*>(heap_caps_malloc(
+  impl.drawBufferA = static_cast<uint16_t*>(heap_caps_malloc(
       SzpiLvglDisplay::kHorizontalResolution * SzpiLvglDisplay::kBufferRows * sizeof(uint16_t),
       MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
-  if (impl.drawBuffer == nullptr) {
-    Serial.println("[SZPI.ESP_LCD] Failed to allocate LVGL draw buffer");
+  impl.drawBufferB = static_cast<uint16_t*>(heap_caps_malloc(
+      SzpiLvglDisplay::kHorizontalResolution * SzpiLvglDisplay::kBufferRows * sizeof(uint16_t),
+      MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL));
+  if (impl.drawBufferA == nullptr || impl.drawBufferB == nullptr) {
+    Serial.println("[SZPI.ESP_LCD] Failed to allocate LVGL draw buffers");
     return false;
   }
 
@@ -278,8 +352,8 @@ bool initLvglDisplay(SzpiLvglDisplayImpl& impl) {
   lv_display_set_flush_cb(impl.display, flushCallback);
   lv_display_set_buffers(
       impl.display,
-      impl.drawBuffer,
-      nullptr,
+      impl.drawBufferA,
+      impl.drawBufferB,
       SzpiLvglDisplay::kHorizontalResolution * SzpiLvglDisplay::kBufferRows * sizeof(uint16_t),
       LV_DISPLAY_RENDER_MODE_PARTIAL);
 
@@ -367,9 +441,14 @@ void releaseDisplayResources(SzpiLvglDisplayImpl& impl) {
     impl.display = nullptr;
   }
 
-  if (impl.drawBuffer != nullptr) {
-    heap_caps_free(impl.drawBuffer);
-    impl.drawBuffer = nullptr;
+  if (impl.drawBufferA != nullptr) {
+    heap_caps_free(impl.drawBufferA);
+    impl.drawBufferA = nullptr;
+  }
+
+  if (impl.drawBufferB != nullptr) {
+    heap_caps_free(impl.drawBufferB);
+    impl.drawBufferB = nullptr;
   }
 
   if (impl.panel != nullptr) {
@@ -439,6 +518,35 @@ bool SzpiLvglDisplay::init() {
 
 lv_display_t* SzpiLvglDisplay::display() const {
   return impl_->display;
+}
+
+bool SzpiLvglDisplay::drawPreviewBitmap(
+    int x1,
+    int y1,
+    int x2,
+    int y2,
+    const uint16_t* pixels) {
+  if (!impl_->ready || impl_->panel == nullptr || pixels == nullptr) {
+    return false;
+  }
+
+  if (!enqueuePendingTransfer(*impl_, PendingTransferType::Preview)) {
+    return false;
+  }
+
+  const esp_err_t err = esp_lcd_panel_draw_bitmap(
+      impl_->panel,
+      x1,
+      y1,
+      x2,
+      y2,
+      const_cast<uint16_t*>(pixels));
+  if (err != ESP_OK) {
+    dropNewestPendingTransfer(*impl_);
+    Serial.printf("[SZPI.ESP_LCD] preview draw failed: %s\n", esp_err_to_name(err));
+    return false;
+  }
+  return true;
 }
 
 bool SzpiLvglDisplay::touchReady() const {

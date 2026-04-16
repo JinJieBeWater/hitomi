@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "face/ports.hpp"
 #include "infra/display/touch_transform.hpp"
 
 struct _lv_display_t;
@@ -12,7 +13,7 @@ class SzpiLvglDisplay {
  public:
   static constexpr uint32_t kHorizontalResolution = 320;
   static constexpr uint32_t kVerticalResolution = 240;
-  static constexpr uint32_t kBufferRows = 20;
+  static constexpr uint32_t kBufferRows = 24;
 
   SzpiLvglDisplay();
   ~SzpiLvglDisplay();
@@ -24,6 +25,12 @@ class SzpiLvglDisplay {
 
   bool init();
   lv_display_t* display() const;
+  bool drawPreviewBitmap(
+      int x1,
+      int y1,
+      int x2,
+      int y2,
+      const uint16_t* pixels);
   bool touchReady() const;
   uint32_t touchTapCount() const;
   infra::TouchPoint lastTouchPoint() const;

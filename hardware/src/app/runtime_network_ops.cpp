@@ -257,6 +257,7 @@ void applySyncResult(const RuntimeContext& context, RuntimeState& state, const C
   state.apiProbeSucceeded = true;
   state.apiProbeStatusCode = std::nullopt;
   persistSnapshots(context, state);
+  reconcileTemplatesForEmployees(context, state);
   setLastError(state, std::nullopt);
   state.renderDirty = true;
 }

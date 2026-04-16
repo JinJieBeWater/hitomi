@@ -14,13 +14,13 @@ const props = defineProps<{
 const hiddenCaptions = new Set(["当前页", "当前筛选"]);
 
 function toneClass(color?: MetricTone) {
-  if (color === "primary") return "bg-primary/10 text-primary ring-primary/20";
-  if (color === "success") return "bg-emerald-500/10 text-emerald-700 ring-emerald-500/20";
-  if (color === "warning") return "bg-amber-500/10 text-amber-700 ring-amber-500/20";
-  if (color === "error") return "bg-rose-500/10 text-rose-700 ring-rose-500/20";
-  if (color === "neutral") return "bg-neutral-900/5 text-neutral-600 ring-neutral-900/10";
+  if (color === "primary") return "border-amber-400/70 bg-amber-500/12 text-amber-700 dark:text-amber-300";
+  if (color === "success") return "border-neutral-400/70 bg-[var(--workspace-panel)] text-neutral-700 dark:border-neutral-700 dark:text-neutral-300";
+  if (color === "warning") return "border-neutral-400/70 bg-[var(--workspace-panel)] text-neutral-700 dark:border-neutral-700 dark:text-neutral-300";
+  if (color === "error") return "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300";
+  if (color === "neutral") return "border-neutral-400/70 bg-[var(--workspace-panel)] text-neutral-700 dark:border-neutral-700 dark:text-neutral-300";
 
-  return "bg-primary/10 text-primary ring-primary/20";
+  return "border-amber-400/70 bg-amber-500/12 text-amber-700 dark:text-amber-300";
 }
 
 function shouldShowCaption(caption?: string): boolean {
@@ -42,7 +42,7 @@ function shouldShowCaption(caption?: string): boolean {
       <div
         v-if="item.icon"
         :class="[
-          'flex size-11 shrink-0 items-center justify-center rounded-2xl ring-1 ring-inset',
+          'flex size-11 shrink-0 items-center justify-center border',
           toneClass(item.color),
         ]"
       >

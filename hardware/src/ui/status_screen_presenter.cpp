@@ -64,6 +64,21 @@ std::string syncLabel(const app::RuntimeStatus& status) {
 }
 
 std::string activeEnrollmentSubject(const app::RuntimeStatus& status) {
+  if (status.activeEnrollmentTaskId.has_value()) {
+    for (const auto& task : status.snapshots.enrollmentTasks) {
+      if (task.taskId != status.activeEnrollmentTaskId.value()) {
+        continue;
+      }
+      if (!task.employeeCode.empty()) {
+        return "Employee " + task.employeeCode;
+      }
+      if (!task.employeeId.empty()) {
+        return "Employee " + task.employeeId;
+      }
+      break;
+    }
+  }
+
   return status.activeEnrollmentEmployeeName.value_or(
       status.activeEnrollmentTaskId.value_or("pending"));
 }
@@ -79,10 +94,10 @@ std::string enrollmentProgressSuffix(const app::RuntimeStatus& status) {
 }
 
 std::string subtitleLabel(const app::RuntimeStatus& status) {
-  if (status.snapshots.deviceName.empty()) {
-    return "SZPI ESP32-S3";
+  if (status.credentials.configured()) {
+    return status.credentials.deviceCode;
   }
-  return status.snapshots.deviceName;
+  return "SZPI ESP32-S3";
 }
 
 std::string credentialsLabel(const app::RuntimeStatus& status) {
@@ -213,6 +228,16 @@ std::string captureActionLabel(const app::RuntimeStatus& status) {
   return captureRunning(status) ? "Cancel" : "Back";
 }
 
+std::string enrollmentTaskLabel(const core::EnrollmentTaskSnapshot& task) {
+  if (!task.employeeCode.empty()) {
+    return "Employee " + task.employeeCode;
+  }
+  if (!task.employeeId.empty()) {
+    return "Employee " + task.employeeId;
+  }
+  return "Employee";
+}
+
 std::string taskLabel(const app::RuntimeStatus& status) {
   if (status.enrollmentState == app::EnrollmentRunState::Capturing ||
       status.enrollmentState == app::EnrollmentRunState::Preparing) {
@@ -248,7 +273,7 @@ std::string taskLabel(const app::RuntimeStatus& status) {
   const auto& task = status.snapshots.enrollmentTasks.front();
   const std::size_t remaining = status.snapshots.enrollmentTasks.size() - 1;
   std::ostringstream oss;
-  oss << "Task: " << task.employeeName;
+  oss << "Task: " << enrollmentTaskLabel(task);
   if (remaining > 0) {
     oss << " +" << remaining << " more";
   }
@@ -380,6 +405,10 @@ std::string attendanceResultLabel(const app::RuntimeStatus& status) {
     return std::to_string(status.pendingQueueSize) + " record(s) queued";
   }
 
+  if (status.lastAttendanceFeedback.has_value()) {
+    return status.lastAttendanceFeedback.value();
+  }
+
   if (status.lastErrorCode.has_value()) {
     return "Error: " + status.lastErrorCode.value();
   }
@@ -392,11 +421,9 @@ std::vector<EnrollmentTaskItemViewModel> enrollmentTasks(const app::RuntimeStatu
   items.reserve(status.snapshots.enrollmentTasks.size());
 
   for (const auto& task : status.snapshots.enrollmentTasks) {
-    const std::string title =
-        task.employeeCode.empty() ? task.employeeName : task.employeeCode + " " + task.employeeName;
     items.push_back(EnrollmentTaskItemViewModel{
         .taskId = task.taskId,
-        .title = title,
+        .title = enrollmentTaskLabel(task),
         .meta = "Status: " + task.status,
     });
   }

@@ -12,6 +12,9 @@ namespace core {
 
 SnapshotBundle applySyncSnapshot(
     const SnapshotBundle& current, const SyncPayload& payload, uint64_t syncedAt);
+std::vector<std::string> collectStaleTemplateEmployeeIds(
+    const std::vector<std::string>& storedTemplateEmployeeIds,
+    const std::vector<EmployeeSnapshot>& employees);
 
 std::optional<AttendanceRecordType> classifyAttendanceType(
     const AttendanceConfigSnapshot& config, uint64_t recognizedAt);

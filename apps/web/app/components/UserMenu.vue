@@ -18,7 +18,9 @@ const isSessionPending = computed(() => !mounted.value || session.value.isPendin
 const isSignedIn = computed(() => Boolean(session.value.data?.user));
 
 const skeletonClass = computed(() => {
-  return props.collapsed ? "size-10 rounded-2xl" : "h-11 w-full rounded-2xl";
+  return props.collapsed
+    ? "workspace-sidebar-control workspace-sidebar-control-square"
+    : "workspace-sidebar-control workspace-sidebar-control-inline";
 });
 
 async function handleSignOut(): Promise<void> {
@@ -51,17 +53,22 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="w-full">
+  <div :class="props.collapsed ? 'flex justify-center' : 'w-full'">
     <USkeleton v-if="isSessionPending" :class="skeletonClass" />
 
     <UButton
       v-else-if="!isSignedIn"
       color="neutral"
       variant="outline"
+      size="lg"
       icon="i-lucide-log-in"
       :square="props.collapsed"
       :block="!props.collapsed"
-      class="rounded-2xl"
+      :class="
+        props.collapsed
+          ? 'workspace-sidebar-control workspace-sidebar-control-square'
+          : 'workspace-sidebar-control workspace-sidebar-control-inline workspace-sidebar-nav-label'
+      "
       to="/login"
     >
       登录
@@ -70,12 +77,17 @@ onMounted(() => {
     <UButton
       v-else
       color="neutral"
-      :variant="props.collapsed ? 'outline' : 'soft'"
+      variant="outline"
+      size="lg"
       icon="i-lucide-log-out"
       :square="props.collapsed"
       :block="!props.collapsed"
       :label="props.collapsed ? undefined : '退出登录'"
-      class="rounded-2xl"
+      :class="
+        props.collapsed
+          ? 'workspace-sidebar-control workspace-sidebar-control-square'
+          : 'workspace-sidebar-control workspace-sidebar-control-inline workspace-sidebar-nav-label'
+      "
       data-testid="sign-out-button"
       @click="handleSignOut()"
     />

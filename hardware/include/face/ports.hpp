@@ -51,6 +51,13 @@ struct CameraStatus {
   std::string lastError;
 };
 
+struct FaceBox {
+  uint16_t left = 0;
+  uint16_t top = 0;
+  uint16_t right = 0;
+  uint16_t bottom = 0;
+};
+
 struct EnrollmentRequest {
   std::string taskId;
   std::string employeeId;

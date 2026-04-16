@@ -121,34 +121,50 @@ async function handleCancel() {
 </script>
 
 <template>
-  <USlideover :open="open" :title="title" side="right" @update:open="emit('update:open', $event)">
+  <USlideover
+    :open="open"
+    :title="title"
+    side="right"
+    :ui="{
+      content: 'workspace-dialog-content',
+      header: 'workspace-dialog-header',
+      body: 'workspace-dialog-body',
+      footer: 'workspace-dialog-footer',
+      title: 'workspace-dialog-title',
+      description: 'workspace-dialog-description',
+      close: 'workspace-dialog-close',
+    }"
+    @update:open="emit('update:open', $event)"
+  >
     <template #body>
-      <div v-if="employee" class="space-y-5">
-        <div class="space-y-1">
-          <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">员工</div>
-          <div class="text-lg font-semibold tracking-tight text-highlighted">
-            {{ employee.name }}
-          </div>
-          <div class="text-sm text-toned">{{ employee.code }}</div>
-        </div>
-
-        <div class="grid gap-4 sm:grid-cols-2">
-          <div>
-            <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">当前状态</div>
-            <div class="mt-2">
-              <UBadge
-                :label="labelFaceStatus(employee.faceProfile?.status)"
-                :color="colorFaceStatus(employee.faceProfile?.status)"
-                variant="subtle"
-                class="rounded-full"
-              />
+      <div v-if="employee" class="workspace-dialog-stack">
+        <div class="workspace-dialog-panel space-y-3">
+          <div class="space-y-1">
+            <div class="workspace-section-label">员工</div>
+            <div class="text-lg font-semibold tracking-tight text-highlighted">
+              {{ employee.name }}
             </div>
+            <div class="workspace-code-value">{{ employee.code }}</div>
           </div>
 
-          <div>
-            <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">当前设备</div>
-            <div class="mt-2 text-sm font-medium text-highlighted">
-              {{ employee.faceProfile?.deviceName || "未分配设备" }}
+          <div class="grid gap-3 sm:grid-cols-2">
+            <div class="workspace-inline-stat">
+              <div class="workspace-section-label">当前状态</div>
+              <div class="mt-2">
+                <UBadge
+                  :label="labelFaceStatus(employee.faceProfile?.status)"
+                  :color="colorFaceStatus(employee.faceProfile?.status)"
+                  variant="outline"
+                  class="workspace-status-chip"
+                />
+              </div>
+            </div>
+
+            <div class="workspace-inline-stat">
+              <div class="workspace-section-label">当前设备</div>
+              <div class="workspace-data-value">
+                {{ employee.faceProfile?.deviceName || "未分配设备" }}
+              </div>
             </div>
           </div>
         </div>
@@ -186,7 +202,7 @@ async function handleCancel() {
             data-testid="employee-face-submit-button"
             :loading="assignFaceTask.isPending.value"
             :disabled="deviceOptions.length === 0"
-            class="w-full rounded-2xl"
+            class="workspace-primary-action w-full"
             icon="i-lucide-scan-face"
             @click="handleSubmit()"
           >
@@ -199,7 +215,7 @@ async function handleCancel() {
             color="error"
             variant="outline"
             :loading="cancelFaceTask.isPending.value"
-            class="w-full rounded-2xl"
+            class="workspace-secondary-action w-full"
             icon="i-lucide-ban"
             @click="handleCancel()"
           >
@@ -208,9 +224,9 @@ async function handleCancel() {
 
           <UButton
             type="button"
-            variant="ghost"
+            variant="outline"
             color="neutral"
-            class="w-full"
+            class="workspace-secondary-action w-full"
             @click="emit('update:open', false)"
             >关闭</UButton
           >

@@ -87,6 +87,7 @@ const emptyClass = computed(() =>
         size="xs"
         variant="outline"
         icon="i-lucide-plus"
+        class="workspace-secondary-action"
         @click="emit('add:wifi-profile')"
       >
         {{ addLabel }}
@@ -105,9 +106,9 @@ const emptyClass = computed(() =>
             <UBadge
               v-if="profile.disabled"
               label="已禁用"
-              color="warning"
-              variant="subtle"
-              class="rounded-full"
+              color="neutral"
+              variant="outline"
+              class="workspace-status-chip"
             />
           </div>
 
@@ -192,7 +193,7 @@ const emptyClass = computed(() =>
       :icon="submitIcon"
       :loading="submitLoading"
       :disabled="submitDisabled"
-      class="w-full rounded-2xl"
+      class="workspace-primary-action w-full"
       @click="emit('submit')"
     >
       {{ submitLabel }}

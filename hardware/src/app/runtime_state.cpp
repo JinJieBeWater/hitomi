@@ -55,6 +55,7 @@ RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeSta
   status.faceTopScore = state.faceTopScore;
   status.detectedFaceCount = state.detectedFaceCount;
   status.faceModuleEnabled = state.faceModuleEnabled;
+  status.lastAttendanceFeedback = state.lastAttendanceFeedback;
   const face::CameraStatus cameraStatus = context.camera.status();
   status.cameraAvailable = cameraStatus.supported;
   status.cameraReady = cameraStatus.initialized;

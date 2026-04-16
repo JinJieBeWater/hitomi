@@ -239,8 +239,9 @@ function resetFilters() {
 
           <template #actions>
             <UButton
-              variant="ghost"
+              variant="outline"
               color="neutral"
+              class="workspace-secondary-action"
               icon="i-lucide-rotate-ccw"
               @click="resetFilters()"
               >清空筛选</UButton
@@ -256,7 +257,7 @@ function resetFilters() {
             empty-title="暂无考勤记录"
             empty-description="当前筛选条件下没有可显示的考勤记录。"
           >
-            <div class="workspace-surface-table hidden md:block">
+            <div class="workspace-surface-table workspace-table-shell hidden md:block">
               <UTable
                 :data="rows"
                 :columns="recordColumns"
@@ -270,13 +271,13 @@ function resetFilters() {
                 </template>
 
                 <template #type-cell="{ row }">
-                  <UBadge
-                    :label="labelAttendanceType(row.original.type)"
-                    :color="colorAttendanceType(row.original.type)"
-                    variant="subtle"
-                    class="rounded-full"
-                  />
-                </template>
+                    <UBadge
+                      :label="labelAttendanceType(row.original.type)"
+                      :color="colorAttendanceType(row.original.type)"
+                      variant="outline"
+                      class="workspace-status-chip"
+                    />
+                  </template>
 
                 <template #employee-cell="{ row }">
                   <div class="space-y-1">
@@ -304,34 +305,30 @@ function resetFilters() {
               <div v-for="item in rows" :key="item.id" class="workspace-mobile-card">
                 <div class="flex items-start justify-between gap-3">
                   <div class="min-w-0 space-y-1">
-                    <div class="text-sm font-medium text-toned">{{ item.localDate }}</div>
+                    <div class="workspace-section-label">{{ item.localDate }}</div>
                     <div class="truncate text-base font-semibold text-highlighted">
                       {{ item.employee?.name || "-" }}
                     </div>
-                    <div class="text-sm text-toned">{{ item.employee?.code || "-" }}</div>
+                    <div class="workspace-code-value mt-0">{{ item.employee?.code || "-" }}</div>
                   </div>
 
                   <UBadge
                     :label="labelAttendanceType(item.type)"
                     :color="colorAttendanceType(item.type)"
-                    variant="subtle"
-                    class="rounded-full"
+                    variant="outline"
+                    class="workspace-status-chip"
                   />
                 </div>
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      打卡时间
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ formatDateTime(item.recognizedAt) }}</div>
+                    <div class="workspace-section-label">打卡时间</div>
+                    <div class="workspace-data-value">{{ formatDateTime(item.recognizedAt) }}</div>
                   </div>
 
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      设备
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ item.device?.name || "-" }}</div>
+                    <div class="workspace-section-label">设备</div>
+                    <div class="workspace-data-value">{{ item.device?.name || "-" }}</div>
                     <div class="text-xs text-toned">{{ item.device?.deviceCode || "-" }}</div>
                   </div>
                 </div>

@@ -155,6 +155,38 @@ void applyTemplateStoreStatus(
       facePortsReady(context);
 }
 
+void reconcileTemplatesForEmployees(const RuntimeContext& context, RuntimeState& state) {
+  if (!state.templateStoreReady) {
+    return;
+  }
+
+  const auto staleEmployeeIds = core::collectStaleTemplateEmployeeIds(
+      context.templateStore.listTemplateEmployeeIds(), state.snapshots.employees);
+  if (staleEmployeeIds.empty()) {
+    return;
+  }
+
+  std::size_t removedCount = 0;
+  for (const auto& employeeId : staleEmployeeIds) {
+    if (!context.templateStore.removeTemplate(employeeId)) {
+      const auto status = context.templateStore.status();
+      Serial.printf(
+          "[APP] template cleanup failed employee=%s status=%s detail=%s\n",
+          employeeId.c_str(),
+          status.health.statusCode.c_str(),
+          status.health.detail.c_str());
+      applyTemplateStoreStatus(context, state, status, false);
+      persistStorageAux(context, state);
+      return;
+    }
+    removedCount += 1;
+  }
+
+  applyTemplateStoreStatus(context, state, context.templateStore.status(), true);
+  persistStorageAux(context, state);
+  Serial.printf("[APP] template cleanup removed=%u stale templates after sync\n", static_cast<unsigned>(removedCount));
+}
+
 void runTemplateStoreSelfTest(const RuntimeContext& context, RuntimeState& state) {
 #ifdef HITOMI_SD_SELF_TEST
   if (!state.templateStoreReady) {

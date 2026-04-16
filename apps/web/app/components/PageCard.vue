@@ -12,7 +12,7 @@ defineProps<{
       <div class="flex min-w-0 items-start gap-3">
         <div
           v-if="icon"
-          class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+          class="workspace-panel-icon mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center"
         >
           <UIcon :name="icon" class="h-4 w-4" />
         </div>

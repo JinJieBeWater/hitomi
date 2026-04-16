@@ -85,6 +85,16 @@ void notify(
   });
 }
 
+std::string enrollmentDisplayLabel(const core::EnrollmentTaskSnapshot& task) {
+  if (!task.employeeCode.empty()) {
+    return "Employee " + task.employeeCode;
+  }
+  if (!task.employeeId.empty()) {
+    return "Employee " + task.employeeId;
+  }
+  return "Employee";
+}
+
 }  // namespace
 
 void startEnrollmentTask(
@@ -180,7 +190,7 @@ void startEnrollmentTask(
 
   state.activeEnrollmentTaskId = task->taskId;
   state.activeEnrollmentEmployeeId = task->employeeId;
-  state.activeEnrollmentEmployeeName = task->employeeName;
+  state.activeEnrollmentEmployeeName = enrollmentDisplayLabel(*task);
   state.enrollmentCapturedSamples = 0;
   state.enrollmentRequiredSamples = board::kEnrollmentRequiredSamples;
   state.detectedFaceCount = 0;
@@ -197,7 +207,7 @@ void startEnrollmentTask(
   notify(
       context,
       infra::DisplayNotificationLevel::Info,
-      "Start: " + task->employeeName,
+      "Start: " + enrollmentDisplayLabel(*task),
       1800);
   state.renderDirty = true;
   Serial.printf("[APP] Enrollment session started taskId=%s employeeId=%s\n", task->taskId.c_str(), task->employeeId.c_str());

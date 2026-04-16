@@ -127,9 +127,9 @@ async function handleSubmit() {
       <template #actions>
         <UBadge
           :label="statusLabel"
-          :color="currentConfig ? 'success' : 'warning'"
-          variant="subtle"
-          class="rounded-full"
+          :color="currentConfig ? 'neutral' : 'primary'"
+          variant="outline"
+          class="workspace-status-chip"
         />
         <UButton
           variant="outline"
@@ -238,7 +238,7 @@ async function handleSubmit() {
               type="submit"
               data-testid="attendance-save-button"
               :loading="saveConfig.isPending.value"
-              class="w-full rounded-2xl sm:w-auto"
+              class="workspace-primary-action w-full sm:w-auto"
               icon="i-lucide-save"
             >
               保存配置
@@ -246,9 +246,9 @@ async function handleSubmit() {
 
             <UButton
               type="button"
-              variant="ghost"
+              variant="outline"
               color="neutral"
-              class="w-full sm:w-auto"
+              class="workspace-secondary-action w-full sm:w-auto"
               icon="i-lucide-rotate-ccw"
               @click="restoreCurrentConfig()"
             >

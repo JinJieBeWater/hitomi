@@ -9,6 +9,8 @@ const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
   hourCycle: "h23",
 });
 
+type UiColor = "error" | "success" | "info" | "primary" | "secondary" | "warning" | "neutral";
+
 export function formatDateTime(value: number | null | undefined) {
   if (!value) return "-";
 
@@ -52,8 +54,8 @@ export function labelDeviceStatus(value: string) {
   return value;
 }
 
-export function colorDeviceStatus(value: string | null | undefined) {
-  if (value === "active") return "success";
+export function colorDeviceStatus(value: string | null | undefined): UiColor {
+  if (value === "active") return "neutral";
   if (value === "disabled") return "neutral";
 
   return "neutral";
@@ -69,10 +71,10 @@ export function labelFaceStatus(value: string | null | undefined) {
   return value;
 }
 
-export function colorFaceStatus(value: string | null | undefined) {
+export function colorFaceStatus(value: string | null | undefined): UiColor {
   if (!value) return "neutral";
-  if (value === "pending") return "warning";
-  if (value === "success") return "success";
+  if (value === "pending") return "primary";
+  if (value === "success") return "neutral";
   if (value === "failed") return "error";
   if (value === "cancelled") return "neutral";
 
@@ -86,9 +88,9 @@ export function labelAttendanceType(value: string) {
   return value;
 }
 
-export function colorAttendanceType(value: string | null | undefined) {
+export function colorAttendanceType(value: string | null | undefined): UiColor {
   if (value === "clock_in") return "primary";
-  if (value === "clock_out") return "warning";
+  if (value === "clock_out") return "neutral";
 
   return "neutral";
 }

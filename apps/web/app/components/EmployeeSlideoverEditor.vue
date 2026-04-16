@@ -76,10 +76,27 @@ async function handleSubmit() {
     :open="open"
     :title="employee ? '编辑员工' : '新增员工'"
     side="right"
+    :ui="{
+      content: 'workspace-dialog-content',
+      header: 'workspace-dialog-header',
+      body: 'workspace-dialog-body',
+      footer: 'workspace-dialog-footer',
+      title: 'workspace-dialog-title',
+      description: 'workspace-dialog-description',
+      close: 'workspace-dialog-close',
+    }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
-      <form class="space-y-5" @submit.prevent="handleSubmit">
+      <form class="workspace-dialog-stack" @submit.prevent="handleSubmit">
+        <div class="workspace-dialog-panel">
+          <div class="workspace-section-label">维护对象</div>
+          <div class="workspace-data-value">{{ employee ? "员工档案" : "新建员工" }}</div>
+          <div class="mt-1 text-sm text-toned">
+            {{ employee ? "更新编号与姓名，保持设备侧识别信息一致。" : "创建后可继续分配录脸任务。" }}
+          </div>
+        </div>
+
         <UFormField label="员工编号" required>
           <UInput
             v-model="form.code"
@@ -113,7 +130,7 @@ async function handleSubmit() {
             type="submit"
             data-testid="employee-submit-button"
             :loading="isSaving"
-            class="w-full rounded-2xl"
+            class="workspace-primary-action w-full"
             icon="i-lucide-save"
           >
             {{ employee ? "保存修改" : "创建员工" }}
@@ -121,23 +138,25 @@ async function handleSubmit() {
 
           <UButton
             type="button"
-            variant="ghost"
+            variant="outline"
             color="neutral"
-            class="w-full"
+            class="workspace-secondary-action w-full"
             @click="emit('update:open', false)"
             >取消</UButton
           >
         </div>
 
-        <div
-          v-if="employee"
-          class="border-t border-neutral-200/70 pt-5 dark:border-neutral-800/80"
-        >
+        <div v-if="employee" class="workspace-danger-panel space-y-3">
+          <div>
+            <div class="workspace-section-label text-rose-600 dark:text-rose-300">危险操作</div>
+            <div class="mt-1 text-sm text-toned">删除员工会连带移除录脸任务和考勤记录。</div>
+          </div>
+
           <UButton
             type="button"
             color="error"
             variant="outline"
-            class="w-full rounded-2xl"
+            class="workspace-secondary-action w-full"
             icon="i-lucide-trash-2"
             @click="emit('request-delete')"
           >

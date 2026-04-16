@@ -8,6 +8,7 @@
 
 #include "app/runtime_context.hpp"
 #include "app/runtime_status.hpp"
+#include "board/app_config.hpp"
 #include "infra/local_store.hpp"
 
 namespace app {
@@ -60,12 +61,16 @@ struct RuntimeState {
   bool wifiShouldTryLastKnownGood = true;
   bool wifiConfiguredFallbackAttempted = false;
   uint32_t lastButtonPollMs = 0;
+  uint32_t lastAttendanceFeedbackAtMs = 0;
   uint32_t lastApiProbeAttemptMs = 0;
   uint32_t lastCameraPollMs = 0;
+  uint32_t lastCameraPreviewRenderMs = 0;
   uint32_t lastCameraStatusRenderMs = 0;
   uint32_t lastEnrollmentReportAttemptMs = 0;
   uint32_t lastEnrollmentFrameSampleMs = 0;
   uint32_t lastFaceDetectionMs = 0;
+  uint32_t lastRecognitionComputeMs = 0;
+  uint32_t lastRecognitionHandledMs = 0;
   uint32_t lastNetworkProbeMs = 0;
   uint32_t lastTemplateStoreProbeMs = 0;
   uint32_t lastWifiConnectAttemptMs = 0;
@@ -91,11 +96,16 @@ struct RuntimeState {
   std::optional<std::string> faceEngineStatusDetail;
   std::optional<std::string> faceDetectStatusDetail;
   std::optional<float> faceTopScore;
+  std::optional<std::string> lastAttendanceFeedback;
   std::optional<std::string> lastErrorCode;
   std::optional<uint8_t> lastWifiDisconnectReason;
+  std::optional<std::string> lastRecognitionEventKey;
   std::optional<std::size_t> activeWifiProfileIndex;
   std::optional<std::string> activeWifiSsid;
   std::string serialCommandBuffer;
+  std::array<face::FaceBox, board::kMaxFaceBoxes> faceBoxes = {};
+  std::size_t faceBoxCount = 0;
+  std::optional<std::size_t> primaryFaceBoxIndex;
   std::vector<WifiScanCandidate> wifiCandidates;
   std::vector<WifiProfileRuntimeState> wifiProfileRuntime;
   EnrollmentRunState enrollmentState = EnrollmentRunState::Idle;

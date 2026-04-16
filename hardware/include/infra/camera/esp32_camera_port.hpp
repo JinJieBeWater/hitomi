@@ -8,6 +8,8 @@ namespace infra {
 
 class Esp32CameraPort final : public face::CameraPort {
  public:
+  struct Impl;
+
   Esp32CameraPort();
   ~Esp32CameraPort() override;
 
@@ -23,7 +25,6 @@ class Esp32CameraPort final : public face::CameraPort {
   std::unique_ptr<face::CameraFrameLease> capture() override;
 
  private:
-  struct Impl;
   std::unique_ptr<Impl> impl_;
 };
 

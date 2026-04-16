@@ -113,11 +113,13 @@ struct LvglStatusDisplayData {
 
   lv_obj_t* homePeriodLabel = nullptr;
   lv_obj_t* homeCameraImage = nullptr;
+  lv_obj_t* homeCameraFrame = nullptr;
   lv_obj_t* homeCameraLabel = nullptr;
   lv_obj_t* homeAttendanceLabel = nullptr;
-  lv_image_dsc_t homeCameraImageDsc = {};
+  std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes> homeFaceBoxOverlays = {};
   std::vector<uint16_t> homeCameraPreviewBuffer = {};
   bool homeCameraPreviewReady = false;
+  DisplayRgb565Frame latestPreviewFrame = {};
 
   lv_obj_t* enrollSummaryLabel = nullptr;
   lv_obj_t* enrollTaskList = nullptr;
@@ -126,10 +128,12 @@ struct LvglStatusDisplayData {
   lv_obj_t* enrollStatusLabel = nullptr;
 
   lv_obj_t* capturePreviewImage = nullptr;
+  lv_obj_t* capturePreviewFrame = nullptr;
   lv_obj_t* captureHintLabel = nullptr;
   lv_obj_t* captureStatusLabel = nullptr;
   lv_obj_t* captureProgressLabel = nullptr;
   lv_obj_t* captureCancelButton = nullptr;
+  std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes> captureFaceBoxOverlays = {};
 
   std::array<StatusRow, 7> systemRows = {};
 
@@ -137,6 +141,7 @@ struct LvglStatusDisplayData {
   uint32_t lastLvglTickMs = 0;
   SidebarPage currentPage = SidebarPage::Home;
   bool hasViewModel = false;
+  bool previewNeedsPresent = false;
   std::string selectedEnrollmentTaskId;
   bool enrollmentRequestQueued = false;
   std::array<DisplayCommand, kDisplayCommandQueueCapacity> commandQueue = {};
@@ -150,6 +155,41 @@ struct LvglStatusDisplayData {
   bool notificationVisible = false;
   uint32_t notificationHideAtMs = 0;
 };
+
+struct DisplayPreviewPerfWindow {
+  uint32_t startedAtMs = 0;
+  uint32_t previewUpdates = 0;
+  uint32_t skippedByPage = 0;
+  uint64_t resampleUs = 0;
+  uint64_t lvglUs = 0;
+};
+
+DisplayPreviewPerfWindow& displayPreviewPerfWindow() {
+  static DisplayPreviewPerfWindow window;
+  return window;
+}
+
+void maybeLogDisplayPreviewPerf(uint32_t nowMs) {
+  auto& window = displayPreviewPerfWindow();
+  if (window.startedAtMs == 0) {
+    window.startedAtMs = nowMs;
+    return;
+  }
+  if (nowMs - window.startedAtMs < 1000) {
+    return;
+  }
+
+  Serial.printf(
+      "[PERF][DISPLAY] preview=%u skipped=%u resample_avg_us=%llu lvgl_avg_us=%llu\n",
+      static_cast<unsigned>(window.previewUpdates),
+      static_cast<unsigned>(window.skippedByPage),
+      static_cast<unsigned long long>(
+          window.previewUpdates == 0 ? 0ULL : window.resampleUs / window.previewUpdates),
+      static_cast<unsigned long long>(
+          window.previewUpdates == 0 ? 0ULL : window.lvglUs / window.previewUpdates));
+
+  window = DisplayPreviewPerfWindow{.startedAtMs = nowMs};
+}
 
 void enrollTaskButtonEventCallback(lv_event_t* event);
 void enrollRefreshButtonEventCallback(lv_event_t* event);
@@ -255,7 +295,8 @@ lv_obj_t* createPageContainer(lv_obj_t* parent) {
   lv_obj_remove_style_all(page);
   lv_obj_set_size(page, kPageWidth, kPageHeight);
   lv_obj_align(page, LV_ALIGN_TOP_LEFT, kPageX, kPageY);
-  lv_obj_set_style_bg_opa(page, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_bg_color(page, lv_color_hex(kPaneBackgroundHex), 0);
+  lv_obj_set_style_bg_opa(page, LV_OPA_COVER, 0);
   lv_obj_set_style_pad_all(page, 0, 0);
   lv_obj_remove_flag(page, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(page, LV_SCROLLBAR_MODE_OFF);
@@ -372,17 +413,16 @@ void refreshHomePage(LvglStatusDisplayData& data) {
   lv_label_set_text(data.homeCameraLabel, data.lastViewModel.cameraHintLine.c_str());
   lv_label_set_text(data.homeAttendanceLabel, data.lastViewModel.attendanceResultLine.c_str());
   if (data.homeCameraImage != nullptr) {
-    if (data.homeCameraPreviewReady) {
-      lv_obj_clear_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_align(data.homeCameraLabel, LV_ALIGN_BOTTOM_LEFT, 10, -8);
-      lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_LEFT, 0);
-      lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
-    } else {
-      lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
-      lv_obj_center(data.homeCameraLabel);
-      lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, 0);
-      lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
-    }
+    lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (data.homeCameraPreviewReady) {
+    lv_obj_align(data.homeCameraLabel, LV_ALIGN_BOTTOM_LEFT, 10, -8);
+    lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_LEFT, 0);
+    lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
+  } else {
+    lv_obj_center(data.homeCameraLabel);
+    lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
   }
 }
 
@@ -464,11 +504,7 @@ void refreshCapturePage(LvglStatusDisplayData& data) {
   }
 
   if (data.capturePreviewImage != nullptr) {
-    if (data.homeCameraPreviewReady) {
-      lv_obj_clear_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
-    } else {
-      lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
-    }
+    lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -516,6 +552,74 @@ void refreshUi(LvglStatusDisplayData& data) {
 
   refreshCurrentPage(data);
   showCurrentPage(data);
+  data.previewNeedsPresent =
+      data.homeCameraPreviewReady &&
+      (data.currentPage == SidebarPage::Home || data.currentPage == SidebarPage::Capture);
+}
+
+struct PreviewCropRect {
+  uint32_t cropWidth = 0;
+  uint32_t cropHeight = 0;
+  uint32_t cropX = 0;
+  uint32_t cropY = 0;
+  bool usesScale = false;
+};
+PreviewCropRect computePreviewCrop(
+    uint16_t sourceWidth,
+    uint16_t sourceHeight,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight);
+void updateFaceBoxOverlays(
+    const DisplayRgb565Frame& frame,
+    const PreviewCropRect& crop,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight,
+    const std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes>& overlays);
+
+void presentPreview(LvglStatusDisplayData& data) {
+  if (!data.homeCameraPreviewReady || data.latestPreviewFrame.data == nullptr) {
+    return;
+  }
+
+  lv_coord_t targetX = kPageX;
+  lv_coord_t targetY = kPageY + kHomeCameraY;
+  lv_coord_t targetWidth = kPageWidth;
+  lv_coord_t targetHeight = kHomeCameraHeight;
+  auto* targetFrame = data.homeCameraFrame;
+  auto overlays = data.homeFaceBoxOverlays;
+  if (data.currentPage == SidebarPage::Capture) {
+    targetY = kPageY + kCapturePreviewY;
+    targetHeight = kCapturePreviewHeight;
+    targetFrame = data.capturePreviewFrame;
+    overlays = data.captureFaceBoxOverlays;
+  } else if (data.currentPage != SidebarPage::Home) {
+    return;
+  }
+
+  const auto crop = computePreviewCrop(
+      data.latestPreviewFrame.width,
+      data.latestPreviewFrame.height,
+      targetWidth,
+      targetHeight);
+
+  if (!data.homeCameraPreviewBuffer.empty() &&
+      data.driver.drawPreviewBitmap(
+          targetX,
+          targetY,
+          targetX + targetWidth,
+          targetY + targetHeight,
+          data.homeCameraPreviewBuffer.data())) {
+    updateFaceBoxOverlays(data.latestPreviewFrame, crop, targetWidth, targetHeight, overlays);
+    data.previewNeedsPresent = false;
+  }
+
+  if (!data.homeCameraPreviewReady || targetFrame == nullptr) {
+    for (auto* overlay : overlays) {
+      if (overlay != nullptr) {
+        lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+  }
 }
 
 void sidebarButtonEventCallback(lv_event_t* event) {
@@ -708,6 +812,7 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_center(data.homePeriodLabel);
 
   lv_obj_t* cameraFrame = lv_obj_create(parent);
+  data.homeCameraFrame = cameraFrame;
   lv_obj_set_size(cameraFrame, kPageWidth, kHomeCameraHeight);
   lv_obj_align(cameraFrame, LV_ALIGN_TOP_LEFT, 0, kHomeCameraY);
   lv_obj_set_style_bg_color(cameraFrame, lv_color_hex(kCameraPlaceholderHex), 0);
@@ -719,6 +824,14 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   data.homeCameraImage = lv_image_create(cameraFrame);
   lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_center(data.homeCameraImage);
+  for (auto& overlay : data.homeFaceBoxOverlays) {
+    overlay = lv_obj_create(cameraFrame);
+    lv_obj_remove_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(overlay, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(overlay, 2, 0);
+    lv_obj_set_style_radius(overlay, 0, 0);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+  }
   data.homeCameraLabel = lv_label_create(cameraFrame);
   lv_obj_set_width(data.homeCameraLabel, kPageWidth - 24);
   lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
@@ -800,6 +913,7 @@ void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, kCaptureHeaderY);
 
   lv_obj_t* previewFrame = lv_obj_create(parent);
+  data.capturePreviewFrame = previewFrame;
   lv_obj_set_size(previewFrame, kPageWidth, kCapturePreviewHeight);
   lv_obj_align(previewFrame, LV_ALIGN_TOP_LEFT, 0, kCapturePreviewY);
   lv_obj_set_style_bg_color(previewFrame, lv_color_hex(kCameraPlaceholderHex), 0);
@@ -812,6 +926,14 @@ void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   data.capturePreviewImage = lv_image_create(previewFrame);
   lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
   lv_obj_center(data.capturePreviewImage);
+  for (auto& overlay : data.captureFaceBoxOverlays) {
+    overlay = lv_obj_create(previewFrame);
+    lv_obj_remove_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_opa(overlay, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(overlay, 2, 0);
+    lv_obj_set_style_radius(overlay, 0, 0);
+    lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+  }
 
   data.captureHintLabel = lv_label_create(previewFrame);
   lv_obj_set_width(data.captureHintLabel, kPageWidth - 24);
@@ -962,15 +1084,159 @@ void processNotificationQueue(LvglStatusDisplayData& data, uint32_t nowMs) {
   showNotificationNow(data, notification, nowMs);
 }
 
-void updatePreviewDescriptor(LvglStatusDisplayData& data, lv_coord_t width, lv_coord_t height) {
-  data.homeCameraImageDsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-  data.homeCameraImageDsc.header.cf = LV_COLOR_FORMAT_RGB565;
-  data.homeCameraImageDsc.header.flags = 0;
-  data.homeCameraImageDsc.header.w = static_cast<uint16_t>(width);
-  data.homeCameraImageDsc.header.h = static_cast<uint16_t>(height);
-  data.homeCameraImageDsc.header.stride = static_cast<uint16_t>(width * sizeof(uint16_t));
-  data.homeCameraImageDsc.data_size = static_cast<uint32_t>(width * height * sizeof(uint16_t));
-  data.homeCameraImageDsc.data = reinterpret_cast<const uint8_t*>(data.homeCameraPreviewBuffer.data());
+void drawPreviewRect(
+    std::vector<uint16_t>& destination,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight,
+    lv_coord_t left,
+    lv_coord_t top,
+    lv_coord_t right,
+    lv_coord_t bottom,
+    uint16_t color) {
+  if (targetWidth <= 0 || targetHeight <= 0) {
+    return;
+  }
+
+  left = LV_CLAMP(0, left, targetWidth - 1);
+  right = LV_CLAMP(0, right, targetWidth - 1);
+  top = LV_CLAMP(0, top, targetHeight - 1);
+  bottom = LV_CLAMP(0, bottom, targetHeight - 1);
+  if (left >= right || top >= bottom) {
+    return;
+  }
+
+  const auto paintPixel = [&](lv_coord_t x, lv_coord_t y) {
+    destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
+        color;
+  };
+
+  for (lv_coord_t x = left; x <= right; x += 1) {
+    paintPixel(x, top);
+    paintPixel(x, bottom);
+  }
+  for (lv_coord_t y = top; y <= bottom; y += 1) {
+    paintPixel(left, y);
+    paintPixel(right, y);
+  }
+}
+
+PreviewCropRect computePreviewCrop(
+    uint16_t sourceWidth,
+    uint16_t sourceHeight,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight) {
+  PreviewCropRect crop = {
+      .cropWidth = sourceWidth,
+      .cropHeight = sourceHeight,
+      .cropX = 0,
+      .cropY = 0,
+      .usesScale = false,
+  };
+
+  if (sourceWidth >= static_cast<uint16_t>(targetWidth) &&
+      sourceHeight >= static_cast<uint16_t>(targetHeight)) {
+    crop.cropWidth = static_cast<uint32_t>(targetWidth);
+    crop.cropHeight = static_cast<uint32_t>(targetHeight);
+    crop.cropX = (static_cast<uint32_t>(sourceWidth) - crop.cropWidth) / 2U;
+    crop.cropY = (static_cast<uint32_t>(sourceHeight) - crop.cropHeight) / 2U;
+    return crop;
+  }
+
+  crop.usesScale = true;
+  const uint32_t sourceAspectScaled = static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight);
+  const uint32_t targetAspectScaled = static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth);
+  if (sourceAspectScaled > targetAspectScaled) {
+    crop.cropWidth = (static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth)) /
+        static_cast<uint32_t>(targetHeight);
+  } else if (sourceAspectScaled < targetAspectScaled) {
+    crop.cropHeight = (static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight)) /
+        static_cast<uint32_t>(targetWidth);
+  }
+  crop.cropX = (static_cast<uint32_t>(sourceWidth) - crop.cropWidth) / 2U;
+  crop.cropY = (static_cast<uint32_t>(sourceHeight) - crop.cropHeight) / 2U;
+  return crop;
+}
+
+void copyCroppedCameraPreview(
+    std::vector<uint16_t>& destination,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight,
+    const uint8_t* source,
+    uint16_t sourceWidth,
+    uint16_t sourceHeight) {
+  const auto crop = computePreviewCrop(sourceWidth, sourceHeight, targetWidth, targetHeight);
+  if (crop.usesScale) {
+    return;
+  }
+
+  auto readSourcePixel = [&](uint32_t x, uint32_t y) -> uint16_t {
+    const std::size_t sourceIndex =
+        (static_cast<std::size_t>(y) * static_cast<std::size_t>(sourceWidth) + static_cast<std::size_t>(x)) * 2U;
+    const uint8_t first = source[sourceIndex];
+    const uint8_t second = source[sourceIndex + 1];
+    if (board::kCameraRgb565BigEndian) {
+      return static_cast<uint16_t>((static_cast<uint16_t>(first) << 8) | second);
+    }
+    return static_cast<uint16_t>((static_cast<uint16_t>(second) << 8) | first);
+  };
+
+  for (lv_coord_t y = 0; y < targetHeight; ++y) {
+    const uint32_t sourceY = crop.cropY + static_cast<uint32_t>(y);
+    for (lv_coord_t x = 0; x < targetWidth; ++x) {
+      const uint32_t sourceX = crop.cropX + static_cast<uint32_t>(x);
+      destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
+          readSourcePixel(sourceX, sourceY);
+    }
+  }
+}
+
+void updateFaceBoxOverlays(
+    const DisplayRgb565Frame& frame,
+    const PreviewCropRect& crop,
+    lv_coord_t targetWidth,
+    lv_coord_t targetHeight,
+    const std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes>& overlays) {
+  for (auto* overlay : overlays) {
+    if (overlay != nullptr) {
+      lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+
+  const std::size_t cappedBoxCount = std::min<std::size_t>(frame.faceBoxCount, overlays.size());
+  for (std::size_t index = 0; index < cappedBoxCount; index += 1) {
+    auto* overlay = overlays[index];
+    if (overlay == nullptr) {
+      continue;
+    }
+    const auto& box = frame.faceBoxes[index];
+    if (box.right <= box.left || box.bottom <= box.top) {
+      continue;
+    }
+
+    const lv_coord_t left =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.left) - static_cast<int32_t>(crop.cropX)) * targetWidth /
+                                static_cast<int32_t>(crop.cropWidth));
+    const lv_coord_t top =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.top) - static_cast<int32_t>(crop.cropY)) * targetHeight /
+                                static_cast<int32_t>(crop.cropHeight));
+    const lv_coord_t right =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.right) - static_cast<int32_t>(crop.cropX)) * targetWidth /
+                                static_cast<int32_t>(crop.cropWidth));
+    const lv_coord_t bottom =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.bottom) - static_cast<int32_t>(crop.cropY)) * targetHeight /
+                                static_cast<int32_t>(crop.cropHeight));
+    if (right <= left || bottom <= top) {
+      continue;
+    }
+
+    lv_obj_set_pos(overlay, left, top);
+    lv_obj_set_size(overlay, right - left, bottom - top);
+    lv_obj_set_style_border_color(
+        overlay,
+        lv_color_hex(frame.primaryFaceBoxIndex.has_value() && frame.primaryFaceBoxIndex.value() == index ? 0xFD20 : 0x07E0),
+        0);
+    lv_obj_clear_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+  }
 }
 
 void resampleCameraPreview(
@@ -979,7 +1245,10 @@ void resampleCameraPreview(
     lv_coord_t targetHeight,
     const uint8_t* source,
     uint16_t sourceWidth,
-    uint16_t sourceHeight) {
+    uint16_t sourceHeight,
+    const std::array<face::FaceBox, DisplayRgb565Frame::kMaxFaceBoxes>& faceBoxes,
+    std::size_t faceBoxCount,
+    std::optional<std::size_t> primaryFaceBoxIndex) {
   auto readSourcePixel = [&](uint32_t x, uint32_t y) -> uint16_t {
     const std::size_t sourceIndex = (static_cast<std::size_t>(y) * static_cast<std::size_t>(sourceWidth) + static_cast<std::size_t>(x)) * 2U;
     const uint8_t first = source[sourceIndex];
@@ -990,26 +1259,83 @@ void resampleCameraPreview(
     return static_cast<uint16_t>((static_cast<uint16_t>(second) << 8) | first);
   };
 
-  const uint32_t sourceAspectScaled = static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight);
-  const uint32_t targetAspectScaled = static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth);
-
   uint32_t cropWidth = sourceWidth;
   uint32_t cropHeight = sourceHeight;
-  if (sourceAspectScaled > targetAspectScaled) {
-    cropWidth = (static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth)) / static_cast<uint32_t>(targetHeight);
-  } else if (sourceAspectScaled < targetAspectScaled) {
-    cropHeight = (static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight)) / static_cast<uint32_t>(targetWidth);
+  uint32_t cropX = 0;
+  uint32_t cropY = 0;
+  const bool canCropWithoutScaling =
+      sourceWidth >= static_cast<uint16_t>(targetWidth) &&
+      sourceHeight >= static_cast<uint16_t>(targetHeight);
+
+  if (canCropWithoutScaling) {
+    cropWidth = static_cast<uint32_t>(targetWidth);
+    cropHeight = static_cast<uint32_t>(targetHeight);
+    cropX = (static_cast<uint32_t>(sourceWidth) - cropWidth) / 2U;
+    cropY = (static_cast<uint32_t>(sourceHeight) - cropHeight) / 2U;
+
+    for (lv_coord_t y = 0; y < targetHeight; ++y) {
+      const uint32_t sourceY = cropY + static_cast<uint32_t>(y);
+      for (lv_coord_t x = 0; x < targetWidth; ++x) {
+        const uint32_t sourceX = cropX + static_cast<uint32_t>(x);
+        destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
+            readSourcePixel(sourceX, sourceY);
+      }
+    }
+  } else {
+    const uint32_t sourceAspectScaled = static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight);
+    const uint32_t targetAspectScaled = static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth);
+
+    if (sourceAspectScaled > targetAspectScaled) {
+      cropWidth = (static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth)) /
+          static_cast<uint32_t>(targetHeight);
+    } else if (sourceAspectScaled < targetAspectScaled) {
+      cropHeight = (static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight)) /
+          static_cast<uint32_t>(targetWidth);
+    }
+
+    cropX = (static_cast<uint32_t>(sourceWidth) - cropWidth) / 2U;
+    cropY = (static_cast<uint32_t>(sourceHeight) - cropHeight) / 2U;
+    for (lv_coord_t y = 0; y < targetHeight; ++y) {
+      const uint32_t sourceY = cropY + (static_cast<uint32_t>(y) * cropHeight) / static_cast<uint32_t>(targetHeight);
+      for (lv_coord_t x = 0; x < targetWidth; ++x) {
+        const uint32_t sourceX = cropX + (static_cast<uint32_t>(x) * cropWidth) / static_cast<uint32_t>(targetWidth);
+        destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
+            readSourcePixel(sourceX, sourceY);
+      }
+    }
   }
 
-  const uint32_t cropX = (static_cast<uint32_t>(sourceWidth) - cropWidth) / 2U;
-  const uint32_t cropY = (static_cast<uint32_t>(sourceHeight) - cropHeight) / 2U;
-  for (lv_coord_t y = 0; y < targetHeight; ++y) {
-    const uint32_t sourceY = cropY + (static_cast<uint32_t>(y) * cropHeight) / static_cast<uint32_t>(targetHeight);
-    for (lv_coord_t x = 0; x < targetWidth; ++x) {
-      const uint32_t sourceX = cropX + (static_cast<uint32_t>(x) * cropWidth) / static_cast<uint32_t>(targetWidth);
-      destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
-          readSourcePixel(sourceX, sourceY);
+  constexpr uint16_t kFaceBoxColor = 0x07E0;
+  constexpr uint16_t kPrimaryFaceBoxColor = 0xFD20;
+  const std::size_t cappedBoxCount = std::min<std::size_t>(faceBoxCount, faceBoxes.size());
+  for (std::size_t index = 0; index < cappedBoxCount; index += 1) {
+    const auto& box = faceBoxes[index];
+    if (box.right <= box.left || box.bottom <= box.top) {
+      continue;
     }
+
+    const lv_coord_t left =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.left) - static_cast<int32_t>(cropX)) * targetWidth /
+                                static_cast<int32_t>(cropWidth));
+    const lv_coord_t top =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.top) - static_cast<int32_t>(cropY)) * targetHeight /
+                                static_cast<int32_t>(cropHeight));
+    const lv_coord_t right =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.right) - static_cast<int32_t>(cropX)) * targetWidth /
+                                static_cast<int32_t>(cropWidth));
+    const lv_coord_t bottom =
+        static_cast<lv_coord_t>((static_cast<int32_t>(box.bottom) - static_cast<int32_t>(cropY)) * targetHeight /
+                                static_cast<int32_t>(cropHeight));
+    drawPreviewRect(
+        destination,
+        targetWidth,
+        targetHeight,
+        left,
+        top,
+        right,
+        bottom,
+        primaryFaceBoxIndex.has_value() && primaryFaceBoxIndex.value() == index ? kPrimaryFaceBoxColor
+                                                                                : kFaceBoxColor);
   }
 }
 
@@ -1052,50 +1378,70 @@ void LvglStatusDisplay::render(const ui::AppViewModel& viewModel) {
   impl_->hasViewModel = true;
   refreshUi(*impl_);
   lv_timer_handler();
+  presentPreview(*impl_);
 }
 
 void LvglStatusDisplay::updateCameraPreview(const DisplayRgb565Frame& frame) {
+  maybeLogDisplayPreviewPerf(millis());
   if (!ready() || frame.data == nullptr || frame.width == 0 || frame.height == 0 || impl_->homeCameraImage == nullptr) {
     return;
   }
   if (impl_->currentPage != SidebarPage::Home && impl_->currentPage != SidebarPage::Capture) {
+    displayPreviewPerfWindow().skippedByPage += 1;
     return;
   }
 
+  auto& perf = displayPreviewPerfWindow();
   const lv_coord_t targetWidth = kPageWidth;
-  const lv_coord_t targetHeight = kHomeCameraHeight;
-  const std::size_t bufferSize = static_cast<std::size_t>(targetWidth) * static_cast<std::size_t>(targetHeight);
-  if (impl_->homeCameraPreviewBuffer.size() != bufferSize) {
-    impl_->homeCameraPreviewBuffer.assign(bufferSize, 0);
-  }
+  const lv_coord_t targetHeight =
+      impl_->currentPage == SidebarPage::Capture ? kCapturePreviewHeight : kHomeCameraHeight;
+  const auto crop = computePreviewCrop(frame.width, frame.height, targetWidth, targetHeight);
+  if (crop.usesScale) {
+    const std::size_t bufferSize = static_cast<std::size_t>(targetWidth) * static_cast<std::size_t>(targetHeight);
+    if (impl_->homeCameraPreviewBuffer.size() != bufferSize) {
+      impl_->homeCameraPreviewBuffer.assign(bufferSize, 0);
+    }
 
-  resampleCameraPreview(
-      impl_->homeCameraPreviewBuffer,
-      targetWidth,
-      targetHeight,
-      frame.data,
-      frame.width,
-      frame.height);
-  updatePreviewDescriptor(*impl_, targetWidth, targetHeight);
+    const uint32_t resampleStartedUs = micros();
+    resampleCameraPreview(
+        impl_->homeCameraPreviewBuffer,
+        targetWidth,
+        targetHeight,
+        frame.data,
+        frame.width,
+        frame.height,
+        frame.faceBoxes,
+        frame.faceBoxCount,
+        frame.primaryFaceBoxIndex);
+    perf.resampleUs += static_cast<uint64_t>(micros() - resampleStartedUs);
+  } else {
+    const std::size_t bufferSize = static_cast<std::size_t>(targetWidth) * static_cast<std::size_t>(targetHeight);
+    if (impl_->homeCameraPreviewBuffer.size() != bufferSize) {
+      impl_->homeCameraPreviewBuffer.assign(bufferSize, 0);
+    }
+    const uint32_t copyStartedUs = micros();
+    copyCroppedCameraPreview(
+        impl_->homeCameraPreviewBuffer,
+        targetWidth,
+        targetHeight,
+        frame.data,
+        frame.width,
+        frame.height);
+    perf.resampleUs += static_cast<uint64_t>(micros() - copyStartedUs);
+  }
+  perf.previewUpdates += 1;
+
   impl_->homeCameraPreviewReady = true;
-
-  lv_image_set_src(impl_->homeCameraImage, &impl_->homeCameraImageDsc);
-  lv_obj_set_size(impl_->homeCameraImage, targetWidth, targetHeight);
-  lv_obj_center(impl_->homeCameraImage);
-  lv_obj_clear_flag(impl_->homeCameraImage, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_invalidate(impl_->homeCameraImage);
-  if (impl_->capturePreviewImage != nullptr) {
-    lv_image_set_src(impl_->capturePreviewImage, &impl_->homeCameraImageDsc);
-    lv_obj_set_size(impl_->capturePreviewImage, targetWidth, targetHeight);
-    lv_obj_center(impl_->capturePreviewImage);
-    lv_obj_clear_flag(impl_->capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_invalidate(impl_->capturePreviewImage);
-  }
+  impl_->latestPreviewFrame = frame;
+  impl_->previewNeedsPresent = true;
   if (impl_->currentPage == SidebarPage::Home && impl_->hasViewModel) {
     refreshHomePage(*impl_);
   } else if (impl_->currentPage == SidebarPage::Capture && impl_->hasViewModel) {
     refreshCapturePage(*impl_);
   }
+  const uint32_t presentStartedUs = micros();
+  presentPreview(*impl_);
+  perf.lvglUs += static_cast<uint64_t>(micros() - presentStartedUs);
 }
 
 void LvglStatusDisplay::clearCameraPreview() {
@@ -1104,6 +1450,18 @@ void LvglStatusDisplay::clearCameraPreview() {
   }
 
   impl_->homeCameraPreviewReady = false;
+  impl_->latestPreviewFrame = {};
+  impl_->previewNeedsPresent = false;
+  for (auto* overlay : impl_->homeFaceBoxOverlays) {
+    if (overlay != nullptr) {
+      lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+  for (auto* overlay : impl_->captureFaceBoxOverlays) {
+    if (overlay != nullptr) {
+      lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
   lv_obj_add_flag(impl_->homeCameraImage, LV_OBJ_FLAG_HIDDEN);
   if (impl_->capturePreviewImage != nullptr) {
     lv_obj_add_flag(impl_->capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
@@ -1112,6 +1470,11 @@ void LvglStatusDisplay::clearCameraPreview() {
     refreshHomePage(*impl_);
   } else if (impl_->currentPage == SidebarPage::Capture && impl_->hasViewModel) {
     refreshCapturePage(*impl_);
+  }
+  const std::size_t pageIndex = toIndex(impl_->currentPage);
+  if (pageIndex < impl_->pageContainers.size() && impl_->pageContainers[pageIndex] != nullptr) {
+    lv_obj_invalidate(impl_->pageContainers[pageIndex]);
+    lv_timer_handler();
   }
 }
 
@@ -1137,6 +1500,9 @@ void LvglStatusDisplay::tick(uint32_t nowMs) {
   impl_->lastLvglTickMs = nowMs;
   processNotificationQueue(*impl_, nowMs);
   lv_timer_handler_run_in_period(board::kLvglHandlerPeriodMs);
+  if (impl_->previewNeedsPresent) {
+    presentPreview(*impl_);
+  }
 }
 
 std::optional<DisplayCommand> LvglStatusDisplay::consumeCommand() {

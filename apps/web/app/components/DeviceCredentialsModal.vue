@@ -54,23 +54,29 @@ const items = computed(() => {
     :close="false"
     title="设备创建成功"
     description="请立即保存设备码和 bootstrap 凭据。设备首配只使用 bootstrap 凭据，运行时 apiKey 会在激活成功后直接下发给设备。"
-    :ui="{ content: 'sm:max-w-xl' }"
+    :ui="{
+      content: 'workspace-dialog-content sm:max-w-xl',
+      header: 'workspace-dialog-header',
+      body: 'workspace-dialog-body',
+      footer: 'workspace-dialog-footer',
+      title: 'workspace-dialog-title',
+      description: 'workspace-dialog-description',
+      close: 'workspace-dialog-close',
+    }"
     @update:open="emit('update:open', $event)"
   >
     <template #body="{ close }">
-      <div class="space-y-5">
-        <div class="space-y-4">
+      <div class="workspace-dialog-stack">
+        <div class="workspace-dialog-panel space-y-4">
           <div
             v-for="item in items"
             :key="item.label"
             class="border-b border-neutral-200/70 pb-4 last:border-b-0 last:pb-0 dark:border-neutral-800/80"
           >
-            <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
-              {{ item.label }}
-            </div>
+            <div class="workspace-section-label">{{ item.label }}</div>
             <div
-              class="mt-2 text-sm text-highlighted sm:text-base"
-              :class="item.mono ? 'break-all font-mono' : 'font-semibold tracking-tight'"
+              class="sm:text-base"
+              :class="item.mono ? 'workspace-code-value font-mono' : 'workspace-data-value'"
             >
               {{ item.value }}
             </div>
@@ -83,6 +89,7 @@ const items = computed(() => {
               variant="outline"
               color="neutral"
               icon="i-lucide-copy"
+              class="workspace-secondary-action"
               @click="emit('copy:code')"
             >
               复制设备码
@@ -91,6 +98,7 @@ const items = computed(() => {
               variant="outline"
               color="neutral"
               icon="i-lucide-copy"
+              class="workspace-secondary-action"
               @click="emit('copy:bootstrap-serial')"
             >
               复制序列号
@@ -100,17 +108,25 @@ const items = computed(() => {
               variant="outline"
               color="neutral"
               icon="i-lucide-copy"
+              class="workspace-secondary-action"
               @click="emit('copy:bootstrap-secret')"
             >
               复制 Bootstrap 密钥
             </UButton>
 
-            <UButton color="primary" icon="i-lucide-usb" @click="emit('start-activation')">
+            <UButton
+              color="primary"
+              icon="i-lucide-usb"
+              class="workspace-primary-action"
+              @click="emit('start-activation')"
+            >
               开始激活
             </UButton>
           </div>
 
-          <UButton icon="i-lucide-check" @click="close()"> 完成 </UButton>
+          <UButton icon="i-lucide-check" variant="outline" class="workspace-secondary-action" @click="close()">
+            完成
+          </UButton>
         </div>
       </div>
     </template>

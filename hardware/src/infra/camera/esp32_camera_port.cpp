@@ -6,13 +6,9 @@
 #include <esp_err.h>
 #include <esp_timer.h>
 #include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
 #include <freertos/semphr.h>
-#include <freertos/task.h>
-#include <sensor.h>
-
-#include <atomic>
 #include <memory>
+#include <sensor.h>
 #include <string>
 #include <utility>
 
@@ -104,6 +100,8 @@ camera_config_t buildCameraConfig() {
   return config;
 }
 
+}  // namespace
+
 class Esp32CameraFrameLease final : public face::CameraFrameLease {
  public:
   Esp32CameraFrameLease(camera_fb_t* frameBuffer, face::CameraFrameInfo frameInfo)
@@ -128,8 +126,6 @@ class Esp32CameraFrameLease final : public face::CameraFrameLease {
   camera_fb_t* frameBuffer_ = nullptr;
   face::CameraFrameInfo frameInfo_ = {};
 };
-
-}  // namespace
 
 struct Esp32CameraPort::Impl {
   Impl() {
@@ -169,46 +165,7 @@ struct Esp32CameraPort::Impl {
     }
     return snapshot;
   }
-
-  static void cameraCaptureTask(void* userData) {
-    auto* impl = static_cast<Impl*>(userData);
-    if (impl == nullptr) {
-      vTaskDelete(nullptr);
-      return;
-    }
-
-    while (!impl->stopTask.load(std::memory_order_acquire)) {
-      camera_fb_t* frameBuffer = esp_camera_fb_get();
-      if (frameBuffer == nullptr) {
-        impl->withStatusLock([](face::CameraStatus& status) {
-          status.failedCaptureCount += 1;
-          status.lastError = "esp_camera_fb_get returned null";
-        });
-        vTaskDelay(pdMS_TO_TICKS(10));
-        continue;
-      }
-
-      camera_fb_t* staleFrame = nullptr;
-      if (xQueueReceive(impl->previewQueue, &staleFrame, 0) == pdTRUE && staleFrame != nullptr) {
-        esp_camera_fb_return(staleFrame);
-      }
-      xQueueOverwrite(impl->previewQueue, &frameBuffer);
-    }
-
-    camera_fb_t* pendingFrame = nullptr;
-    while (xQueueReceive(impl->previewQueue, &pendingFrame, 0) == pdTRUE) {
-      if (pendingFrame != nullptr) {
-        esp_camera_fb_return(pendingFrame);
-      }
-    }
-
-    vTaskDelete(nullptr);
-  }
-
   bool initialized = false;
-  std::atomic<bool> stopTask{false};
-  TaskHandle_t taskHandle = nullptr;
-  QueueHandle_t previewQueue = nullptr;
   SemaphoreHandle_t statusMutex = nullptr;
   face::CameraStatus status = {};
 };
@@ -218,18 +175,6 @@ Esp32CameraPort::Esp32CameraPort() : impl_(std::make_unique<Impl>()) {}
 Esp32CameraPort::~Esp32CameraPort() {
   if (impl_ == nullptr || !impl_->initialized) {
     return;
-  }
-
-  impl_->stopTask.store(true, std::memory_order_release);
-  if (impl_->taskHandle != nullptr) {
-    while (eTaskGetState(impl_->taskHandle) != eDeleted) {
-      vTaskDelay(pdMS_TO_TICKS(5));
-    }
-    impl_->taskHandle = nullptr;
-  }
-  if (impl_->previewQueue != nullptr) {
-    vQueueDelete(impl_->previewQueue);
-    impl_->previewQueue = nullptr;
   }
 
   esp_camera_deinit();
@@ -291,35 +236,6 @@ bool Esp32CameraPort::init() {
     });
   }
 
-  impl_->previewQueue = xQueueCreate(1, sizeof(camera_fb_t*));
-  if (impl_->previewQueue == nullptr) {
-    impl_->withStatusLock([](face::CameraStatus& status) {
-      status.lastError = "preview queue create failed";
-    });
-    esp_camera_deinit();
-    setIoExpanderOutputBit(board::kIoExpanderCameraPwdnBit, true);
-    return false;
-  }
-
-  impl_->stopTask.store(false, std::memory_order_release);
-  if (xTaskCreatePinnedToCore(
-          Impl::cameraCaptureTask,
-          "hitomi_camera",
-          kCameraTaskStackSize,
-          impl_.get(),
-          kCameraTaskPriority,
-          &impl_->taskHandle,
-          kCameraTaskCore) != pdPASS) {
-    impl_->withStatusLock([](face::CameraStatus& status) {
-      status.lastError = "camera capture task create failed";
-    });
-    vQueueDelete(impl_->previewQueue);
-    impl_->previewQueue = nullptr;
-    esp_camera_deinit();
-    setIoExpanderOutputBit(board::kIoExpanderCameraPwdnBit, true);
-    return false;
-  }
-
   impl_->initialized = true;
   impl_->withStatusLock([](face::CameraStatus& status) {
     status.initialized = true;
@@ -341,12 +257,16 @@ face::CameraStatus Esp32CameraPort::status() const {
 }
 
 std::unique_ptr<face::CameraFrameLease> Esp32CameraPort::capture() {
-  if (!impl_->initialized || impl_->previewQueue == nullptr) {
+  if (!impl_->initialized) {
     return nullptr;
   }
 
-  camera_fb_t* frameBuffer = nullptr;
-  if (xQueueReceive(impl_->previewQueue, &frameBuffer, 0) != pdTRUE || frameBuffer == nullptr) {
+  camera_fb_t* frameBuffer = esp_camera_fb_get();
+  if (frameBuffer == nullptr) {
+    impl_->withStatusLock([](face::CameraStatus& status) {
+      status.failedCaptureCount += 1;
+      status.lastError = "esp_camera_fb_get returned null";
+    });
     return nullptr;
   }
 
@@ -357,7 +277,6 @@ std::unique_ptr<face::CameraFrameLease> Esp32CameraPort::capture() {
       .pixelFormat = toCameraPixelFormat(frameBuffer->format),
       .capturedAtMs = static_cast<uint64_t>(esp_timer_get_time() / 1000ULL),
   };
-
   impl_->withStatusLock([&](face::CameraStatus& status) {
     status.captureCount += 1;
     status.lastFrame = frameInfo;

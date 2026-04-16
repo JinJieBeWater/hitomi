@@ -15,7 +15,7 @@ withDefaults(
   <div class="workspace-empty-state">
     <div
       v-if="icon"
-      class="flex size-12 items-center justify-center rounded-2xl bg-neutral-900/5 text-neutral-500 ring-1 ring-inset ring-neutral-900/10"
+      class="workspace-panel-icon flex size-12 items-center justify-center text-neutral-500"
     >
       <UIcon :name="icon" class="size-6" />
     </div>
@@ -25,7 +25,7 @@ withDefaults(
       <div v-if="description" class="text-sm text-toned">{{ description }}</div>
     </div>
 
-    <div v-if="$slots.actions" class="flex flex-wrap justify-center gap-2">
+    <div v-if="$slots.actions" class="flex flex-wrap gap-2">
       <slot name="actions" />
     </div>
   </div>

@@ -133,8 +133,9 @@ function resetFilters() {
                 class="w-full sm:min-w-40"
               />
               <UButton
-                variant="ghost"
+                variant="outline"
                 color="neutral"
+                class="workspace-secondary-action"
                 icon="i-lucide-rotate-ccw"
                 :disabled="!status"
                 @click="resetFilters()"
@@ -151,7 +152,7 @@ function resetFilters() {
             empty-title="暂无录脸记录"
             empty-description="暂无匹配的录脸记录。"
           >
-            <div class="workspace-surface-table hidden md:block">
+            <div class="workspace-surface-table workspace-table-shell hidden md:block">
               <UTable
                 :data="rows"
                 :columns="faceProfileColumns"
@@ -179,13 +180,13 @@ function resetFilters() {
                 </template>
 
                 <template #status-cell="{ row }">
-                  <UBadge
-                    :label="labelFaceStatus(row.original.status)"
-                    :color="colorFaceStatus(row.original.status)"
-                    variant="subtle"
-                    class="rounded-full"
-                  />
-                </template>
+                    <UBadge
+                      :label="labelFaceStatus(row.original.status)"
+                      :color="colorFaceStatus(row.original.status)"
+                      variant="outline"
+                      class="workspace-status-chip"
+                    />
+                  </template>
 
                 <template #updatedAt-cell="{ row }">
                   <div class="text-sm text-toned">{{ formatDateTime(row.original.updatedAt) }}</div>
@@ -204,15 +205,15 @@ function resetFilters() {
                     <div class="truncate text-base font-semibold text-highlighted">
                       {{ item.employee?.name || "-" }}
                     </div>
-                    <div class="text-sm text-toned">{{ item.employee?.code || "-" }}</div>
+                    <div class="workspace-code-value mt-0">{{ item.employee?.code || "-" }}</div>
                   </div>
 
                   <div class="flex items-center gap-2">
                     <UBadge
                       :label="labelFaceStatus(item.status)"
                       :color="colorFaceStatus(item.status)"
-                      variant="subtle"
-                      class="rounded-full"
+                      variant="outline"
+                      class="workspace-status-chip"
                     />
                     <RowActions :items="getRowActions(item)" trigger-size="sm" />
                   </div>
@@ -220,18 +221,14 @@ function resetFilters() {
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      设备
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ item.device?.name || "-" }}</div>
+                    <div class="workspace-section-label">设备</div>
+                    <div class="workspace-data-value">{{ item.device?.name || "-" }}</div>
                     <div class="text-xs text-toned">{{ item.device?.deviceCode || "-" }}</div>
                   </div>
 
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      更新时间
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ formatDateTime(item.updatedAt) }}</div>
+                    <div class="workspace-section-label">更新时间</div>
+                    <div class="workspace-data-value">{{ formatDateTime(item.updatedAt) }}</div>
                   </div>
                 </div>
               </div>

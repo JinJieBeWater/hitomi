@@ -27,14 +27,19 @@ function toggleTheme() {
 <template>
   <UButton
     color="neutral"
-    :variant="props.collapsed || props.compact ? 'outline' : 'ghost'"
+    variant="outline"
+    size="lg"
     :square="props.collapsed || props.compact"
     :block="!props.collapsed && !props.compact"
     :icon="actionIcon"
     :label="showLabel ? actionLabel : undefined"
     :title="actionLabel"
     :aria-label="actionLabel"
-    class="rounded-2xl"
+    :class="
+      props.collapsed || props.compact
+        ? 'workspace-sidebar-control workspace-sidebar-control-square'
+        : 'workspace-sidebar-control workspace-sidebar-control-inline workspace-sidebar-nav-label'
+    "
     @click="toggleTheme()"
   />
 </template>

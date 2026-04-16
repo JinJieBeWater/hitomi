@@ -146,6 +146,29 @@ void testClassifyAttendanceTypeUsesShanghaiWindows() {
   expect(offWindow == AttendanceRecordType::ClockOut, "18:10 CST should be clock_out");
 }
 
+void testCollectStaleTemplateEmployeeIdsFindsRemovedEmployees() {
+  const std::vector<std::string> storedTemplateEmployeeIds = {"emp_001", "emp_legacy", "emp_002"};
+  const std::vector<EmployeeSnapshot> employees = {
+      EmployeeSnapshot{
+          .id = "emp_001",
+          .code = "20230001",
+          .name = "张三",
+          .updatedAt = 40,
+      },
+      EmployeeSnapshot{
+          .id = "emp_002",
+          .code = "20230002",
+          .name = "李四",
+          .updatedAt = 50,
+      },
+  };
+
+  const auto staleEmployeeIds = core::collectStaleTemplateEmployeeIds(storedTemplateEmployeeIds, employees);
+
+  expect(staleEmployeeIds.size() == 1, "template cleanup should identify removed employees");
+  expect(staleEmployeeIds.front() == "emp_legacy", "template cleanup should keep only stale employee ids");
+}
+
 void testEnqueueAttendanceRecordKeepsEarlierDuplicate() {
   std::vector<PendingAttendanceRecord> queue = {
       PendingAttendanceRecord{
@@ -591,7 +614,7 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   expect(view.wifiLine.find("Lab-WiFi") != std::string::npos, "view should show connected SSID");
   expect(view.apiLine.find("Reachable") != std::string::npos, "view should surface API success");
   expect(view.enrollmentTasks.size() == 1, "view should surface enrollment tasks");
-  expect(view.enrollmentTasks.front().title == "20230001 张三", "task card should show employee code before name");
+  expect(view.enrollmentTasks.front().title == "Employee 20230001", "task card should prefer English employee labels");
   expect(view.enrollmentTasks.front().meta == "Status: pending", "task card should show only task status");
   expect(view.footer == "fw-tag", "view footer should use firmware tag");
 }
@@ -608,7 +631,7 @@ void testPresenterShowsEnrollmentProgressAndPendingReport() {
   status.enrollmentState = app::EnrollmentRunState::Capturing;
   status.enrollmentCapturedSamples = 2;
   status.enrollmentRequiredSamples = 3;
-  status.activeEnrollmentEmployeeName = std::optional<std::string>("张三");
+  status.activeEnrollmentEmployeeName = std::optional<std::string>("Employee 20230001");
   status.enrollmentPendingCount = 1;
 
   const AppViewModel view = ui::StatusScreenPresenter::build(status);
@@ -647,6 +670,7 @@ int main() {
   try {
     testApplySyncSnapshotReplacesRemoteSnapshots();
     testClassifyAttendanceTypeUsesShanghaiWindows();
+    testCollectStaleTemplateEmployeeIdsFindsRemovedEmployees();
     testEnqueueAttendanceRecordKeepsEarlierDuplicate();
     testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected();
     testPendingEnrollmentReportUpsertReplacesByTaskId();

@@ -272,7 +272,9 @@ watch(
           <UButton variant="outline" icon="i-lucide-refresh-cw" @click="employeesQuery.refetch()"
             >刷新</UButton
           >
-          <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()">新增员工</UButton>
+          <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()">
+            新增员工
+          </UButton>
         </template>
       </PageHeader>
     </template>
@@ -302,8 +304,9 @@ watch(
 
           <template #actions>
             <UButton
-              variant="ghost"
+              variant="outline"
               color="neutral"
+              class="workspace-secondary-action"
               icon="i-lucide-rotate-ccw"
               @click="resetFilters()"
               >清空筛选</UButton
@@ -320,12 +323,12 @@ watch(
             empty-description="当前筛选条件下没有可显示的员工记录。"
           >
             <template #empty-actions>
-              <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()"
+              <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()"
                 >新增员工</UButton
               >
             </template>
 
-            <div class="workspace-surface-table hidden md:block">
+            <div class="workspace-surface-table workspace-table-shell hidden md:block">
               <UTable
                 :data="rows"
                 :columns="employeeColumns"
@@ -337,8 +340,8 @@ watch(
                     <UBadge
                       :label="labelFaceStatus(row.original.faceProfile?.status)"
                       :color="colorFaceStatus(row.original.faceProfile?.status)"
-                      variant="subtle"
-                      class="rounded-full"
+                      variant="outline"
+                      class="workspace-status-chip"
                     />
 
                     <div class="text-sm text-toned">
@@ -364,15 +367,15 @@ watch(
                     <div class="truncate text-base font-semibold text-highlighted">
                       {{ item.name }}
                     </div>
-                    <div class="text-sm text-toned">{{ item.code }}</div>
+                    <div class="workspace-code-value mt-0">{{ item.code }}</div>
                   </div>
 
                   <div class="flex items-center gap-2">
                     <UBadge
                       :label="labelFaceStatus(item.faceProfile?.status)"
                       :color="colorFaceStatus(item.faceProfile?.status)"
-                      variant="subtle"
-                      class="rounded-full"
+                      variant="outline"
+                      class="workspace-status-chip"
                     />
                     <RowActions :items="getRowActions(item)" trigger-size="sm" />
                   </div>
@@ -380,19 +383,15 @@ watch(
 
                 <div class="mt-4 flex items-start justify-between gap-4">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      录脸任务
-                    </div>
-                    <div class="mt-1 text-highlighted">
+                    <div class="workspace-section-label">录脸任务</div>
+                    <div class="workspace-data-value">
                       {{ item.faceProfile?.deviceName || "未分配设备" }}
                     </div>
                   </div>
 
                   <div class="text-right">
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      更新时间
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ formatDateTime(item.updatedAt) }}</div>
+                    <div class="workspace-section-label">更新时间</div>
+                    <div class="workspace-data-value">{{ formatDateTime(item.updatedAt) }}</div>
                   </div>
                 </div>
               </div>

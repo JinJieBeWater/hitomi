@@ -36,7 +36,9 @@ onMounted(() => {
 
       <div v-else class="space-y-3">
         <UButton to="/login" block size="lg" icon="i-lucide-log-in">前往登录</UButton>
-        <UButton to="/dashboard" block variant="ghost" color="neutral">尝试进入后台</UButton>
+        <UButton to="/dashboard" block variant="outline" color="neutral" class="workspace-secondary-action">
+          尝试进入后台
+        </UButton>
       </div>
     </UPageCard>
   </div>

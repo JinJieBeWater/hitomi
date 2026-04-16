@@ -235,6 +235,19 @@ TemplateLibrarySummary SdMmcTemplateStore::loadSummary() const {
   return status_.summary;
 }
 
+std::vector<std::string> SdMmcTemplateStore::listTemplateEmployeeIds() const {
+  std::vector<std::string> employeeIds;
+  if (!status_.ready || !manifest_.has_value()) {
+    return employeeIds;
+  }
+
+  employeeIds.reserve(manifest_->items.size());
+  for (const auto& item : manifest_->items) {
+    employeeIds.push_back(item.employeeId);
+  }
+  return employeeIds;
+}
+
 std::optional<TemplateBlob> SdMmcTemplateStore::readTemplate(const std::string& employeeId) {
   if (!status_.ready || !validateEmployeeId(employeeId)) {
     return std::nullopt;

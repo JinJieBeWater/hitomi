@@ -1,9 +1,12 @@
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 
+#include "face/ports.hpp"
 #include "ui/app_view_model.hpp"
 
 namespace infra {
@@ -24,6 +27,10 @@ struct DisplayRgb565Frame {
   const uint8_t* data = nullptr;
   uint16_t width = 0;
   uint16_t height = 0;
+  static constexpr std::size_t kMaxFaceBoxes = 4;
+  std::array<face::FaceBox, kMaxFaceBoxes> faceBoxes = {};
+  std::size_t faceBoxCount = 0;
+  std::optional<std::size_t> primaryFaceBoxIndex;
 };
 
 enum class DisplayNotificationLevel : uint8_t {

@@ -23,7 +23,7 @@ const end = computed(() =>
 </script>
 
 <template>
-  <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+  <div class="workspace-pagination">
     <div class="text-sm text-toned">显示 {{ start }} - {{ end }}，共 {{ props.total }} 条</div>
 
     <UPagination
@@ -33,7 +33,13 @@ const end = computed(() =>
       :total="props.total"
       :disabled="props.disabled"
       :sibling-count="1"
+      color="neutral"
+      variant="outline"
+      active-color="primary"
+      active-variant="solid"
+      size="sm"
       show-edges
+      class="workspace-secondary-action"
       @update:page="emit('update:page', $event)"
     />
   </div>

@@ -36,6 +36,7 @@ void applyTemplateStoreStatus(
     RuntimeState& state,
     const infra::TemplateStoreStatus& status,
     bool replaceSummary);
+void reconcileTemplatesForEmployees(const RuntimeContext& context, RuntimeState& state);
 void runTemplateStoreSelfTest(const RuntimeContext& context, RuntimeState& state);
 void probeTemplateStore(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs);
 

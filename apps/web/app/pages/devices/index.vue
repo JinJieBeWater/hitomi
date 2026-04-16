@@ -328,11 +328,14 @@ function getRowActions(item: any) {
             variant="outline"
             icon="i-lucide-usb"
             :loading="serialConnectLoading"
+            class="workspace-secondary-action"
             @click="openSerialConfigPage"
           >
             连接设备
           </UButton>
-          <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()">创建设备</UButton>
+          <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()">
+            创建设备
+          </UButton>
         </template>
       </PageHeader>
     </template>
@@ -372,8 +375,9 @@ function getRowActions(item: any) {
 
           <template #actions>
             <UButton
-              variant="ghost"
+              variant="outline"
               color="neutral"
+              class="workspace-secondary-action"
               icon="i-lucide-rotate-ccw"
               @click="resetFilters()"
               >清空筛选</UButton
@@ -390,12 +394,12 @@ function getRowActions(item: any) {
             empty-description="当前筛选条件下没有可显示的设备记录。"
           >
             <template #empty-actions>
-              <UButton icon="i-lucide-plus" class="rounded-2xl" @click="openCreate()"
+              <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()"
                 >创建设备</UButton
               >
             </template>
 
-            <div class="workspace-surface-table hidden md:block">
+            <div class="workspace-surface-table workspace-table-shell hidden md:block">
               <UTable
                 :data="rows"
                 :columns="deviceColumns"
@@ -403,13 +407,13 @@ function getRowActions(item: any) {
                 :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[820px]' }"
               >
                 <template #status-cell="{ row }">
-                  <UBadge
-                    :label="labelDeviceStatus(row.original.status)"
-                    :color="colorDeviceStatus(row.original.status)"
-                    variant="subtle"
-                    class="rounded-full"
-                  />
-                </template>
+                    <UBadge
+                      :label="labelDeviceStatus(row.original.status)"
+                      :color="colorDeviceStatus(row.original.status)"
+                      variant="outline"
+                      class="workspace-status-chip"
+                    />
+                  </template>
 
                 <template #lastSeenAt-cell="{ row }">
                   <div class="text-sm text-toned">
@@ -434,15 +438,15 @@ function getRowActions(item: any) {
                     <div class="truncate text-base font-semibold text-highlighted">
                       {{ item.name }}
                     </div>
-                    <div class="text-sm text-toned">{{ item.deviceCode }}</div>
+                    <div class="workspace-code-value mt-0">{{ item.deviceCode }}</div>
                   </div>
 
                   <div class="flex items-center gap-2">
                     <UBadge
                       :label="labelDeviceStatus(item.status)"
                       :color="colorDeviceStatus(item.status)"
-                      variant="subtle"
-                      class="rounded-full"
+                      variant="outline"
+                      class="workspace-status-chip"
                     />
                     <RowActions :items="getRowActions(item)" trigger-size="sm" />
                   </div>
@@ -450,17 +454,13 @@ function getRowActions(item: any) {
 
                 <div class="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      最近在线
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ formatDateTime(item.lastSeenAt) }}</div>
+                    <div class="workspace-section-label">最近在线</div>
+                    <div class="workspace-data-value">{{ formatDateTime(item.lastSeenAt) }}</div>
                   </div>
 
                   <div>
-                    <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">
-                      创建时间
-                    </div>
-                    <div class="mt-1 text-highlighted">{{ formatDateTime(item.createdAt) }}</div>
+                    <div class="workspace-section-label">创建时间</div>
+                    <div class="workspace-data-value">{{ formatDateTime(item.createdAt) }}</div>
                   </div>
                 </div>
               </div>

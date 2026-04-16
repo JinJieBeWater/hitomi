@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <ctime>
 #include <sstream>
+#include <unordered_set>
 
 namespace core {
 namespace {
@@ -71,6 +72,26 @@ SnapshotBundle applySyncSnapshot(
   next.lastSyncAt = syncedAt;
   next.lastServerTime = payload.serverTime;
   return next;
+}
+
+std::vector<std::string> collectStaleTemplateEmployeeIds(
+    const std::vector<std::string>& storedTemplateEmployeeIds,
+    const std::vector<EmployeeSnapshot>& employees) {
+  std::unordered_set<std::string> activeEmployeeIds;
+  activeEmployeeIds.reserve(employees.size());
+  for (const auto& employee : employees) {
+    activeEmployeeIds.insert(employee.id);
+  }
+
+  std::vector<std::string> staleEmployeeIds;
+  staleEmployeeIds.reserve(storedTemplateEmployeeIds.size());
+  for (const auto& employeeId : storedTemplateEmployeeIds) {
+    if (activeEmployeeIds.find(employeeId) == activeEmployeeIds.end()) {
+      staleEmployeeIds.push_back(employeeId);
+    }
+  }
+
+  return staleEmployeeIds;
 }
 
 std::optional<AttendanceRecordType> classifyAttendanceType(

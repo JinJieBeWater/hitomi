@@ -70,6 +70,7 @@ struct RuntimeStatus {
   std::optional<float> faceTopScore;
   std::size_t detectedFaceCount = 0;
   bool faceModuleEnabled = false;
+  std::optional<std::string> lastAttendanceFeedback;
   bool cameraAvailable = false;
   bool cameraReady = false;
   uint32_t cameraCaptureCount = 0;

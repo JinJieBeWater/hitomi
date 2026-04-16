@@ -130,10 +130,10 @@ const workflowDescription = computed(() => {
 });
 const connectionTone = computed(() => {
   if (view.value === "connecting") {
-    return "warning" as const;
+    return "primary" as const;
   }
 
-  return serial.connected.value ? ("success" as const) : ("neutral" as const);
+  return serial.connected.value ? ("neutral" as const) : ("neutral" as const);
 });
 const connectionLabel = computed(() => {
   if (view.value === "connecting") {
@@ -661,8 +661,8 @@ onBeforeUnmount(() => {
             <UBadge
               :label="connectionLabel"
               :color="connectionTone"
-              variant="subtle"
-              class="rounded-full"
+              variant="outline"
+              class="workspace-status-chip"
             />
             <UBadge
               v-if="summary?.activationState"
@@ -674,8 +674,8 @@ onBeforeUnmount(() => {
                     : '未配置'
               "
               color="neutral"
-              variant="subtle"
-              class="rounded-full"
+              variant="outline"
+              class="workspace-status-chip"
             />
           </div>
 
@@ -699,6 +699,7 @@ onBeforeUnmount(() => {
             icon="i-lucide-usb"
             :loading="view === 'connecting'"
             :disabled="!serial.supported.value"
+            class="workspace-primary-action"
             @click="connect"
           >
             {{ serial.connected.value ? "重新选择串口" : "连接设备" }}
@@ -709,6 +710,7 @@ onBeforeUnmount(() => {
             color="neutral"
             icon="i-lucide-refresh-cw"
             :loading="busy"
+            class="workspace-secondary-action"
             @click="reloadCurrentConfig"
           >
             重新读取
@@ -718,6 +720,7 @@ onBeforeUnmount(() => {
             color="neutral"
             icon="i-lucide-unplug"
             :disabled="!serial.connected.value"
+            class="workspace-secondary-action"
             @click="disconnectDevice"
           >
             断开串口
@@ -747,14 +750,14 @@ onBeforeUnmount(() => {
               <UBadge
                 label="实时串口输出"
                 color="neutral"
-                variant="subtle"
-                class="rounded-full"
+                variant="outline"
+                class="workspace-status-chip"
               />
               <UBadge
                 :label="`${logCount} 行`"
                 :color="logCount ? 'primary' : 'neutral'"
-                variant="subtle"
-                class="rounded-full"
+                variant="outline"
+                class="workspace-status-chip"
               />
               <span
                 class="text-[11px] font-medium tracking-[0.16em] text-neutral-500 uppercase dark:text-neutral-400"
@@ -775,18 +778,20 @@ onBeforeUnmount(() => {
           <div class="flex flex-wrap gap-2">
             <UButton
               size="xs"
-              variant="ghost"
+              variant="outline"
               color="neutral"
               icon="i-lucide-trash-2"
+              class="workspace-secondary-action"
               @click="serial.clearLogs()"
             >
               清空
             </UButton>
             <UButton
               size="xs"
-              variant="ghost"
+              variant="outline"
               color="neutral"
               :icon="showSerialLogs ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
+              class="workspace-secondary-action"
               @click="showSerialLogs = !showSerialLogs"
             >
               {{ showSerialLogs ? "折叠日志" : "展开日志" }}
@@ -799,7 +804,7 @@ onBeforeUnmount(() => {
             <div class="flex items-center justify-between border-b border-white/8 px-4 py-3">
               <div class="flex items-center gap-2">
                 <span
-                  class="size-2 rounded-full bg-emerald-400"
+                  class="size-2 rounded-full bg-amber-500"
                   :class="serial.connected.value ? 'animate-pulse' : 'bg-neutral-500'"
                 />
                 <span class="text-[11px] font-medium tracking-[0.16em] text-neutral-400 uppercase">
@@ -912,7 +917,7 @@ onBeforeUnmount(() => {
               <UButton
                 icon="i-lucide-usb"
                 :disabled="!serial.supported.value"
-                class="w-full rounded-2xl"
+                class="workspace-primary-action w-full"
                 @click="connect"
               >
                 连接设备
@@ -935,7 +940,7 @@ onBeforeUnmount(() => {
               <UFormField label="设备名称" required>
                 <UInput v-model="newDeviceName" placeholder="例如 前台一号机" icon="i-lucide-monitor" class="w-full" @keydown.enter="handleCreateDevice" />
               </UFormField>
-              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="w-full rounded-2xl" @click="handleCreateDevice">
+              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="workspace-primary-action w-full" @click="handleCreateDevice">
                 创建设备
               </UButton>
             </div>
@@ -975,7 +980,7 @@ onBeforeUnmount(() => {
               </div>
             </template>
 
-            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-2xl border border-green-200/70 bg-green-50/50 px-4 py-3 text-sm font-medium text-green-700 dark:border-green-800/50 dark:bg-green-950/30 dark:text-green-400">
+            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-2xl border border-neutral-300/80 bg-[var(--workspace-panel-muted)] px-4 py-3 text-sm font-medium text-highlighted dark:border-neutral-700/80">
               <UIcon name="i-lucide-circle-check" class="size-4" />
               {{ statusMessage }}
             </div>
@@ -996,7 +1001,7 @@ onBeforeUnmount(() => {
             </div>
 
             <template v-if="dbDevice && (step === 'action' || step === 'config')">
-              <UButton icon="i-lucide-key-round" :loading="polling" class="w-full rounded-2xl" @click="pollUntilActivated">
+              <UButton icon="i-lucide-key-round" :loading="polling" class="workspace-primary-action w-full" @click="pollUntilActivated">
                 开始激活
               </UButton>
 
@@ -1031,7 +1036,7 @@ onBeforeUnmount(() => {
               <UFormField label="设备名称" required>
                 <UInput v-model="newDeviceName" placeholder="例如 前台一号机" icon="i-lucide-monitor" class="w-full" />
               </UFormField>
-              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="w-full rounded-2xl" @click="handleCreateDevice">
+              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="workspace-primary-action w-full" @click="handleCreateDevice">
                 创建设备并覆盖凭证
               </UButton>
             </template>
@@ -1045,7 +1050,7 @@ onBeforeUnmount(() => {
                 设备最近错误：{{ summary.lastErrorCode }}
               </div>
             </template>
-            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-2xl border border-green-200/70 bg-green-50/50 px-4 py-3 text-sm font-medium text-green-700 dark:border-green-800/50 dark:bg-green-950/30 dark:text-green-400">
+            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-2xl border border-neutral-300/80 bg-[var(--workspace-panel-muted)] px-4 py-3 text-sm font-medium text-highlighted dark:border-neutral-700/80">
               <UIcon name="i-lucide-circle-check" class="size-4" />
               {{ statusMessage }}
             </div>
@@ -1090,7 +1095,7 @@ onBeforeUnmount(() => {
                       <p class="mb-2 text-xs text-amber-600 dark:text-amber-400">确认执行？</p>
                       <div class="flex gap-2">
                         <UButton size="sm" color="warning" icon="i-lucide-check" :loading="busy" @click="executeReset('credentials')">确认清除</UButton>
-                        <UButton size="sm" variant="ghost" color="neutral" :disabled="busy" @click="confirmingReset = null">取消</UButton>
+                        <UButton size="sm" variant="outline" color="neutral" class="workspace-secondary-action" :disabled="busy" @click="confirmingReset = null">取消</UButton>
                       </div>
                     </template>
                     <UButton v-else size="sm" color="warning" variant="outline" icon="i-lucide-key-round" :disabled="!deviceId" @click="confirmingReset = 'credentials'">
@@ -1107,7 +1112,7 @@ onBeforeUnmount(() => {
                       <p class="mb-2 text-xs text-red-600 dark:text-red-400">此操作不可撤销，确认完全重置？</p>
                       <div class="flex gap-2">
                         <UButton size="sm" color="error" icon="i-lucide-check" :loading="busy" @click="executeReset('full')">确认重置</UButton>
-                        <UButton size="sm" variant="ghost" color="neutral" :disabled="busy" @click="confirmingReset = null">取消</UButton>
+                        <UButton size="sm" variant="outline" color="neutral" class="workspace-secondary-action" :disabled="busy" @click="confirmingReset = null">取消</UButton>
                       </div>
                     </template>
                     <UButton v-else size="sm" color="error" variant="outline" icon="i-lucide-rotate-ccw" :disabled="!deviceId" @click="confirmingReset = 'full'">

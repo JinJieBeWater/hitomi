@@ -37,6 +37,18 @@ const groups = [
     })),
   },
 ];
+
+function sidebarControlClass(collapsed: boolean): string {
+  return collapsed
+    ? "workspace-sidebar-control workspace-sidebar-control-square"
+    : "workspace-sidebar-control workspace-sidebar-control-inline";
+}
+
+function sidebarNavLinkClass(collapsed: boolean): string {
+  return collapsed
+    ? "workspace-sidebar-nav-link workspace-sidebar-nav-link-collapsed before:rounded-[0.22rem] before:inset-[1px]"
+    : "workspace-sidebar-nav-link before:rounded-[0.22rem] before:inset-[1px]";
+}
 </script>
 
 <template>
@@ -47,44 +59,64 @@ const groups = [
       mode="slideover"
       collapsible
       resizable
-      class="border-r border-neutral-200/70 bg-white/72 backdrop-blur dark:border-neutral-800/80 dark:bg-neutral-950/85"
+      class="border-r border-neutral-400/70 bg-[var(--workspace-panel)] dark:border-neutral-700/80 dark:bg-[var(--workspace-panel)]"
       :ui="{
         header: 'px-3 pt-3',
         body: 'px-3 py-2',
-        footer: 'px-3 py-3 lg:border-t lg:border-neutral-200/80 dark:lg:border-neutral-800/80',
+        footer: 'px-3 py-3 lg:border-t lg:border-neutral-400/70 dark:lg:border-neutral-700/80',
       }"
     >
       <template #header="{ collapsed }">
-        <TeamsMenu :collapsed="collapsed" />
+        <div :class="collapsed ? 'flex w-full justify-center' : 'w-full'">
+          <TeamsMenu :collapsed="collapsed" />
+        </div>
       </template>
 
       <template #default="{ collapsed }">
-        <UDashboardSearchButton
-          :collapsed="collapsed"
-          class="rounded-2xl border border-neutral-200/80 bg-white/78 shadow-sm ring-0 dark:border-neutral-800/80 dark:bg-neutral-900/80"
-        />
+        <div :class="['flex flex-col gap-2', collapsed ? 'items-center' : '']">
+          <UDashboardSearchButton
+            :collapsed="collapsed"
+            variant="outline"
+            color="neutral"
+            size="lg"
+            :class="sidebarControlClass(collapsed)"
+            :ui="{
+              base: 'ring-0 shadow-none',
+              label: 'workspace-sidebar-nav-label',
+              trailing: collapsed ? 'hidden' : 'hidden lg:flex items-center gap-0.5 ms-auto',
+            }"
+          />
 
-        <UNavigationMenu
-          :collapsed="collapsed"
-          :items="mainLinks"
-          orientation="vertical"
-          color="neutral"
-          variant="pill"
-          highlight
-          highlight-color="primary"
-          tooltip
-          popover
-          :ui="{
-            link: 'rounded-2xl px-3 py-2.5 transition-colors',
-            label: 'text-sm font-medium',
-          }"
-        />
+          <UNavigationMenu
+            :collapsed="collapsed"
+            :items="mainLinks"
+            orientation="vertical"
+            color="neutral"
+            variant="pill"
+            highlight
+            highlight-color="primary"
+            tooltip
+            popover
+            :ui="{
+              root: collapsed ? 'flex flex-col items-center gap-2' : 'flex flex-col gap-2',
+              list: collapsed ? 'flex flex-col items-center gap-2' : 'flex flex-col gap-2',
+              item: collapsed ? 'flex justify-center' : '',
+              link: `${sidebarNavLinkClass(collapsed)} transition-colors uppercase tracking-[0.14em]`,
+              label: 'workspace-sidebar-nav-label',
+              linkLeadingIcon: collapsed ? 'size-5' : 'size-5',
+            }"
+          />
+        </div>
       </template>
 
       <template #footer="{ collapsed }">
-        <div class="flex w-full min-w-0 flex-col gap-2">
-          <ThemeToggle :collapsed="collapsed" />
-          <UserMenu :collapsed="collapsed" />
+        <div :class="['flex w-full min-w-0 flex-col gap-2', collapsed ? 'items-center' : '']">
+          <div :class="collapsed ? 'flex w-full justify-center' : 'w-full'">
+            <ThemeToggle :collapsed="collapsed" />
+          </div>
+          <div :class="collapsed ? 'flex w-full justify-center' : 'w-full'">
+            <UserMenu :collapsed="collapsed" />
+          </div>
         </div>
       </template>
     </UDashboardSidebar>

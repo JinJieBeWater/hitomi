@@ -14,6 +14,7 @@ class SdMmcTemplateStore final : public TemplateStorePort {
   TemplateStoreInitStatus begin() override;
   TemplateStoreStatus status() const override;
   TemplateLibrarySummary loadSummary() const override;
+  std::vector<std::string> listTemplateEmployeeIds() const override;
   std::optional<TemplateBlob> readTemplate(const std::string& employeeId) override;
   bool upsertTemplate(const std::string& employeeId, const std::vector<uint8_t>& bytes, uint64_t updatedAt) override;
   bool removeTemplate(const std::string& employeeId) override;

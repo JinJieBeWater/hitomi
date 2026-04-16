@@ -69,11 +69,19 @@ function handleConfirm() {
     :close="!props.submitting"
     :title="`确认删除${props.entityLabel}`"
     description="删除后不可恢复，相关录脸任务和考勤记录会一并移除。"
-    :ui="{ content: 'sm:max-w-xl' }"
+    :ui="{
+      content: 'workspace-dialog-content sm:max-w-xl',
+      header: 'workspace-dialog-header',
+      body: 'workspace-dialog-body',
+      footer: 'workspace-dialog-footer',
+      title: 'workspace-dialog-title',
+      description: 'workspace-dialog-description',
+      close: 'workspace-dialog-close',
+    }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
-      <div class="space-y-5">
+      <div class="workspace-dialog-stack">
         <div v-if="props.loading" class="space-y-3">
           <USkeleton class="h-5 w-40 rounded-full" />
           <USkeleton class="h-16 w-full rounded-2xl" />
@@ -82,37 +90,27 @@ function handleConfirm() {
         </div>
 
         <template v-else-if="props.impact">
-          <div class="space-y-4">
+          <div class="workspace-dialog-panel space-y-4">
             <div class="border-b border-neutral-200/70 pb-4 dark:border-neutral-800/80">
-              <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
-                {{ props.entityLabel }}
-              </div>
+              <div class="workspace-section-label">{{ props.entityLabel }}</div>
               <div class="mt-2 text-base font-semibold tracking-tight text-highlighted">
                 {{ props.impact.name }}
               </div>
-              <div class="mt-1 text-sm text-toned">
+              <div class="workspace-code-value">
                 {{ props.identifierLabel }}: {{ props.impact.identifierValue }}
               </div>
             </div>
 
             <div class="grid gap-3 sm:grid-cols-2">
-              <div
-                class="rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80"
-              >
-                <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
-                  录脸任务
-                </div>
+              <div class="workspace-inline-stat">
+                <div class="workspace-section-label">录脸任务</div>
                 <div class="mt-2 text-2xl font-semibold tracking-tight text-highlighted">
                   {{ props.impact.faceProfileCount }}
                 </div>
               </div>
 
-              <div
-                class="rounded-2xl border border-neutral-200/70 px-4 py-4 dark:border-neutral-800/80"
-              >
-                <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
-                  考勤记录
-                </div>
+              <div class="workspace-inline-stat">
+                <div class="workspace-section-label">考勤记录</div>
                 <div class="mt-2 text-2xl font-semibold tracking-tight text-highlighted">
                   {{ props.impact.attendanceRecordCount }}
                 </div>
@@ -140,8 +138,9 @@ function handleConfirm() {
 
         <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
           <UButton
-            variant="ghost"
+            variant="outline"
             color="neutral"
+            class="workspace-secondary-action"
             :disabled="props.submitting"
             @click="emit('update:open', false)"
           >
@@ -151,6 +150,7 @@ function handleConfirm() {
           <UButton
             color="error"
             icon="i-lucide-trash-2"
+            class="workspace-primary-action"
             data-testid="delete-confirm-submit-button"
             :loading="props.submitting"
             :disabled="!isMatched || props.loading || !props.impact"
