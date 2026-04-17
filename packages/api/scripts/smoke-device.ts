@@ -234,24 +234,28 @@ async function startServerIfNeeded(preferredBaseUrl: string) {
   const port = await findAvailablePort(host);
   const baseUrl = `http://${host}:${port}`;
   await mkdir(devServerTempDir, { recursive: true });
-  await runAppCommand(["run", "build"], "Nuxt build", {
+  await runAppCommand("node ./node_modules/nuxt/bin/nuxt.mjs build", "Nuxt build", {
     TMPDIR: devServerTempDir,
   });
 
   let stdout = "";
   let stderr = "";
-  const child = spawn("bun", ["run", "preview", "--", "--port", `${port}`], {
-    cwd: appRoot,
-    env: {
-      ...process.env,
-      HOST: host,
-      NITRO_HOST: host,
-      PORT: `${port}`,
-      NITRO_PORT: `${port}`,
-      TMPDIR: devServerTempDir,
+  const child = spawn(
+    "zsh",
+    ["-lc", `node ./node_modules/nuxt/bin/nuxt.mjs preview --port ${port}`],
+    {
+      cwd: appRoot,
+      env: {
+        ...process.env,
+        HOST: host,
+        NITRO_HOST: host,
+        PORT: `${port}`,
+        NITRO_PORT: `${port}`,
+        TMPDIR: devServerTempDir,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
     },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  );
 
   child.stdout?.on("data", (chunk) => {
     stdout += chunk.toString();
@@ -274,12 +278,12 @@ async function startServerIfNeeded(preferredBaseUrl: string) {
   };
 }
 
-async function runAppCommand(args: string[], label: string, envOverrides: Record<string, string>) {
+async function runAppCommand(command: string, label: string, envOverrides: Record<string, string>) {
   await new Promise<void>((resolve, reject) => {
     let stdout = "";
     let stderr = "";
 
-    const child = spawn("bun", args, {
+    const child = spawn("zsh", ["-lc", command], {
       cwd: appRoot,
       env: {
         ...process.env,

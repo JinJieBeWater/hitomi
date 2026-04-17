@@ -3,12 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nuxt build",
-    "check-types": "nuxt prepare && tsc --noEmit -p .nuxt/tsconfig.server.json && bunx vue-tsc --noEmit -p tsconfig.typecheck.json",
-    "dev": "nuxt dev",
-    "generate": "nuxt generate",
-    "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "build": "zsh -lc 'node ./node_modules/nuxt/bin/nuxt.mjs build'",
+    "check-types": "zsh -lc 'node ./node_modules/nuxt/bin/nuxt.mjs prepare && tsc --noEmit -p .nuxt/tsconfig.server.json && npm exec --yes --cache ../../output/tmp/npm-cache --package vue-tsc -- vue-tsc --noEmit -p tsconfig.typecheck.json'",
+    "dev": "zsh -lc 'node ./node_modules/nuxt/bin/nuxt.mjs dev'",
+    "generate": "zsh -lc 'node ./node_modules/nuxt/bin/nuxt.mjs generate'",
+    "preview": "zsh -lc 'node ./node_modules/nuxt/bin/nuxt.mjs preview'",
+    "postinstall": "zsh -lc 'node ./node_modules/nuxt/bin/nuxt.mjs prepare'"
   },
   "dependencies": {
     "@hitomi/api": "workspace:*",
