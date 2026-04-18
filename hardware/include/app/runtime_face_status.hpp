@@ -14,35 +14,78 @@ enum class FaceLineStyle {
   Presenter,
 };
 
+inline std::string localizeFaceEngineDetailForPresenter(const std::string& detail) {
+  if (detail == "Linked (model load deferred)") {
+    return "已连接（模型延后加载）";
+  }
+  if (detail == "Link check failed") {
+    return "链接检查失败";
+  }
+  if (detail == "model config missing") {
+    return "缺少模型配置";
+  }
+  return detail;
+}
+
+inline std::string localizeFaceDetectDetailForPresenter(const std::string& detail) {
+  if (detail == "Waiting for first frame") {
+    return "等待首帧";
+  }
+  if (detail == "Detected") {
+    return "已检测到人脸";
+  }
+  if (detail == "No face") {
+    return "未检测到人脸";
+  }
+  if (detail == "Ready") {
+    return "已就绪";
+  }
+  if (detail == "Detector init failed") {
+    return "检测器初始化失败";
+  }
+  if (detail == "Unsupported pixel format") {
+    return "像素格式不支持";
+  }
+  return detail;
+}
+
 inline std::string formatFaceEngineLine(const RuntimeStatus& status, FaceLineStyle style) {
-  const char* readyLabel = style == FaceLineStyle::Presenter ? "Face engine: Ready" : "Face engine: ready";
-  const char* failedPrefix = style == FaceLineStyle::Presenter ? "Face engine: Failed (" : "Face engine: failed (";
+  const char* readyLabel = style == FaceLineStyle::Presenter ? "识别引擎：已就绪" : "Face engine: ready";
+  const char* failedPrefix = style == FaceLineStyle::Presenter ? "识别引擎：不可用（" : "Face engine: failed (";
   if (status.faceEngineReady) {
     if (status.faceEngineStatusDetail.has_value() && !status.faceEngineStatusDetail->empty()) {
-      return "Face engine: " + status.faceEngineStatusDetail.value();
+      const std::string detail = style == FaceLineStyle::Presenter
+          ? localizeFaceEngineDetailForPresenter(status.faceEngineStatusDetail.value())
+          : status.faceEngineStatusDetail.value();
+      return std::string(style == FaceLineStyle::Presenter ? "识别引擎：" : "Face engine: ") + detail;
     }
     return readyLabel;
   }
   if (status.faceEngineStatusDetail.has_value() && !status.faceEngineStatusDetail->empty()) {
-    return std::string(failedPrefix) + status.faceEngineStatusDetail.value() + ")";
+    const std::string detail = style == FaceLineStyle::Presenter
+        ? localizeFaceEngineDetailForPresenter(status.faceEngineStatusDetail.value())
+        : status.faceEngineStatusDetail.value();
+    return std::string(failedPrefix) + detail + ")";
   }
-  return style == FaceLineStyle::Presenter ? "Face engine: Unavailable" : "Face engine: unavailable";
+  return style == FaceLineStyle::Presenter ? "识别引擎：不可用" : "Face engine: unavailable";
 }
 
 inline std::string formatFaceDetectLine(const RuntimeStatus& status, FaceLineStyle style) {
   if (!status.faceEngineReady) {
-    return "Detect: engine unavailable";
+    return style == FaceLineStyle::Presenter ? "检测：识别引擎不可用" : "Detect: engine unavailable";
   }
   if (!status.faceDetectReady) {
-    return "Detect: " + status.faceDetectStatusDetail.value_or("idle");
+    const std::string detail = status.faceDetectStatusDetail.value_or("idle");
+    return std::string(style == FaceLineStyle::Presenter ? "检测：" : "Detect: ") +
+        (style == FaceLineStyle::Presenter ? localizeFaceDetectDetailForPresenter(detail) : detail);
   }
   if (!status.faceDetected) {
-    return "Detect: none";
+    return style == FaceLineStyle::Presenter ? "检测：无人脸" : "Detect: none";
   }
 
   std::ostringstream oss;
   if (style == FaceLineStyle::Presenter) {
-    oss << "Detect: " << status.detectedFaceCount << " face(s)";
+    oss << "检测：" << status.detectedFaceCount << " 张人脸";
     if (status.faceTopScore.has_value()) {
       oss << " @" << std::fixed << std::setprecision(2) << status.faceTopScore.value();
     }

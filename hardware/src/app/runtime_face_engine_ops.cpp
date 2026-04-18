@@ -348,17 +348,17 @@ std::optional<std::pair<const StoredFaceTemplate*, float>> recognizeEmployee(
 }
 
 std::string attendanceTypeLabel(core::AttendanceRecordType type) {
-  return type == core::AttendanceRecordType::ClockIn ? "clock-in" : "clock-out";
+  return type == core::AttendanceRecordType::ClockIn ? "上班" : "下班";
 }
 
 std::string employeeDisplayLabel(const StoredFaceTemplate& employee) {
   if (!employee.employeeCode.empty()) {
-    return "Employee " + employee.employeeCode;
+    return "员工 " + employee.employeeCode;
   }
   if (!employee.employeeId.empty()) {
-    return "Employee " + employee.employeeId;
+    return "员工 " + employee.employeeId;
   }
-  return "Employee";
+  return "员工";
 }
 
 bool recognitionComputationDue(const RuntimeState& state, uint32_t nowMs) {
@@ -413,7 +413,7 @@ void handleAttendanceRecognition(
         state,
         matched.employeeId + ":attendance-config-missing",
         infra::DisplayNotificationLevel::Error,
-        employeeName + " missing attendance config",
+        employeeName + " 缺少考勤配置",
         nowMs);
     state.lastErrorCode = "ATTENDANCE_CONFIG_MISSING";
     return;
@@ -426,7 +426,7 @@ void handleAttendanceRecognition(
         state,
         matched.employeeId + ":not-in-window:" + std::to_string(recognizedAt / 60000ULL),
         infra::DisplayNotificationLevel::Warning,
-        employeeName + " outside attendance window",
+        employeeName + " 当前不在考勤时段",
         nowMs);
     state.lastErrorCode = "ATTENDANCE_NOT_IN_WINDOW";
     return;
@@ -450,18 +450,18 @@ void handleAttendanceRecognition(
   infra::DisplayNotificationLevel level = infra::DisplayNotificationLevel::Success;
   switch (mutation.action) {
     case core::QueueMutationAction::Inserted:
-      feedback = employeeName + " " + attendanceTypeLabel(attendanceType.value()) + " saved";
+      feedback = employeeName + " " + attendanceTypeLabel(attendanceType.value()) + "已记录";
       persistPendingAttendanceRecords(context, state);
       state.lastErrorCode.reset();
       break;
     case core::QueueMutationAction::ReplacedWithEarlier:
-      feedback = employeeName + " replaced with earlier " + attendanceTypeLabel(attendanceType.value());
+      feedback = employeeName + " 已更新为更早的" + attendanceTypeLabel(attendanceType.value());
       persistPendingAttendanceRecords(context, state);
       state.lastErrorCode.reset();
       break;
     case core::QueueMutationAction::IgnoredLaterOrEqual:
     default:
-      feedback = employeeName + " already has earlier or equal " + attendanceTypeLabel(attendanceType.value());
+      feedback = employeeName + " 已存在更早或相同的" + attendanceTypeLabel(attendanceType.value());
       level = infra::DisplayNotificationLevel::Warning;
       state.lastErrorCode = "ATTENDANCE_DUPLICATE_LATER_OR_EQUAL";
       break;

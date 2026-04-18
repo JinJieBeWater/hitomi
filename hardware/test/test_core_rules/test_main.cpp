@@ -606,16 +606,17 @@ void testRuntimeDiagnosticsAndPresenterExposeStatusLines() {
   expect(
       diagnostics.faceDetectLine.find("faces=2") != std::string::npos,
       "diagnostics should surface face detect count");
-  expect(view.storageLine.find("templates=2") != std::string::npos, "view should surface template count");
+  expect(view.storageLine.find("模板=2") != std::string::npos, "view should surface template count");
   expect(
-      view.faceDetectLine.find("2 face(s)") != std::string::npos && view.faceDetectLine.find("@0.87") != std::string::npos,
+      view.faceDetectLine.find("2 张人脸") != std::string::npos && view.faceDetectLine.find("@0.87") != std::string::npos,
       "view should surface face detect summary");
-  expect(view.activationLine.find("waiting for claim") != std::string::npos, "view should show activation state");
+  expect(view.activationLine.find("待认领") != std::string::npos, "view should show activation state");
   expect(view.wifiLine.find("Lab-WiFi") != std::string::npos, "view should show connected SSID");
-  expect(view.apiLine.find("Reachable") != std::string::npos, "view should surface API success");
+  expect(view.apiLine.find("可达") != std::string::npos, "view should surface API success");
   expect(view.enrollmentTasks.size() == 1, "view should surface enrollment tasks");
-  expect(view.enrollmentTasks.front().title == "Employee 20230001", "task card should prefer English employee labels");
-  expect(view.enrollmentTasks.front().meta == "Status: pending", "task card should show only task status");
+  expect(view.enrollmentTasks.front().title == "员工 20230001", "task card should prefer localized employee labels");
+  expect(view.enrollmentTasks.front().meta == "状态：待处理", "task card should show only task status");
+  expect(view.pendingQueueCount == 3, "view should surface pending queue count for home status");
   expect(view.footer == "fw-tag", "view footer should use firmware tag");
 }
 
@@ -636,10 +637,12 @@ void testPresenterShowsEnrollmentProgressAndPendingReport() {
 
   const AppViewModel view = ui::StatusScreenPresenter::build(status);
 
-  expect(view.taskLine.find("enrolling") != std::string::npos, "task line should surface enrollment progress");
+  expect(view.taskLine.find("录脸中") != std::string::npos, "task line should surface enrollment progress");
   expect(view.taskLine.find("2/3") != std::string::npos, "task line should surface enrollment sample count");
+  expect(view.captureRequiredSamples == 3, "capture should surface required samples");
+  expect(view.captureCapturedSamples == 2, "capture should surface captured samples");
   expect(
-      view.enrollmentTaskSummaryLine.find("pending") != std::string::npos,
+      view.enrollmentTaskSummaryLine.find("待上报") != std::string::npos,
       "summary should surface pending enrollment report");
 }
 

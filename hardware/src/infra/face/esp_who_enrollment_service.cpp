@@ -178,7 +178,7 @@ bool EspWhoEnrollmentService::start(const face::EnrollmentRequest& request) {
       .capturedSamples = 0,
       .requiredSamples = board::kEnrollmentRequiredSamples,
       .detectedFaceCount = 0,
-      .detail = "Waiting for single face",
+      .detail = "请看向摄像头",
   };
   impl_->completedResult.reset();
   impl_->startedAtMs = millis();
@@ -208,7 +208,7 @@ void EspWhoEnrollmentService::cancel() {
       .failureReason = std::optional<std::string>("ENROLLMENT_CANCELLED"),
   };
   impl_->progress.active = false;
-  impl_->progress.detail = "Cancelled";
+  impl_->progress.detail = "已取消";
   impl_->sessionActive = false;
   Serial.printf(
       "[ENROLL] cancelled task=%s employee=%s samples=%u/%u\n",
@@ -277,19 +277,19 @@ void EspWhoEnrollmentService::processFrame(
 
   if (detections.empty()) {
     impl_->progress.capturedSamples = 0;
-    impl_->progress.detail = "No face detected";
+    impl_->progress.detail = "未检测到人脸";
     impl_->logProgressIfChanged(nowMs);
     return;
   }
   if (detections.size() > 1) {
     impl_->progress.capturedSamples = 0;
-    impl_->progress.detail = "Multiple faces detected";
+    impl_->progress.detail = "检测到多张人脸";
     impl_->logProgressIfChanged(nowMs);
     return;
   }
 
   impl_->progress.capturedSamples += 1;
-  impl_->progress.detail = "Hold still for enrollment";
+  impl_->progress.detail = "请保持不动";
   impl_->logProgressIfChanged(nowMs);
 
   if (impl_->progress.capturedSamples < impl_->progress.requiredSamples) {
@@ -317,7 +317,7 @@ void EspWhoEnrollmentService::processFrame(
       .failureReason = std::nullopt,
   };
   impl_->progress.active = false;
-  impl_->progress.detail = "Template captured";
+  impl_->progress.detail = "模板采集完成";
   impl_->sessionActive = false;
   Serial.printf(
       "[ENROLL] success task=%s employee=%s templateBytes=%u elapsed=%lums\n",

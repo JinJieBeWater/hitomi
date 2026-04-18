@@ -87,12 +87,12 @@ void notify(
 
 std::string enrollmentDisplayLabel(const core::EnrollmentTaskSnapshot& task) {
   if (!task.employeeCode.empty()) {
-    return "Employee " + task.employeeCode;
+    return "员工 " + task.employeeCode;
   }
   if (!task.employeeId.empty()) {
-    return "Employee " + task.employeeId;
+    return "员工 " + task.employeeId;
   }
-  return "Employee";
+  return "员工";
 }
 
 }  // namespace
@@ -110,39 +110,39 @@ void startEnrollmentTask(
         taskId.c_str(),
         static_cast<unsigned>(state.pendingEnrollmentReports.size()));
     state.enrollmentState = EnrollmentRunState::Reporting;
-    state.enrollmentStatusDetail = "Pending enrollment report must flush first";
+    state.enrollmentStatusDetail = "需先上报上一条录脸结果";
     state.enrollmentFailureReason = "ENROLLMENT_REPORT_PENDING";
     state.lastErrorCode = "ENROLLMENT_REPORT_PENDING";
-    notify(context, infra::DisplayNotificationLevel::Warning, "Wait for report.", 2200);
+    notify(context, infra::DisplayNotificationLevel::Warning, "请先完成结果上报", 2200);
     state.renderDirty = true;
     return;
   }
   if (context.enrollmentService.active()) {
     Serial.println("[APP] enrollment blocked: already in progress");
-    state.enrollmentStatusDetail = "Enrollment already in progress";
+    state.enrollmentStatusDetail = "录脸会话已在进行中";
     state.enrollmentFailureReason = "ENROLLMENT_BUSY";
     state.lastErrorCode = "ENROLLMENT_BUSY";
-    notify(context, infra::DisplayNotificationLevel::Warning, "Already running.", 1800);
+    notify(context, infra::DisplayNotificationLevel::Warning, "录脸进行中", 1800);
     state.renderDirty = true;
     return;
   }
   if (!state.templateStoreReady) {
     Serial.println("[APP] enrollment blocked: template store unavailable");
     state.enrollmentState = EnrollmentRunState::Failed;
-    state.enrollmentStatusDetail = "SD card is required for enrollment";
+    state.enrollmentStatusDetail = "录脸需要 SD 卡";
     state.enrollmentFailureReason = "TEMPLATE_STORE_UNAVAILABLE";
     state.lastErrorCode = "TEMPLATE_STORE_UNAVAILABLE";
-    notify(context, infra::DisplayNotificationLevel::Error, "Need SD card.", 2200);
+    notify(context, infra::DisplayNotificationLevel::Error, "需要 SD 卡", 2200);
     state.renderDirty = true;
     return;
   }
   if (!state.filesystemReady) {
     Serial.println("[APP] enrollment blocked: LittleFS unavailable");
     state.enrollmentState = EnrollmentRunState::Failed;
-    state.enrollmentStatusDetail = "LittleFS unavailable";
+    state.enrollmentStatusDetail = "LittleFS 不可用";
     state.enrollmentFailureReason = "FILESYSTEM_UNAVAILABLE";
     state.lastErrorCode = "FILESYSTEM_UNAVAILABLE";
-    notify(context, infra::DisplayNotificationLevel::Error, "No LittleFS.", 1800);
+    notify(context, infra::DisplayNotificationLevel::Error, "LittleFS 不可用", 1800);
     state.renderDirty = true;
     return;
   }
@@ -153,10 +153,10 @@ void startEnrollmentTask(
         context.camera.ready() ? 1 : 0,
         context.enrollmentService.available() ? 1 : 0);
     state.enrollmentState = EnrollmentRunState::Failed;
-    state.enrollmentStatusDetail = "Camera or enrollment service unavailable";
+    state.enrollmentStatusDetail = "摄像头或录脸服务不可用";
     state.enrollmentFailureReason = "ENROLLMENT_UNAVAILABLE";
     state.lastErrorCode = "ENROLLMENT_UNAVAILABLE";
-    notify(context, infra::DisplayNotificationLevel::Error, "Camera unavailable.", 2200);
+    notify(context, infra::DisplayNotificationLevel::Error, "摄像头不可用", 2200);
     state.renderDirty = true;
     return;
   }
@@ -165,10 +165,10 @@ void startEnrollmentTask(
   if (task == nullptr || task->status != "pending") {
     Serial.printf("[APP] enrollment blocked: task invalid taskId=%s\n", taskId.c_str());
     state.enrollmentState = EnrollmentRunState::Failed;
-    state.enrollmentStatusDetail = "Task missing or not pending";
+    state.enrollmentStatusDetail = "任务不存在或不是待处理";
     state.enrollmentFailureReason = "ENROLLMENT_TASK_INVALID";
     state.lastErrorCode = "ENROLLMENT_TASK_INVALID";
-    notify(context, infra::DisplayNotificationLevel::Warning, "Task not pending.", 2000);
+    notify(context, infra::DisplayNotificationLevel::Warning, "任务不是待处理状态", 2000);
     state.renderDirty = true;
     return;
   }
@@ -180,10 +180,10 @@ void startEnrollmentTask(
       })) {
     Serial.printf("[APP] enrollment start failed taskId=%s employeeId=%s\n", task->taskId.c_str(), task->employeeId.c_str());
     state.enrollmentState = EnrollmentRunState::Failed;
-    state.enrollmentStatusDetail = "Failed to start enrollment session";
+    state.enrollmentStatusDetail = "无法启动录脸会话";
     state.enrollmentFailureReason = "ENROLLMENT_START_FAILED";
     state.lastErrorCode = "ENROLLMENT_START_FAILED";
-    notify(context, infra::DisplayNotificationLevel::Error, "Start failed.", 2000);
+    notify(context, infra::DisplayNotificationLevel::Error, "启动失败", 2000);
     state.renderDirty = true;
     return;
   }
@@ -195,7 +195,7 @@ void startEnrollmentTask(
   state.enrollmentRequiredSamples = board::kEnrollmentRequiredSamples;
   state.detectedFaceCount = 0;
   state.enrollmentFailureReason = std::nullopt;
-  state.enrollmentStatusDetail = "Look at the camera";
+  state.enrollmentStatusDetail = "请看向摄像头";
   state.enrollmentState = EnrollmentRunState::Preparing;
   setLastError(state, std::nullopt);
   if (!state.pendingEnrollmentReports.empty()) {
@@ -207,7 +207,7 @@ void startEnrollmentTask(
   notify(
       context,
       infra::DisplayNotificationLevel::Info,
-      "Start: " + enrollmentDisplayLabel(*task),
+      "开始录脸：" + enrollmentDisplayLabel(*task),
       1800);
   state.renderDirty = true;
   Serial.printf("[APP] Enrollment session started taskId=%s employeeId=%s\n", task->taskId.c_str(), task->employeeId.c_str());
@@ -220,7 +220,7 @@ void cancelEnrollmentTask(
   static_cast<void>(nowMs);
 
   if (!context.enrollmentService.active()) {
-    notify(context, infra::DisplayNotificationLevel::Warning, "Nothing to cancel.", 1600);
+    notify(context, infra::DisplayNotificationLevel::Warning, "当前没有可取消的任务", 1600);
     return;
   }
 
@@ -228,20 +228,20 @@ void cancelEnrollmentTask(
   const auto result = context.enrollmentService.takeResult();
   if (!result.has_value()) {
     state.enrollmentState = EnrollmentRunState::Cancelled;
-    state.enrollmentStatusDetail = "Enrollment cancelled";
+    state.enrollmentStatusDetail = "已取消";
     state.enrollmentFailureReason = "ENROLLMENT_CANCELLED";
     state.lastErrorCode = "ENROLLMENT_CANCELLED";
-    notify(context, infra::DisplayNotificationLevel::Warning, "Cancelled.", 1600);
+    notify(context, infra::DisplayNotificationLevel::Warning, "已取消", 1600);
     state.renderDirty = true;
     return;
   }
 
   state.enrollmentFailureReason = "ENROLLMENT_CANCELLED";
   state.enrollmentState = EnrollmentRunState::Reporting;
-  state.enrollmentStatusDetail = "Reporting enrollment cancellation";
+  state.enrollmentStatusDetail = "正在上报取消结果";
   enqueueEnrollmentReport(context, state, result.value(), std::optional<std::string>("ENROLLMENT_CANCELLED"));
   state.lastErrorCode = "ENROLLMENT_CANCELLED";
-  notify(context, infra::DisplayNotificationLevel::Warning, "Cancelled. Reporting.", 1800);
+  notify(context, infra::DisplayNotificationLevel::Warning, "已取消，正在上报", 1800);
   state.renderDirty = true;
 }
 
@@ -293,20 +293,20 @@ void processEnrollmentFrame(
         result->employeeId.c_str(),
         result->failureReason.has_value() ? result->failureReason->c_str() : "UNKNOWN");
     state.enrollmentState = EnrollmentRunState::Reporting;
-    state.enrollmentStatusDetail = "Reporting enrollment failure";
+    state.enrollmentStatusDetail = "正在上报录脸失败";
     enqueueEnrollmentReport(context, state, result.value(), result->failureReason);
     state.lastErrorCode = result->failureReason;
     notify(
         context,
         infra::DisplayNotificationLevel::Error,
-        "Failed: " + result->failureReason.value_or("UNKNOWN"),
+        "录脸失败：" + result->failureReason.value_or("UNKNOWN"),
         3200);
     state.renderDirty = true;
     return;
   }
 
   state.enrollmentState = EnrollmentRunState::SavingTemplate;
-  state.enrollmentStatusDetail = "Saving template to SD";
+  state.enrollmentStatusDetail = "正在保存模板到 SD 卡";
   Serial.printf(
       "[APP] enrollment local success task=%s employee=%s templateBytes=%u\n",
       result->taskId.c_str(),
@@ -324,11 +324,11 @@ void processEnrollmentFrame(
     applyTemplateStoreStatus(context, state, context.templateStore.status(), false);
     persistStorageAux(context, state);
     state.enrollmentFailureReason = "TEMPLATE_STORE_WRITE_FAILED";
-    state.enrollmentStatusDetail = "Template save failed; reporting failure";
+    state.enrollmentStatusDetail = "模板保存失败，正在上报失败";
     enqueueEnrollmentReport(context, state, result.value(), std::optional<std::string>("TEMPLATE_STORE_WRITE_FAILED"));
     state.enrollmentState = EnrollmentRunState::Reporting;
     state.lastErrorCode = "TEMPLATE_STORE_WRITE_FAILED";
-    notify(context, infra::DisplayNotificationLevel::Error, "Save failed.", 2200);
+    notify(context, infra::DisplayNotificationLevel::Error, "模板保存失败", 2200);
     state.renderDirty = true;
     return;
   }
@@ -337,10 +337,10 @@ void processEnrollmentFrame(
   persistStorageAux(context, state);
   Serial.printf("[APP] enrollment template saved employee=%s\n", result->employeeId.c_str());
   state.enrollmentState = EnrollmentRunState::Reporting;
-  state.enrollmentStatusDetail = "Reporting enrollment success";
+  state.enrollmentStatusDetail = "正在上报录脸成功";
   enqueueEnrollmentReport(context, state, result.value(), std::nullopt);
   setLastError(state, std::nullopt);
-  notify(context, infra::DisplayNotificationLevel::Success, "Saved. Reporting.", 1800);
+  notify(context, infra::DisplayNotificationLevel::Success, "已保存，正在上报", 1800);
   state.renderDirty = true;
 }
 

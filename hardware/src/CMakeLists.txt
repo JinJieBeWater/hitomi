@@ -1,5 +1,6 @@
 file(GLOB_RECURSE hitomi_runtime_sources
-    "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+    "${CMAKE_CURRENT_LIST_DIR}/*.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/*.c")
 
 idf_component_register(
     SRCS ${hitomi_runtime_sources}

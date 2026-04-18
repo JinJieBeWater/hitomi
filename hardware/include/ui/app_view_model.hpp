@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -22,6 +23,10 @@ struct AppViewModel {
   std::string captureTitleLine;
   std::string captureStatusLine;
   std::string captureProgressLine;
+  uint8_t captureProgressPercent = 0;
+  uint8_t captureRequiredSamples = 0;
+  uint8_t captureCapturedSamples = 0;
+  uint8_t captureDetectedFaceCount = 0;
   std::string captureActionLabel;
   std::vector<EnrollmentTaskItemViewModel> enrollmentTasks;
   std::string enrollmentTaskSummaryLine;
@@ -34,6 +39,7 @@ struct AppViewModel {
   std::string syncLine;
   std::string taskLine;
   std::string queueLine;
+  uint16_t pendingQueueCount = 0;
   std::string errorLine;
   std::string faceLine;
   std::string footer;

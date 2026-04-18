@@ -41,10 +41,10 @@ void testStatusScreenShowsFaceDetectState() {
   ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
 
   expect(
-      view.faceLine.find("Linked (model load deferred)") != std::string::npos,
+      view.faceLine.find("已连接（模型延后加载）") != std::string::npos,
       "face line should surface engine state detail");
   expect(
-      view.faceDetectLine.find("1 face(s)") != std::string::npos &&
+      view.faceDetectLine.find("1 张人脸") != std::string::npos &&
           view.faceDetectLine.find("@0.93") != std::string::npos,
       "face detect line should surface detection count and score");
 }
@@ -52,28 +52,32 @@ void testStatusScreenShowsFaceDetectState() {
 void testStatusScreenShowsEnrollmentGuidance() {
   app::RuntimeStatus status = {};
   status.enrollmentState = app::EnrollmentRunState::Capturing;
-  status.activeEnrollmentEmployeeName = std::optional<std::string>("Alice");
+  status.activeEnrollmentEmployeeName = std::optional<std::string>("Employee 20230001");
   status.enrollmentCapturedSamples = 1;
   status.enrollmentRequiredSamples = 3;
+  status.detectedFaceCount = 1;
   status.enrollmentStatusDetail = std::optional<std::string>("Hold still for enrollment");
 
   ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
 
-  expect(view.periodLine.find("Enroll: Alice (1/3)") != std::string::npos, "period line should show enrollment progress");
+  expect(view.periodLine.find("录脸：员工 20230001 (1/3)") != std::string::npos, "period line should show enrollment progress");
   expect(
-      view.cameraHintLine.find("Sample 1/3. Hold still.") != std::string::npos,
+      view.cameraHintLine.find("正在采样 1/3，请保持不动") != std::string::npos,
       "camera hint should show operator-facing enrollment guidance");
   expect(
-      view.attendanceResultLine.find("Rec Alice (1/3)") != std::string::npos,
+      view.attendanceResultLine.find("录脸 员工 20230001 (1/3)") != std::string::npos,
       "status card should show active enrollment progress");
   expect(view.captureActive, "capture page should activate during enrollment");
   expect(
-      view.captureTitleLine.find("Capture: Alice") != std::string::npos,
+      view.captureTitleLine.find("采集：员工 20230001") != std::string::npos,
       "capture page title should show active employee");
   expect(
       view.captureProgressLine.find("1/3") != std::string::npos,
       "capture page should expose sample progress");
-  expect(view.captureActionLabel == "Cancel", "active capture should offer cancel action");
+  expect(view.captureRequiredSamples == 3, "capture page should expose required sample count");
+  expect(view.captureCapturedSamples == 1, "capture page should expose captured sample count");
+  expect(view.captureDetectedFaceCount == 1, "capture page should expose detected face count");
+  expect(view.captureActionLabel == "取消", "active capture should offer cancel action");
 }
 
 void testStatusScreenShowsEnrollmentFailureState() {
@@ -84,10 +88,26 @@ void testStatusScreenShowsEnrollmentFailureState() {
 
   ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
 
-  expect(view.periodLine == "Enroll: failed", "period line should show failed enrollment state");
-  expect(view.attendanceResultLine == "Failed", "status card should show failed enrollment state");
+  expect(view.periodLine == "录脸：失败", "period line should show failed enrollment state");
+  expect(view.attendanceResultLine == "失败", "status card should show failed enrollment state");
   expect(view.captureActive, "capture page should stay visible for terminal failure confirmation");
-  expect(view.captureActionLabel == "Back", "terminal failure should offer a return action");
+  expect(view.captureActionLabel == "返回", "terminal failure should offer a return action");
+}
+
+void testStatusScreenLocalizesEnrollmentFailureReason() {
+  app::RuntimeStatus status = {};
+  status.enrollmentState = app::EnrollmentRunState::Failed;
+  status.enrollmentFailureReason = std::optional<std::string>("ENROLLMENT_TIMEOUT");
+  status.lastErrorCode = std::optional<std::string>("ENROLLMENT_TIMEOUT");
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(
+      view.captureStatusLine.find("录脸超时") != std::string::npos,
+      "capture status should localize common enrollment failure reasons");
+  expect(
+      view.errorLine.find("录脸超时") != std::string::npos,
+      "error line should localize common enrollment failure reasons");
 }
 
 void testStatusScreenShowsEnrollmentCancelledState() {
@@ -98,10 +118,10 @@ void testStatusScreenShowsEnrollmentCancelledState() {
 
   ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
 
-  expect(view.periodLine == "Enroll: cancelled", "period line should show cancelled enrollment state");
-  expect(view.attendanceResultLine == "Cancelled", "status card should show cancelled enrollment state");
+  expect(view.periodLine == "录脸：已取消", "period line should show cancelled enrollment state");
+  expect(view.attendanceResultLine == "已取消", "status card should show cancelled enrollment state");
   expect(view.captureActive, "capture page should stay visible after cancellation");
-  expect(view.captureActionLabel == "Back", "cancelled state should offer a return action");
+  expect(view.captureActionLabel == "返回", "cancelled state should offer a return action");
 }
 
 }  // namespace
@@ -112,6 +132,7 @@ int main() {
     testStatusScreenShowsFaceDetectState();
     testStatusScreenShowsEnrollmentGuidance();
     testStatusScreenShowsEnrollmentFailureState();
+    testStatusScreenLocalizesEnrollmentFailureReason();
     testStatusScreenShowsEnrollmentCancelledState();
     std::cout << "[PASS] status screen api probe" << '\n';
     return EXIT_SUCCESS;

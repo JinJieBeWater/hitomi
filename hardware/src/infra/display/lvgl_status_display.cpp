@@ -3,9 +3,12 @@
 #include <Arduino.h>
 #include <lvgl.h>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,34 +27,52 @@ constexpr lv_coord_t kPageHeight = SzpiLvglDisplay::kVerticalResolution - kPageY
 
 constexpr lv_coord_t kNavButtonWidth = 64;
 constexpr lv_coord_t kNavButtonHeight = 32;
-constexpr lv_coord_t kSidebarTitleY = 12;
-constexpr lv_coord_t kNavStartY = 40;
+constexpr lv_coord_t kSidebarTitleY = 10;
+constexpr lv_coord_t kSidebarSubtitleY = 34;
+constexpr lv_coord_t kSidebarFooterY = -10;
+constexpr lv_coord_t kNavStartY = 66;
 constexpr lv_coord_t kNavStepY = 38;
 
 constexpr lv_coord_t kHomePeriodY = 0;
-constexpr lv_coord_t kHomeCameraY = 36;
-constexpr lv_coord_t kHomeCameraHeight = 118;
-constexpr lv_coord_t kHomeAttendanceY = 164;
-constexpr lv_coord_t kHomeAttendanceHeight = 48;
+constexpr lv_coord_t kHomePeriodHeight = 28;
+constexpr lv_coord_t kHomeStatusY = 36;
+constexpr lv_coord_t kHomeStatusHeight = 36;
+constexpr lv_coord_t kHomeStatusGap = 8;
+constexpr lv_coord_t kHomeCameraY = 80;
+constexpr lv_coord_t kHomeCameraHeight = 92;
+constexpr lv_coord_t kHomeAttendanceY = 180;
+constexpr lv_coord_t kHomeAttendanceHeight = 38;
 
 constexpr lv_coord_t kEnrollHeaderY = 0;
-constexpr lv_coord_t kEnrollTaskY = 34;
+constexpr lv_coord_t kEnrollSummaryY = 18;
+constexpr lv_coord_t kEnrollMetaY = 18;
+constexpr lv_coord_t kEnrollTaskY = 40;
 constexpr lv_coord_t kEnrollTaskHeight = 44;
-constexpr lv_coord_t kEnrollTaskGap = 8;
-constexpr lv_coord_t kEnrollTaskListHeight = 132;
-constexpr lv_coord_t kEnrollActionY = 184;
-constexpr lv_coord_t kEnrollActionHeight = 34;
-constexpr lv_coord_t kEnrollActionGap = 10;
-constexpr lv_coord_t kEnrollStatusY = 228;
+constexpr lv_coord_t kEnrollTaskGap = 6;
+constexpr lv_coord_t kEnrollTaskListHeight = 112;
+constexpr lv_coord_t kEnrollDetailY = 160;
+constexpr lv_coord_t kEnrollDetailHeight = 58;
+constexpr lv_coord_t kEnrollActionHeight = 22;
+constexpr lv_coord_t kEnrollActionGap = 8;
 
 constexpr lv_coord_t kCaptureHeaderY = 0;
-constexpr lv_coord_t kCapturePreviewY = 26;
-constexpr lv_coord_t kCapturePreviewHeight = 136;
-constexpr lv_coord_t kCaptureStatusY = 170;
-constexpr lv_coord_t kCaptureProgressY = 196;
-constexpr lv_coord_t kCaptureActionY = 218;
-constexpr lv_coord_t kCaptureActionHeight = 34;
+constexpr lv_coord_t kCapturePreviewY = 22;
+constexpr lv_coord_t kCapturePreviewHeight = 108;
+constexpr lv_coord_t kCaptureStatusY = 138;
+constexpr lv_coord_t kCaptureProgressY = 162;
+constexpr lv_coord_t kCaptureBarY = 184;
+constexpr lv_coord_t kCaptureBarHeight = 8;
+constexpr lv_coord_t kCaptureActionY = 194;
+constexpr lv_coord_t kCaptureActionHeight = 24;
+constexpr lv_coord_t kCaptureFacePillWidth = 70;
+constexpr lv_coord_t kCaptureFacePillHeight = 18;
+constexpr lv_coord_t kCaptureSampleDotSize = 10;
+constexpr lv_coord_t kCaptureSampleDotGap = 8;
+constexpr std::size_t kCaptureSampleIndicatorCount = 5;
 
+constexpr lv_coord_t kSystemSummaryHeight = 54;
+constexpr lv_coord_t kSystemSummaryY = 0;
+constexpr lv_coord_t kSystemRowsY = 64;
 constexpr lv_coord_t kSystemRowHeight = 34;
 constexpr lv_coord_t kSystemRowGap = 8;
 
@@ -59,6 +80,8 @@ constexpr uint32_t kSidebarBackgroundHex = 0x0D3B2A;
 constexpr uint32_t kPaneBackgroundHex = 0x1F8A3B;
 constexpr uint32_t kPanelHex = 0x2A9D50;
 constexpr uint32_t kPanelMutedHex = 0x247E47;
+constexpr uint32_t kPanelBorderHex = 0x8ED1A0;
+constexpr uint32_t kPanelBorderMutedHex = 0x1C5B34;
 constexpr uint32_t kCameraPlaceholderHex = 0x113F2C;
 constexpr uint32_t kTextColorHex = 0xFFFFFF;
 constexpr uint32_t kMutedTextHex = 0xDCE8DD;
@@ -66,6 +89,9 @@ constexpr uint32_t kNavButtonHex = 0x145A32;
 constexpr uint32_t kNavButtonActiveHex = 0xF0F3BD;
 constexpr uint32_t kNavButtonActiveTextHex = 0x0D3B2A;
 constexpr uint32_t kAccentHex = 0xF4A261;
+constexpr uint32_t kGoodHex = 0x5FD38D;
+constexpr uint32_t kWarnHex = 0xF4C35C;
+constexpr uint32_t kErrorHex = 0xE76F51;
 constexpr std::size_t kDisplayCommandQueueCapacity = 4;
 constexpr std::size_t kDisplayNotificationQueueCapacity = 4;
 constexpr lv_coord_t kNotificationWidth = 72;
@@ -87,9 +113,9 @@ struct SidebarPageSpec {
 };
 
 constexpr std::array<SidebarPageSpec, 3> kSidebarPages = {{
-    {.page = SidebarPage::Home, .label = "Home"},
-    {.page = SidebarPage::Enroll, .label = "Enroll"},
-    {.page = SidebarPage::System, .label = "System"},
+    {.page = SidebarPage::Home, .label = "首页"},
+    {.page = SidebarPage::Enroll, .label = "录脸"},
+    {.page = SidebarPage::System, .label = "系统"},
 }};
 
 struct LvglStatusDisplayData;
@@ -99,8 +125,23 @@ struct SidebarBinding {
   SidebarPage page = SidebarPage::Home;
 };
 
+enum class StatusTone : uint8_t {
+  Neutral = 0,
+  Good,
+  Warn,
+  Error,
+};
+
+struct CompactStatusChip {
+  lv_obj_t* panel = nullptr;
+  lv_obj_t* led = nullptr;
+  lv_obj_t* titleLabel = nullptr;
+  lv_obj_t* valueLabel = nullptr;
+};
+
 struct StatusRow {
   lv_obj_t* panel = nullptr;
+  lv_obj_t* led = nullptr;
   lv_obj_t* valueLabel = nullptr;
 };
 
@@ -110,31 +151,47 @@ struct LvglStatusDisplayData {
   std::array<lv_obj_t*, kSidebarPages.size()> navButtons = {};
   std::array<SidebarBinding, kSidebarPages.size()> navBindings = {};
   std::array<lv_obj_t*, kPageCount> pageContainers = {};
+  lv_obj_t* sidebarTitleLabel = nullptr;
+  lv_obj_t* sidebarSubtitleLabel = nullptr;
+  lv_obj_t* sidebarFooterLabel = nullptr;
 
   lv_obj_t* homePeriodLabel = nullptr;
+  std::array<CompactStatusChip, 3> homeStatusChips = {};
   lv_obj_t* homeCameraImage = nullptr;
   lv_obj_t* homeCameraFrame = nullptr;
   lv_obj_t* homeCameraLabel = nullptr;
   lv_obj_t* homeAttendanceLabel = nullptr;
+  lv_obj_t* homeAttendanceMetaLabel = nullptr;
   std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes> homeFaceBoxOverlays = {};
   std::vector<uint16_t> homeCameraPreviewBuffer = {};
   bool homeCameraPreviewReady = false;
   DisplayRgb565Frame latestPreviewFrame = {};
 
   lv_obj_t* enrollSummaryLabel = nullptr;
+  lv_obj_t* enrollMetaLabel = nullptr;
   lv_obj_t* enrollTaskList = nullptr;
+  lv_obj_t* enrollSelectionCard = nullptr;
+  lv_obj_t* enrollSelectionLed = nullptr;
+  lv_obj_t* enrollSelectionTitleLabel = nullptr;
+  lv_obj_t* enrollSelectionMetaLabel = nullptr;
   lv_obj_t* enrollRefreshButton = nullptr;
   lv_obj_t* enrollStartButton = nullptr;
-  lv_obj_t* enrollStatusLabel = nullptr;
 
   lv_obj_t* capturePreviewImage = nullptr;
   lv_obj_t* capturePreviewFrame = nullptr;
   lv_obj_t* captureHintLabel = nullptr;
+  lv_obj_t* captureFaceStateLabel = nullptr;
   lv_obj_t* captureStatusLabel = nullptr;
   lv_obj_t* captureProgressLabel = nullptr;
+  lv_obj_t* captureProgressBar = nullptr;
   lv_obj_t* captureCancelButton = nullptr;
+  std::array<lv_obj_t*, kCaptureSampleIndicatorCount> captureSampleDots = {};
   std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes> captureFaceBoxOverlays = {};
 
+  lv_obj_t* systemSummaryCard = nullptr;
+  lv_obj_t* systemActivationLabel = nullptr;
+  lv_obj_t* systemSyncLabel = nullptr;
+  lv_obj_t* systemFooterLabel = nullptr;
   std::array<StatusRow, 7> systemRows = {};
 
   ui::AppViewModel lastViewModel = {};
@@ -225,15 +282,282 @@ void printLvglLog(lv_log_level_t level, const char* message) {
 }
 
 void applyLabelStyle(lv_obj_t* label, lv_text_align_t align, uint32_t colorHex = kTextColorHex) {
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_font(label, &hitomi_ui_zh_14, 0);
   lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
   lv_obj_set_style_text_align(label, align, 0);
 }
 
-void applyCaptionStyle(lv_obj_t* label, lv_text_align_t align) {
-  lv_obj_set_style_text_font(label, &lv_font_montserrat_12, 0);
-  lv_obj_set_style_text_color(label, lv_color_hex(kMutedTextHex), 0);
+void applyCaptionStyle(lv_obj_t* label, lv_text_align_t align, uint32_t colorHex = kMutedTextHex) {
+  lv_obj_set_style_text_font(label, &hitomi_ui_zh_12, 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
   lv_obj_set_style_text_align(label, align, 0);
+}
+
+void applyPanelStyle(
+    lv_obj_t* panel,
+    uint32_t bgHex,
+    uint32_t borderHex = kPanelBorderMutedHex,
+    lv_coord_t radius = 14,
+    lv_coord_t borderWidth = 1) {
+  lv_obj_set_style_bg_color(panel, lv_color_hex(bgHex), 0);
+  lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(panel, borderWidth, 0);
+  lv_obj_set_style_border_color(panel, lv_color_hex(borderHex), 0);
+  lv_obj_set_style_radius(panel, radius, 0);
+}
+
+void applyCompactValueStyle(lv_obj_t* label, lv_text_align_t align, uint32_t colorHex = kTextColorHex) {
+  lv_obj_set_style_text_font(label, &hitomi_ui_zh_12, 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
+  lv_obj_set_style_text_align(label, align, 0);
+}
+
+std::string lowerCopy(std::string value) {
+  for (char& ch : value) {
+    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+  }
+  return value;
+}
+
+bool startsWith(const std::string& text, const char* prefix) {
+  const std::string_view prefixView(prefix);
+  return text.size() >= prefixView.size() && text.compare(0, prefixView.size(), prefixView.data()) == 0;
+}
+
+std::string stripPrefix(const std::string& text, const char* prefix) {
+  return startsWith(text, prefix) ? text.substr(std::char_traits<char>::length(prefix)) : text;
+}
+
+StatusTone wifiToneFromLine(const std::string& line) {
+  if (startsWith(line, "已连接") || startsWith(line, "Connected")) {
+    return StatusTone::Good;
+  }
+  if (startsWith(line, "未连接") || startsWith(line, "Disconnected")) {
+    return StatusTone::Error;
+  }
+  return StatusTone::Warn;
+}
+
+StatusTone syncToneFromLine(const std::string& line) {
+  const std::string value = lowerCopy(line);
+  if (line.find("已就绪") != std::string::npos || value.find("ready") != std::string::npos) {
+    return StatusTone::Good;
+  }
+  return StatusTone::Warn;
+}
+
+StatusTone taskToneFromSummary(const std::string& line) {
+  if (line == "暂无任务" || line == "No tasks") {
+    return StatusTone::Neutral;
+  }
+  return StatusTone::Warn;
+}
+
+StatusTone apiToneFromLine(const std::string& line) {
+  const std::string value = lowerCopy(line);
+  if (line.find("可达") != std::string::npos || value.find("reachable") != std::string::npos) {
+    return StatusTone::Good;
+  }
+  if (line.find("失败") != std::string::npos || value.find("failed") != std::string::npos) {
+    return StatusTone::Error;
+  }
+  return StatusTone::Warn;
+}
+
+StatusTone credentialsToneFromLine(const std::string& line) {
+  if (line == "缺失" || line == "Missing") {
+    return StatusTone::Error;
+  }
+  if (line == "仅引导配置" || line == "Bootstrap only") {
+    return StatusTone::Warn;
+  }
+  return StatusTone::Good;
+}
+
+StatusTone activationToneFromLine(const std::string& line) {
+  const std::string value = lowerCopy(line);
+  if (line.find("已激活") != std::string::npos || value.find("activated") != std::string::npos) {
+    return StatusTone::Good;
+  }
+  return StatusTone::Warn;
+}
+
+StatusTone storageToneFromLine(const std::string& line) {
+  const std::string value = lowerCopy(line);
+  if (line.find("已就绪") != std::string::npos || value.find("ready") != std::string::npos) {
+    return StatusTone::Good;
+  }
+  if (line.find("已禁用") != std::string::npos || value.find("disabled") != std::string::npos) {
+    return StatusTone::Warn;
+  }
+  return StatusTone::Error;
+}
+
+StatusTone genericSystemTone(const std::string& line) {
+  const std::string value = lowerCopy(line);
+  if (line.empty() || line == "无" || value == "none") {
+    return StatusTone::Neutral;
+  }
+  if (line.find("已就绪") != std::string::npos || line.find("已连接") != std::string::npos ||
+      line.find("可达") != std::string::npos || line.find("张人脸") != std::string::npos ||
+      line.find("已记录") != std::string::npos || value.find("ready") != std::string::npos ||
+      value.find("linked") != std::string::npos || value.find("reachable") != std::string::npos ||
+      value.find("face(s)") != std::string::npos) {
+    return StatusTone::Good;
+  }
+  if (line.find("等待") != std::string::npos || line.find("待上报") != std::string::npos ||
+      line.find("待认领") != std::string::npos || line.find("未启用") != std::string::npos ||
+      line.find("已禁用") != std::string::npos || value.find("wait") != std::string::npos ||
+      value.find("pending") != std::string::npos || value.find("inactive") != std::string::npos ||
+      value.find("disabled") != std::string::npos) {
+    return StatusTone::Warn;
+  }
+  if (line.find("失败") != std::string::npos || line.find("错误") != std::string::npos ||
+      line.find("缺失") != std::string::npos || line.find("不可用") != std::string::npos ||
+      value.find("fail") != std::string::npos || value.find("error") != std::string::npos ||
+      value.find("missing") != std::string::npos || value.find("unavailable") != std::string::npos) {
+    return StatusTone::Error;
+  }
+  return StatusTone::Neutral;
+}
+
+uint32_t toneLedHex(StatusTone tone) {
+  switch (tone) {
+    case StatusTone::Good:
+      return kGoodHex;
+    case StatusTone::Warn:
+      return kWarnHex;
+    case StatusTone::Error:
+      return kErrorHex;
+    case StatusTone::Neutral:
+    default:
+      return kMutedTextHex;
+  }
+}
+
+uint32_t tonePanelHex(StatusTone tone) {
+  switch (tone) {
+    case StatusTone::Good:
+      return 0x256F42;
+    case StatusTone::Warn:
+      return 0x77561D;
+    case StatusTone::Error:
+      return 0x6A3027;
+    case StatusTone::Neutral:
+    default:
+      return kPanelMutedHex;
+  }
+}
+
+uint32_t toneBorderHex(StatusTone tone) {
+  switch (tone) {
+    case StatusTone::Good:
+      return 0x74D795;
+    case StatusTone::Warn:
+      return 0xF4C35C;
+    case StatusTone::Error:
+      return 0xF08D73;
+    case StatusTone::Neutral:
+    default:
+      return kPanelBorderHex;
+  }
+}
+
+void setLedTone(lv_obj_t* led, StatusTone tone) {
+  if (led == nullptr) {
+    return;
+  }
+
+  lv_led_set_color(led, lv_color_hex(toneLedHex(tone)));
+  if (tone == StatusTone::Neutral) {
+    lv_led_set_brightness(led, 80);
+  } else {
+    lv_led_set_brightness(led, 255);
+  }
+  lv_led_on(led);
+}
+
+std::string compactWifiValue(const std::string& line) {
+  if (startsWith(line, "已连接") || startsWith(line, "Connected")) {
+    return "在线";
+  }
+  if (startsWith(line, "未连接") || startsWith(line, "Disconnected")) {
+    return "离线";
+  }
+  if (startsWith(line, "未知") || startsWith(line, "Unknown")) {
+    return "未知";
+  }
+  return line;
+}
+
+std::string compactSyncValue(const std::string& line) {
+  const std::string value = startsWith(line, "同步：") ? stripPrefix(line, "同步：") : stripPrefix(line, "Sync: ");
+  if (value.find("已就绪") != std::string::npos || value.find("Ready") != std::string::npos) {
+    return "已就绪";
+  }
+  if (value.find("同步中") != std::string::npos || value.find("Syncing") != std::string::npos) {
+    return "同步中";
+  }
+  if (value.find("等待") != std::string::npos || value.find("Waiting") != std::string::npos) {
+    return "等待";
+  }
+  if (value.find("未启用") != std::string::npos || value.find("Inactive") != std::string::npos) {
+    return "未启用";
+  }
+  return value;
+}
+
+std::string compactTaskValue(const std::string& line) {
+  if (line == "暂无任务" || line == "No tasks") {
+    return line;
+  }
+  if (line == "结果待上报" || line == "Report pending") {
+    return "待上报";
+  }
+  return line;
+}
+
+std::string compactApiValue(const std::string& line) {
+  if (line == "可达" || line == "Reachable") {
+    return "可达";
+  }
+  if (line == "等待 Wi-Fi" || line == "Waiting for WiFi") {
+    return "等 Wi-Fi";
+  }
+  if (line == "缺少地址" || line == "Missing origin") {
+    return "需地址";
+  }
+  if (line == "探测中" || line == "Probing") {
+    return "探测中";
+  }
+  if (startsWith(line, "失败") || startsWith(line, "Failed")) {
+    return "失败";
+  }
+  return line;
+}
+
+StatusTone queueTone(uint16_t pendingQueueCount) {
+  if (pendingQueueCount == 0) {
+    return StatusTone::Neutral;
+  }
+  if (pendingQueueCount < 4) {
+    return StatusTone::Warn;
+  }
+  return StatusTone::Error;
+}
+
+std::string homeMetaValue(const ui::AppViewModel& viewModel) {
+  if (viewModel.pendingQueueCount > 0) {
+    return viewModel.queueLine;
+  }
+  return compactApiValue(viewModel.apiLine);
+}
+
+StatusTone homeMetaTone(const ui::AppViewModel& viewModel) {
+  if (viewModel.pendingQueueCount > 0) {
+    return queueTone(viewModel.pendingQueueCount);
+  }
+  return apiToneFromLine(viewModel.apiLine);
 }
 
 uint32_t notificationColorHex(DisplayNotificationLevel level) {
@@ -265,7 +589,11 @@ uint32_t notificationTextHex(DisplayNotificationLevel level) {
 void applyNavButtonStyle(lv_obj_t* button, bool active) {
   lv_obj_set_style_bg_color(button, lv_color_hex(active ? kNavButtonActiveHex : kNavButtonHex), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(button, 0, 0);
+  lv_obj_set_style_border_width(button, 1, 0);
+  lv_obj_set_style_border_color(
+      button,
+      lv_color_hex(active ? kAccentHex : kPanelBorderMutedHex),
+      0);
   lv_obj_set_style_radius(button, 10, 0);
 
   lv_obj_t* label = lv_obj_get_child(button, 0);
@@ -277,7 +605,8 @@ void applyNavButtonStyle(lv_obj_t* button, bool active) {
 void applyActionButtonStyle(lv_obj_t* button, bool enabled) {
   lv_obj_set_style_bg_color(button, lv_color_hex(enabled ? kAccentHex : kPanelMutedHex), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(button, 0, 0);
+  lv_obj_set_style_border_width(button, 1, 0);
+  lv_obj_set_style_border_color(button, lv_color_hex(enabled ? kPanelBorderHex : kPanelBorderMutedHex), 0);
   lv_obj_set_style_radius(button, 12, 0);
   lv_obj_set_style_text_color(button, lv_color_hex(kSidebarBackgroundHex), 0);
 }
@@ -286,7 +615,11 @@ void applyTaskButtonStyle(lv_obj_t* button, bool selected, bool enabled) {
   const uint32_t color = !enabled ? kPanelMutedHex : (selected ? kAccentHex : kPanelHex);
   lv_obj_set_style_bg_color(button, lv_color_hex(color), 0);
   lv_obj_set_style_bg_opa(button, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(button, 0, 0);
+  lv_obj_set_style_border_width(button, 1, 0);
+  lv_obj_set_style_border_color(
+      button,
+      lv_color_hex(selected ? kPanelBorderHex : kPanelBorderMutedHex),
+      0);
   lv_obj_set_style_radius(button, 12, 0);
 }
 
@@ -311,36 +644,91 @@ lv_obj_t* createPageLabel(lv_obj_t* parent, lv_coord_t y, lv_coord_t width, uint
   return label;
 }
 
+CompactStatusChip createCompactStatusChip(
+    lv_obj_t* parent,
+    lv_coord_t x,
+    lv_coord_t y,
+    lv_coord_t width,
+    const char* title) {
+  CompactStatusChip chip = {};
+  chip.panel = lv_obj_create(parent);
+  lv_obj_set_size(chip.panel, width, kHomeStatusHeight);
+  lv_obj_align(chip.panel, LV_ALIGN_TOP_LEFT, x, y);
+  applyPanelStyle(chip.panel, kPanelMutedHex, kPanelBorderHex, 14);
+  lv_obj_set_style_pad_left(chip.panel, 8, 0);
+  lv_obj_set_style_pad_right(chip.panel, 8, 0);
+  lv_obj_set_style_pad_top(chip.panel, 6, 0);
+  lv_obj_set_style_pad_bottom(chip.panel, 6, 0);
+  lv_obj_remove_flag(chip.panel, LV_OBJ_FLAG_SCROLLABLE);
+
+  chip.led = lv_led_create(chip.panel);
+  lv_obj_set_size(chip.led, 10, 10);
+  lv_obj_align(chip.led, LV_ALIGN_TOP_LEFT, 0, 1);
+
+  chip.titleLabel = lv_label_create(chip.panel);
+  applyCaptionStyle(chip.titleLabel, LV_TEXT_ALIGN_LEFT);
+  lv_label_set_text(chip.titleLabel, title);
+  lv_obj_align(chip.titleLabel, LV_ALIGN_TOP_LEFT, 16, 0);
+
+  chip.valueLabel = lv_label_create(chip.panel);
+  lv_obj_set_width(chip.valueLabel, width - 16);
+  lv_label_set_long_mode(chip.valueLabel, LV_LABEL_LONG_DOT);
+  applyCompactValueStyle(chip.valueLabel, LV_TEXT_ALIGN_LEFT);
+  lv_obj_align(chip.valueLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+  return chip;
+}
+
+void setCompactStatusChip(
+    const CompactStatusChip& chip,
+    const std::string& value,
+    StatusTone tone) {
+  if (chip.panel != nullptr) {
+    applyPanelStyle(chip.panel, tonePanelHex(tone), toneBorderHex(tone), 14);
+  }
+  if (chip.valueLabel != nullptr) {
+    lv_label_set_text(chip.valueLabel, value.c_str());
+  }
+  setLedTone(chip.led, tone);
+}
+
 StatusRow createSystemRow(lv_obj_t* parent, lv_coord_t y, const char* title) {
   StatusRow row = {};
-  row.panel = lv_button_create(parent);
+  row.panel = lv_obj_create(parent);
   lv_obj_set_size(row.panel, kPageWidth, kSystemRowHeight);
   lv_obj_align(row.panel, LV_ALIGN_TOP_LEFT, 0, y);
-  lv_obj_set_style_bg_color(row.panel, lv_color_hex(kPanelHex), 0);
-  lv_obj_set_style_bg_opa(row.panel, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(row.panel, 0, 0);
-  lv_obj_set_style_radius(row.panel, 12, 0);
-  lv_obj_set_style_pad_left(row.panel, 10, 0);
+  applyPanelStyle(row.panel, kPanelHex, kPanelBorderMutedHex, 12);
+  lv_obj_set_style_pad_left(row.panel, 12, 0);
   lv_obj_set_style_pad_right(row.panel, 10, 0);
   lv_obj_set_style_pad_top(row.panel, 4, 0);
   lv_obj_set_style_pad_bottom(row.panel, 4, 0);
+  lv_obj_remove_flag(row.panel, LV_OBJ_FLAG_SCROLLABLE);
+
+  row.led = lv_led_create(row.panel);
+  lv_obj_set_size(row.led, 10, 10);
+  lv_obj_align(row.led, LV_ALIGN_TOP_LEFT, 0, 2);
+  setLedTone(row.led, StatusTone::Neutral);
 
   lv_obj_t* titleLabel = lv_label_create(row.panel);
   applyCaptionStyle(titleLabel, LV_TEXT_ALIGN_LEFT);
   lv_label_set_text(titleLabel, title);
-  lv_obj_align(titleLabel, LV_ALIGN_TOP_LEFT, 0, 0);
+  lv_obj_align(titleLabel, LV_ALIGN_TOP_LEFT, 18, 0);
 
   row.valueLabel = lv_label_create(row.panel);
-  lv_obj_set_width(row.valueLabel, kPageWidth - 20);
+  lv_obj_set_width(row.valueLabel, kPageWidth - 36);
+  lv_label_set_long_mode(row.valueLabel, LV_LABEL_LONG_DOT);
   applyLabelStyle(row.valueLabel, LV_TEXT_ALIGN_LEFT);
-  lv_obj_align(row.valueLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+  lv_obj_align(row.valueLabel, LV_ALIGN_BOTTOM_LEFT, 18, 0);
   return row;
 }
 
-void setSystemRowValue(const StatusRow& row, const std::string& value) {
+void setSystemRowValue(const StatusRow& row, const std::string& value, StatusTone tone) {
+  if (row.panel != nullptr) {
+    applyPanelStyle(row.panel, tonePanelHex(tone), toneBorderHex(tone), 12);
+  }
   if (row.valueLabel != nullptr) {
     lv_label_set_text(row.valueLabel, value.c_str());
   }
+  setLedTone(row.led, tone);
 }
 
 bool enqueueCommand(LvglStatusDisplayData& data, DisplayCommand command) {
@@ -408,12 +796,149 @@ const ui::EnrollmentTaskItemViewModel* selectedEnrollmentTask(const LvglStatusDi
   return nullptr;
 }
 
+StatusTone enrollSelectionTone(const LvglStatusDisplayData& data, bool hasTask) {
+  if (!hasTask) {
+    return taskToneFromSummary(data.lastViewModel.enrollmentTaskSummaryLine);
+  }
+  if (data.enrollmentRequestQueued) {
+    return StatusTone::Warn;
+  }
+  if (selectedEnrollmentTask(data) != nullptr) {
+    return StatusTone::Good;
+  }
+  return StatusTone::Neutral;
+}
+
+std::string enrollSelectionTitle(const LvglStatusDisplayData& data, bool hasTask) {
+  const auto* task = selectedEnrollmentTask(data);
+  if (task != nullptr) {
+    return task->title;
+  }
+  if (hasTask) {
+    return "选择任务";
+  }
+  return "暂无任务";
+}
+
+std::string enrollSelectionMeta(const LvglStatusDisplayData& data, bool hasTask) {
+  const auto* task = selectedEnrollmentTask(data);
+  if (task != nullptr) {
+    if (data.enrollmentRequestQueued) {
+      return "正在进入录脸";
+    }
+    return task->meta;
+  }
+  if (hasTask) {
+    return "点选列表后开始";
+  }
+  return compactSyncValue(data.lastViewModel.syncLine);
+}
+
+std::string enrollSelectionFooter(const LvglStatusDisplayData& data) {
+  if (data.lastViewModel.pendingQueueCount > 0) {
+    return data.lastViewModel.queueLine;
+  }
+  return compactSyncValue(data.lastViewModel.syncLine);
+}
+
+std::string captureFaceStateText(const ui::AppViewModel& viewModel) {
+  if (viewModel.captureDetectedFaceCount == 0) {
+    return "无人脸";
+  }
+  if (viewModel.captureDetectedFaceCount == 1) {
+    return "1 人脸";
+  }
+  return std::to_string(viewModel.captureDetectedFaceCount) + " 人脸";
+}
+
+StatusTone captureFaceTone(const ui::AppViewModel& viewModel) {
+  if (viewModel.captureDetectedFaceCount == 1) {
+    return StatusTone::Good;
+  }
+  if (viewModel.captureDetectedFaceCount == 0) {
+    return StatusTone::Warn;
+  }
+  return StatusTone::Error;
+}
+
+void setCaptureSampleIndicators(LvglStatusDisplayData& data) {
+  const std::size_t required = std::min<std::size_t>(
+      data.lastViewModel.captureRequiredSamples,
+      data.captureSampleDots.size());
+  const std::size_t captured = std::min<std::size_t>(
+      data.lastViewModel.captureCapturedSamples,
+      required);
+
+  for (std::size_t index = 0; index < data.captureSampleDots.size(); index += 1) {
+    lv_obj_t* dot = data.captureSampleDots[index];
+    if (dot == nullptr) {
+      continue;
+    }
+
+    if (index >= required) {
+      lv_obj_add_flag(dot, LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+
+    lv_obj_remove_flag(dot, LV_OBJ_FLAG_HIDDEN);
+    const bool done = index < captured;
+    const bool current = !done && index == captured && captured < required;
+    applyPanelStyle(
+        dot,
+        done ? kGoodHex : (current ? kAccentHex : kPanelMutedHex),
+        done ? kGoodHex : (current ? kAccentHex : kPanelBorderMutedHex),
+        kCaptureSampleDotSize / 2,
+        current ? 2 : 1);
+  }
+}
+
+void refreshChrome(LvglStatusDisplayData& data) {
+  if (data.sidebarTitleLabel != nullptr) {
+    lv_label_set_text(data.sidebarTitleLabel, data.lastViewModel.title.c_str());
+  }
+  if (data.sidebarSubtitleLabel != nullptr) {
+    lv_label_set_text(data.sidebarSubtitleLabel, data.lastViewModel.subtitle.c_str());
+  }
+  if (data.sidebarFooterLabel != nullptr) {
+    lv_label_set_text(data.sidebarFooterLabel, data.lastViewModel.footer.c_str());
+  }
+}
+
 void refreshHomePage(LvglStatusDisplayData& data) {
   lv_label_set_text(data.homePeriodLabel, data.lastViewModel.periodLine.c_str());
+  setCompactStatusChip(
+      data.homeStatusChips[0],
+      compactWifiValue(data.lastViewModel.wifiLine),
+      wifiToneFromLine(data.lastViewModel.wifiLine));
+  setCompactStatusChip(
+      data.homeStatusChips[1],
+      compactSyncValue(data.lastViewModel.syncLine),
+      syncToneFromLine(data.lastViewModel.syncLine));
+  setCompactStatusChip(
+      data.homeStatusChips[2],
+      compactTaskValue(data.lastViewModel.enrollmentTaskSummaryLine),
+      taskToneFromSummary(data.lastViewModel.enrollmentTaskSummaryLine));
   lv_label_set_text(data.homeCameraLabel, data.lastViewModel.cameraHintLine.c_str());
-  lv_label_set_text(data.homeAttendanceLabel, data.lastViewModel.attendanceResultLine.c_str());
+  lv_label_set_text(
+      data.homeAttendanceLabel,
+      (data.lastViewModel.attendanceResultLine.empty() ? "准备识别"
+                                                       : data.lastViewModel.attendanceResultLine)
+          .c_str());
+  if (data.homeAttendanceMetaLabel != nullptr) {
+    const StatusTone metaTone = homeMetaTone(data.lastViewModel);
+    lv_label_set_text(data.homeAttendanceMetaLabel, homeMetaValue(data.lastViewModel).c_str());
+    lv_obj_set_style_text_color(data.homeAttendanceMetaLabel, lv_color_hex(toneLedHex(metaTone)), 0);
+  }
   if (data.homeCameraImage != nullptr) {
     lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (data.homeCameraFrame != nullptr) {
+    const StatusTone cameraTone = genericSystemTone(data.lastViewModel.faceDetectLine);
+    applyPanelStyle(
+        data.homeCameraFrame,
+        kCameraPlaceholderHex,
+        cameraTone == StatusTone::Neutral ? kPanelBorderMutedHex : toneBorderHex(cameraTone),
+        18);
   }
   if (data.homeCameraPreviewReady) {
     lv_obj_align(data.homeCameraLabel, LV_ALIGN_BOTTOM_LEFT, 10, -8);
@@ -436,6 +961,11 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
   }
 
   lv_label_set_text(data.enrollSummaryLabel, data.lastViewModel.enrollmentTaskSummaryLine.c_str());
+  if (data.enrollMetaLabel != nullptr) {
+    const StatusTone syncTone = syncToneFromLine(data.lastViewModel.syncLine);
+    lv_label_set_text(data.enrollMetaLabel, compactSyncValue(data.lastViewModel.syncLine).c_str());
+    lv_obj_set_style_text_color(data.enrollMetaLabel, lv_color_hex(toneLedHex(syncTone)), 0);
+  }
 
   if (data.enrollTaskList != nullptr) {
     lv_obj_clean(data.enrollTaskList);
@@ -443,7 +973,6 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
       const auto& task = data.lastViewModel.enrollmentTasks[index];
       lv_obj_t* button = lv_button_create(data.enrollTaskList);
       lv_obj_set_size(button, kPageWidth - 6, kEnrollTaskHeight);
-      lv_obj_set_style_border_width(button, 0, 0);
       lv_obj_set_style_radius(button, 14, 0);
       lv_obj_set_style_margin_bottom(button, kEnrollTaskGap, 0);
       lv_obj_set_style_pad_left(button, 10, 0);
@@ -470,31 +999,43 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
   applyActionButtonStyle(data.enrollRefreshButton, true);
   applyActionButtonStyle(data.enrollStartButton, hasTask && selectedEnrollmentTask(data) != nullptr);
 
-  std::string statusText;
-  if (data.lastViewModel.periodLine.rfind("Enroll:", 0) == 0) {
-    statusText = "Capture running.";
-  } else if (!hasTask) {
-    statusText = "No tasks. Tap Refresh.";
-  } else if (data.enrollmentRequestQueued) {
-    const auto* task = selectedEnrollmentTask(data);
-    statusText = task == nullptr ? "Reselect task." : "Starting " + task->title;
-  } else if (selectedEnrollmentTask(data) != nullptr) {
-    statusText = "Task selected. Tap Start.";
-  } else {
-    statusText = "Pick a task.";
+  const StatusTone selectionTone = enrollSelectionTone(data, hasTask);
+  if (data.enrollSelectionCard != nullptr) {
+    applyPanelStyle(data.enrollSelectionCard, tonePanelHex(selectionTone), toneBorderHex(selectionTone), 16);
   }
-  lv_label_set_text(data.enrollStatusLabel, statusText.c_str());
+  setLedTone(data.enrollSelectionLed, selectionTone);
+  if (data.enrollSelectionTitleLabel != nullptr) {
+    lv_label_set_text(data.enrollSelectionTitleLabel, enrollSelectionTitle(data, hasTask).c_str());
+  }
+  if (data.enrollSelectionMetaLabel != nullptr) {
+    const std::string detail = enrollSelectionMeta(data, hasTask) + "  |  " + enrollSelectionFooter(data);
+    lv_label_set_text(data.enrollSelectionMetaLabel, detail.c_str());
+  }
 }
 
 void refreshCapturePage(LvglStatusDisplayData& data) {
   if (data.captureHintLabel != nullptr) {
     lv_label_set_text(data.captureHintLabel, data.lastViewModel.captureTitleLine.c_str());
   }
+  if (data.captureFaceStateLabel != nullptr) {
+    const StatusTone faceTone = captureFaceTone(data.lastViewModel);
+    lv_label_set_text(data.captureFaceStateLabel, captureFaceStateText(data.lastViewModel).c_str());
+    lv_obj_set_style_text_color(data.captureFaceStateLabel, lv_color_hex(toneLedHex(faceTone)), 0);
+  }
   if (data.captureStatusLabel != nullptr) {
     lv_label_set_text(data.captureStatusLabel, data.lastViewModel.captureStatusLine.c_str());
   }
   if (data.captureProgressLabel != nullptr) {
     lv_label_set_text(data.captureProgressLabel, data.lastViewModel.captureProgressLine.c_str());
+  }
+  setCaptureSampleIndicators(data);
+  if (data.captureProgressBar != nullptr) {
+    if (data.lastViewModel.captureRequiredSamples == 0) {
+      lv_obj_add_flag(data.captureProgressBar, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_remove_flag(data.captureProgressBar, LV_OBJ_FLAG_HIDDEN);
+      lv_bar_set_value(data.captureProgressBar, data.lastViewModel.captureProgressPercent, LV_ANIM_OFF);
+    }
   }
   if (data.captureCancelButton != nullptr) {
     applyActionButtonStyle(data.captureCancelButton, true);
@@ -506,16 +1047,43 @@ void refreshCapturePage(LvglStatusDisplayData& data) {
   if (data.capturePreviewImage != nullptr) {
     lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
   }
+  if (data.capturePreviewFrame != nullptr) {
+    applyPanelStyle(
+        data.capturePreviewFrame,
+        kCameraPlaceholderHex,
+        toneBorderHex(genericSystemTone(data.lastViewModel.captureStatusLine)),
+        18);
+  }
 }
 
 void refreshSystemPage(LvglStatusDisplayData& data) {
-  setSystemRowValue(data.systemRows[0], data.lastViewModel.credentialsLine);
-  setSystemRowValue(data.systemRows[1], data.lastViewModel.wifiLine);
-  setSystemRowValue(data.systemRows[2], data.lastViewModel.apiLine);
-  setSystemRowValue(data.systemRows[3], data.lastViewModel.faceLine);
-  setSystemRowValue(data.systemRows[4], data.lastViewModel.faceDetectLine);
-  setSystemRowValue(data.systemRows[5], data.lastViewModel.storageLine);
-  setSystemRowValue(data.systemRows[6], data.lastViewModel.errorLine);
+  const StatusTone activationTone = activationToneFromLine(data.lastViewModel.activationLine);
+  const StatusTone syncTone = syncToneFromLine(data.lastViewModel.syncLine);
+  if (data.systemSummaryCard != nullptr) {
+    const StatusTone summaryTone =
+        activationTone == StatusTone::Good && syncTone == StatusTone::Good ? StatusTone::Good : StatusTone::Warn;
+    applyPanelStyle(data.systemSummaryCard, tonePanelHex(summaryTone), toneBorderHex(summaryTone), 16);
+  }
+  if (data.systemActivationLabel != nullptr) {
+    lv_label_set_text(data.systemActivationLabel, data.lastViewModel.activationLine.c_str());
+    lv_obj_set_style_text_color(data.systemActivationLabel, lv_color_hex(toneLedHex(activationTone)), 0);
+  }
+  if (data.systemSyncLabel != nullptr) {
+    lv_label_set_text(data.systemSyncLabel, data.lastViewModel.syncLine.c_str());
+    lv_obj_set_style_text_color(data.systemSyncLabel, lv_color_hex(toneLedHex(syncTone)), 0);
+  }
+  if (data.systemFooterLabel != nullptr) {
+    const std::string footer = data.lastViewModel.subtitle + " | " + data.lastViewModel.footer;
+    lv_label_set_text(data.systemFooterLabel, footer.c_str());
+  }
+
+  setSystemRowValue(data.systemRows[0], data.lastViewModel.credentialsLine, credentialsToneFromLine(data.lastViewModel.credentialsLine));
+  setSystemRowValue(data.systemRows[1], data.lastViewModel.wifiLine, wifiToneFromLine(data.lastViewModel.wifiLine));
+  setSystemRowValue(data.systemRows[2], data.lastViewModel.apiLine, apiToneFromLine(data.lastViewModel.apiLine));
+  setSystemRowValue(data.systemRows[3], data.lastViewModel.faceLine, genericSystemTone(data.lastViewModel.faceLine));
+  setSystemRowValue(data.systemRows[4], data.lastViewModel.faceDetectLine, genericSystemTone(data.lastViewModel.faceDetectLine));
+  setSystemRowValue(data.systemRows[5], data.lastViewModel.storageLine, storageToneFromLine(data.lastViewModel.storageLine));
+  setSystemRowValue(data.systemRows[6], data.lastViewModel.errorLine, genericSystemTone(data.lastViewModel.errorLine));
 }
 
 void refreshCurrentPage(LvglStatusDisplayData& data) {
@@ -542,6 +1110,7 @@ void refreshUi(LvglStatusDisplayData& data) {
     return;
   }
 
+  refreshChrome(data);
   refreshNavButtons(data);
 
   if (data.lastViewModel.captureActive && data.currentPage != SidebarPage::Capture) {
@@ -683,24 +1252,19 @@ void enrollRefreshButtonEventCallback(lv_event_t* event) {
                            })) {
     enqueueNotification(*data, DisplayNotification{
                                    .level = DisplayNotificationLevel::Warning,
-                                   .text = "Busy. Retry.",
+                                   .text = "忙碌中，请重试",
                                    .durationMs = 2200,
                                });
-    if (data->enrollStatusLabel != nullptr) {
-      lv_label_set_text(data->enrollStatusLabel, "Busy. Retry.");
-    }
     return;
   }
 
   data->enrollmentRequestQueued = false;
   enqueueNotification(*data, DisplayNotification{
                                  .level = DisplayNotificationLevel::Info,
-                                 .text = "Refreshing...",
+                                 .text = "刷新中...",
                                  .durationMs = 1800,
                              });
-  if (data->enrollStatusLabel != nullptr) {
-    lv_label_set_text(data->enrollStatusLabel, "Refreshing...");
-  }
+  refreshEnrollPage(*data);
 }
 
 void enrollStartButtonEventCallback(lv_event_t* event) {
@@ -724,21 +1288,19 @@ void enrollStartButtonEventCallback(lv_event_t* event) {
                            })) {
     enqueueNotification(*data, DisplayNotification{
                                    .level = DisplayNotificationLevel::Warning,
-                                   .text = "Busy. Retry.",
+                                   .text = "忙碌中，请重试",
                                    .durationMs = 2200,
                                });
-    if (data->enrollStatusLabel != nullptr) {
-      lv_label_set_text(data->enrollStatusLabel, "Busy. Retry.");
-    }
     return;
   }
 
   data->enrollmentRequestQueued = true;
   enqueueNotification(*data, DisplayNotification{
                                  .level = DisplayNotificationLevel::Info,
-                                 .text = "Capture started.",
+                                 .text = "已开始采集",
                                  .durationMs = 2000,
                              });
+  refreshEnrollPage(*data);
   data->currentPage = SidebarPage::Capture;
   refreshUi(*data);
 }
@@ -766,7 +1328,7 @@ void captureCancelButtonEventCallback(lv_event_t* event) {
   if (!enqueueCommand(*data, command)) {
     enqueueNotification(*data, DisplayNotification{
                                    .level = DisplayNotificationLevel::Warning,
-                                   .text = "Busy. Retry.",
+                                   .text = "忙碌中，请重试",
                                    .durationMs = 1800,
                                });
     return;
@@ -775,8 +1337,8 @@ void captureCancelButtonEventCallback(lv_event_t* event) {
   enqueueNotification(*data, DisplayNotification{
                                  .level = data->lastViewModel.captureRunning ? DisplayNotificationLevel::Warning
                                                                             : DisplayNotificationLevel::Info,
-                                 .text = data->lastViewModel.captureRunning ? "Cancelling..."
-                                                                           : "Back to tasks...",
+                                 .text = data->lastViewModel.captureRunning ? "取消中..."
+                                                                           : "返回任务列表...",
                                  .durationMs = 1600,
                              });
 }
@@ -800,25 +1362,29 @@ void createSidebarButton(LvglStatusDisplayData& data, lv_obj_t* parent, const Si
 }
 
 void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
-  lv_obj_t* periodChip = lv_button_create(parent);
-  lv_obj_set_size(periodChip, kPageWidth, 30);
+  lv_obj_t* periodChip = lv_obj_create(parent);
+  lv_obj_set_size(periodChip, kPageWidth, kHomePeriodHeight);
   lv_obj_align(periodChip, LV_ALIGN_TOP_LEFT, 0, kHomePeriodY);
-  lv_obj_set_style_bg_color(periodChip, lv_color_hex(kAccentHex), 0);
-  lv_obj_set_style_bg_opa(periodChip, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(periodChip, 0, 0);
-  lv_obj_set_style_radius(periodChip, 12, 0);
+  applyPanelStyle(periodChip, kAccentHex, kPanelBorderHex, 12);
+  lv_obj_remove_flag(periodChip, LV_OBJ_FLAG_SCROLLABLE);
   data.homePeriodLabel = lv_label_create(periodChip);
+  lv_obj_set_width(data.homePeriodLabel, kPageWidth - 16);
+  lv_label_set_long_mode(data.homePeriodLabel, LV_LABEL_LONG_DOT);
   applyLabelStyle(data.homePeriodLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
   lv_obj_center(data.homePeriodLabel);
+
+  const lv_coord_t chipWidth = (kPageWidth - (kHomeStatusGap * 2)) / 3;
+  data.homeStatusChips[0] = createCompactStatusChip(parent, 0, kHomeStatusY, chipWidth, "网络");
+  data.homeStatusChips[1] =
+      createCompactStatusChip(parent, chipWidth + kHomeStatusGap, kHomeStatusY, chipWidth, "同步");
+  data.homeStatusChips[2] =
+      createCompactStatusChip(parent, (chipWidth + kHomeStatusGap) * 2, kHomeStatusY, chipWidth, "任务");
 
   lv_obj_t* cameraFrame = lv_obj_create(parent);
   data.homeCameraFrame = cameraFrame;
   lv_obj_set_size(cameraFrame, kPageWidth, kHomeCameraHeight);
   lv_obj_align(cameraFrame, LV_ALIGN_TOP_LEFT, 0, kHomeCameraY);
-  lv_obj_set_style_bg_color(cameraFrame, lv_color_hex(kCameraPlaceholderHex), 0);
-  lv_obj_set_style_bg_opa(cameraFrame, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(cameraFrame, 0, 0);
-  lv_obj_set_style_radius(cameraFrame, 18, 0);
+  applyPanelStyle(cameraFrame, kCameraPlaceholderHex, kPanelBorderMutedHex, 18);
   lv_obj_remove_flag(cameraFrame, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(cameraFrame, LV_SCROLLBAR_MODE_OFF);
   data.homeCameraImage = lv_image_create(cameraFrame);
@@ -838,19 +1404,23 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   applyLabelStyle(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, kMutedTextHex);
   lv_obj_center(data.homeCameraLabel);
 
-  lv_obj_t* attendanceCard = lv_button_create(parent);
+  lv_obj_t* attendanceCard = lv_obj_create(parent);
   lv_obj_set_size(attendanceCard, kPageWidth, kHomeAttendanceHeight);
   lv_obj_align(attendanceCard, LV_ALIGN_TOP_LEFT, 0, kHomeAttendanceY);
-  lv_obj_set_style_bg_color(attendanceCard, lv_color_hex(kPanelHex), 0);
-  lv_obj_set_style_bg_opa(attendanceCard, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(attendanceCard, 0, 0);
-  lv_obj_set_style_radius(attendanceCard, 14, 0);
+  applyPanelStyle(attendanceCard, kPanelHex, kPanelBorderHex, 14);
   lv_obj_set_style_pad_all(attendanceCard, 10, 0);
+  lv_obj_remove_flag(attendanceCard, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t* attendanceCaption = lv_label_create(attendanceCard);
   applyCaptionStyle(attendanceCaption, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(attendanceCaption, "Status");
+  lv_label_set_text(attendanceCaption, "考勤");
   lv_obj_align(attendanceCaption, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  data.homeAttendanceMetaLabel = lv_label_create(attendanceCard);
+  lv_obj_set_width(data.homeAttendanceMetaLabel, 92);
+  lv_label_set_long_mode(data.homeAttendanceMetaLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.homeAttendanceMetaLabel, LV_TEXT_ALIGN_RIGHT);
+  lv_obj_align(data.homeAttendanceMetaLabel, LV_ALIGN_TOP_RIGHT, 0, 0);
 
   data.homeAttendanceLabel = lv_label_create(attendanceCard);
   lv_obj_set_width(data.homeAttendanceLabel, kPageWidth - 20);
@@ -862,53 +1432,79 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
 void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_t* header = lv_label_create(parent);
   applyCaptionStyle(header, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(header, "Tasks");
+  lv_label_set_text(header, "录脸任务");
   lv_obj_set_width(header, kPageWidth);
   lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, kEnrollHeaderY);
 
-  data.enrollSummaryLabel = createPageLabel(parent, 16, kPageWidth, kMutedTextHex);
+  data.enrollSummaryLabel = createPageLabel(parent, kEnrollSummaryY, kPageWidth - 84, kMutedTextHex);
+  lv_label_set_long_mode(data.enrollSummaryLabel, LV_LABEL_LONG_DOT);
+  data.enrollMetaLabel = lv_label_create(parent);
+  lv_obj_set_width(data.enrollMetaLabel, 80);
+  lv_label_set_long_mode(data.enrollMetaLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.enrollMetaLabel, LV_TEXT_ALIGN_RIGHT);
+  lv_obj_align(data.enrollMetaLabel, LV_ALIGN_TOP_RIGHT, 0, kEnrollMetaY);
   data.enrollTaskList = lv_obj_create(parent);
   lv_obj_set_size(data.enrollTaskList, kPageWidth + 6, kEnrollTaskListHeight);
   lv_obj_align(data.enrollTaskList, LV_ALIGN_TOP_LEFT, 0, kEnrollTaskY);
-  lv_obj_set_style_bg_opa(data.enrollTaskList, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(data.enrollTaskList, 0, 0);
+  applyPanelStyle(data.enrollTaskList, kPanelMutedHex, kPanelBorderMutedHex, 16);
   lv_obj_set_style_pad_all(data.enrollTaskList, 0, 0);
   lv_obj_set_style_pad_right(data.enrollTaskList, 6, 0);
   lv_obj_set_scroll_dir(data.enrollTaskList, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(data.enrollTaskList, LV_SCROLLBAR_MODE_AUTO);
 
-  const lv_coord_t actionButtonWidth = (kPageWidth - kEnrollActionGap) / 2;
+  data.enrollSelectionCard = lv_obj_create(parent);
+  lv_obj_set_size(data.enrollSelectionCard, kPageWidth, kEnrollDetailHeight);
+  lv_obj_align(data.enrollSelectionCard, LV_ALIGN_TOP_LEFT, 0, kEnrollDetailY);
+  applyPanelStyle(data.enrollSelectionCard, kPanelMutedHex, kPanelBorderHex, 16);
+  lv_obj_set_style_pad_left(data.enrollSelectionCard, 10, 0);
+  lv_obj_set_style_pad_right(data.enrollSelectionCard, 10, 0);
+  lv_obj_set_style_pad_top(data.enrollSelectionCard, 8, 0);
+  lv_obj_set_style_pad_bottom(data.enrollSelectionCard, 8, 0);
+  lv_obj_remove_flag(data.enrollSelectionCard, LV_OBJ_FLAG_SCROLLABLE);
 
-  data.enrollRefreshButton = lv_button_create(parent);
+  data.enrollSelectionLed = lv_led_create(data.enrollSelectionCard);
+  lv_obj_set_size(data.enrollSelectionLed, 10, 10);
+  lv_obj_align(data.enrollSelectionLed, LV_ALIGN_TOP_LEFT, 0, 2);
+
+  data.enrollSelectionTitleLabel = lv_label_create(data.enrollSelectionCard);
+  lv_obj_set_width(data.enrollSelectionTitleLabel, kPageWidth - 34);
+  lv_label_set_long_mode(data.enrollSelectionTitleLabel, LV_LABEL_LONG_DOT);
+  applyCompactValueStyle(data.enrollSelectionTitleLabel, LV_TEXT_ALIGN_LEFT, kTextColorHex);
+  lv_obj_align(data.enrollSelectionTitleLabel, LV_ALIGN_TOP_LEFT, 18, 0);
+
+  data.enrollSelectionMetaLabel = lv_label_create(data.enrollSelectionCard);
+  lv_obj_set_width(data.enrollSelectionMetaLabel, kPageWidth - 20);
+  lv_label_set_long_mode(data.enrollSelectionMetaLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.enrollSelectionMetaLabel, LV_TEXT_ALIGN_LEFT);
+  lv_obj_align(data.enrollSelectionMetaLabel, LV_ALIGN_TOP_LEFT, 0, 16);
+
+  const lv_coord_t actionButtonWidth = (kPageWidth - 20 - kEnrollActionGap) / 2;
+
+  data.enrollRefreshButton = lv_button_create(data.enrollSelectionCard);
   lv_obj_set_size(data.enrollRefreshButton, actionButtonWidth, kEnrollActionHeight);
-  lv_obj_align(data.enrollRefreshButton, LV_ALIGN_TOP_LEFT, 0, kEnrollActionY);
+  lv_obj_align(data.enrollRefreshButton, LV_ALIGN_BOTTOM_LEFT, 0, 0);
   lv_obj_add_event_cb(data.enrollRefreshButton, enrollRefreshButtonEventCallback, LV_EVENT_CLICKED, &data);
-  lv_obj_set_style_border_width(data.enrollRefreshButton, 0, 0);
   lv_obj_set_style_radius(data.enrollRefreshButton, 14, 0);
   lv_obj_t* refreshLabel = lv_label_create(data.enrollRefreshButton);
-  applyLabelStyle(refreshLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
-  lv_label_set_text(refreshLabel, "Refresh");
+  applyCompactValueStyle(refreshLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  lv_label_set_text(refreshLabel, "刷新");
   lv_obj_center(refreshLabel);
 
-  data.enrollStartButton = lv_button_create(parent);
+  data.enrollStartButton = lv_button_create(data.enrollSelectionCard);
   lv_obj_set_size(data.enrollStartButton, actionButtonWidth, kEnrollActionHeight);
-  lv_obj_align(data.enrollStartButton, LV_ALIGN_TOP_LEFT, actionButtonWidth + kEnrollActionGap, kEnrollActionY);
+  lv_obj_align(data.enrollStartButton, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
   lv_obj_add_event_cb(data.enrollStartButton, enrollStartButtonEventCallback, LV_EVENT_CLICKED, &data);
-  lv_obj_set_style_border_width(data.enrollStartButton, 0, 0);
   lv_obj_set_style_radius(data.enrollStartButton, 14, 0);
   lv_obj_t* startLabel = lv_label_create(data.enrollStartButton);
-  applyLabelStyle(startLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
-  lv_label_set_text(startLabel, "Start");
+  applyCompactValueStyle(startLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  lv_label_set_text(startLabel, "开始");
   lv_obj_center(startLabel);
-
-  data.enrollStatusLabel = createPageLabel(parent, kEnrollStatusY, kPageWidth, kMutedTextHex);
-  lv_label_set_long_mode(data.enrollStatusLabel, LV_LABEL_LONG_DOT);
 }
 
 void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_t* header = lv_label_create(parent);
   applyCaptionStyle(header, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(header, "Capture");
+  lv_label_set_text(header, "采集");
   lv_obj_set_width(header, kPageWidth);
   lv_obj_align(header, LV_ALIGN_TOP_LEFT, 0, kCaptureHeaderY);
 
@@ -916,10 +1512,7 @@ void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   data.capturePreviewFrame = previewFrame;
   lv_obj_set_size(previewFrame, kPageWidth, kCapturePreviewHeight);
   lv_obj_align(previewFrame, LV_ALIGN_TOP_LEFT, 0, kCapturePreviewY);
-  lv_obj_set_style_bg_color(previewFrame, lv_color_hex(kCameraPlaceholderHex), 0);
-  lv_obj_set_style_bg_opa(previewFrame, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_width(previewFrame, 0, 0);
-  lv_obj_set_style_radius(previewFrame, 18, 0);
+  applyPanelStyle(previewFrame, kCameraPlaceholderHex, kPanelBorderMutedHex, 18);
   lv_obj_remove_flag(previewFrame, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(previewFrame, LV_SCROLLBAR_MODE_OFF);
 
@@ -941,32 +1534,94 @@ void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   applyLabelStyle(data.captureHintLabel, LV_TEXT_ALIGN_CENTER, kMutedTextHex);
   lv_obj_align(data.captureHintLabel, LV_ALIGN_TOP_MID, 0, 10);
 
+  data.captureFaceStateLabel = lv_label_create(previewFrame);
+  lv_obj_set_width(data.captureFaceStateLabel, kCaptureFacePillWidth);
+  lv_label_set_long_mode(data.captureFaceStateLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.captureFaceStateLabel, LV_TEXT_ALIGN_RIGHT, kMutedTextHex);
+  lv_obj_align(data.captureFaceStateLabel, LV_ALIGN_TOP_RIGHT, -10, 10);
+
+  const lv_coord_t sampleStripWidth =
+      static_cast<lv_coord_t>(kCaptureSampleIndicatorCount) * kCaptureSampleDotSize +
+      static_cast<lv_coord_t>(kCaptureSampleIndicatorCount - 1) * kCaptureSampleDotGap;
+  const lv_coord_t sampleStartX = (kPageWidth - sampleStripWidth) / 2;
+  for (std::size_t index = 0; index < data.captureSampleDots.size(); index += 1) {
+    data.captureSampleDots[index] = lv_obj_create(previewFrame);
+    lv_obj_set_size(data.captureSampleDots[index], kCaptureSampleDotSize, kCaptureSampleDotSize);
+    lv_obj_align(
+        data.captureSampleDots[index],
+        LV_ALIGN_BOTTOM_LEFT,
+        sampleStartX + static_cast<lv_coord_t>(index) * (kCaptureSampleDotSize + kCaptureSampleDotGap),
+        -10);
+    applyPanelStyle(
+        data.captureSampleDots[index],
+        kPanelMutedHex,
+        kPanelBorderMutedHex,
+        kCaptureSampleDotSize / 2);
+    lv_obj_remove_flag(data.captureSampleDots[index], LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(data.captureSampleDots[index], LV_OBJ_FLAG_HIDDEN);
+  }
+
   data.captureStatusLabel = createPageLabel(parent, kCaptureStatusY, kPageWidth, kTextColorHex);
   lv_label_set_long_mode(data.captureStatusLabel, LV_LABEL_LONG_WRAP);
 
   data.captureProgressLabel = createPageLabel(parent, kCaptureProgressY, kPageWidth, kMutedTextHex);
   lv_label_set_long_mode(data.captureProgressLabel, LV_LABEL_LONG_WRAP);
 
+  data.captureProgressBar = lv_bar_create(parent);
+  lv_obj_set_size(data.captureProgressBar, kPageWidth, kCaptureBarHeight);
+  lv_obj_align(data.captureProgressBar, LV_ALIGN_TOP_LEFT, 0, kCaptureBarY);
+  lv_bar_set_range(data.captureProgressBar, 0, 100);
+  lv_obj_set_style_bg_color(data.captureProgressBar, lv_color_hex(kPanelMutedHex), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(data.captureProgressBar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(data.captureProgressBar, lv_color_hex(kAccentHex), LV_PART_INDICATOR);
+  lv_obj_set_style_radius(data.captureProgressBar, 10, LV_PART_MAIN);
+  lv_obj_set_style_radius(data.captureProgressBar, 10, LV_PART_INDICATOR);
+  lv_obj_add_flag(data.captureProgressBar, LV_OBJ_FLAG_HIDDEN);
+
   data.captureCancelButton = lv_button_create(parent);
   lv_obj_set_size(data.captureCancelButton, kPageWidth, kCaptureActionHeight);
   lv_obj_align(data.captureCancelButton, LV_ALIGN_TOP_LEFT, 0, kCaptureActionY);
   lv_obj_add_event_cb(data.captureCancelButton, captureCancelButtonEventCallback, LV_EVENT_CLICKED, &data);
-  lv_obj_set_style_border_width(data.captureCancelButton, 0, 0);
   lv_obj_set_style_radius(data.captureCancelButton, 14, 0);
   lv_obj_t* cancelLabel = lv_label_create(data.captureCancelButton);
-  applyLabelStyle(cancelLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
-  lv_label_set_text(cancelLabel, "Cancel");
+  applyCompactValueStyle(cancelLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  lv_label_set_text(cancelLabel, "取消");
   lv_obj_center(cancelLabel);
 }
 
 void createSystemPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
-  data.systemRows[0] = createSystemRow(parent, 0, "Credentials");
-  data.systemRows[1] = createSystemRow(parent, kSystemRowHeight + kSystemRowGap, "WiFi");
-  data.systemRows[2] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 2, "API");
-  data.systemRows[3] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 3, "Face");
-  data.systemRows[4] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 4, "Detect");
-  data.systemRows[5] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 5, "Storage");
-  data.systemRows[6] = createSystemRow(parent, (kSystemRowHeight + kSystemRowGap) * 6, "Error");
+  data.systemSummaryCard = lv_obj_create(parent);
+  lv_obj_set_size(data.systemSummaryCard, kPageWidth, kSystemSummaryHeight);
+  lv_obj_align(data.systemSummaryCard, LV_ALIGN_TOP_LEFT, 0, kSystemSummaryY);
+  applyPanelStyle(data.systemSummaryCard, kPanelMutedHex, kPanelBorderHex, 16);
+  lv_obj_set_style_pad_all(data.systemSummaryCard, 10, 0);
+  lv_obj_remove_flag(data.systemSummaryCard, LV_OBJ_FLAG_SCROLLABLE);
+
+  data.systemActivationLabel = lv_label_create(data.systemSummaryCard);
+  lv_obj_set_width(data.systemActivationLabel, kPageWidth - 20);
+  lv_label_set_long_mode(data.systemActivationLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.systemActivationLabel, LV_TEXT_ALIGN_LEFT, kTextColorHex);
+  lv_obj_align(data.systemActivationLabel, LV_ALIGN_TOP_LEFT, 0, 0);
+
+  data.systemSyncLabel = lv_label_create(data.systemSummaryCard);
+  lv_obj_set_width(data.systemSyncLabel, kPageWidth - 20);
+  lv_label_set_long_mode(data.systemSyncLabel, LV_LABEL_LONG_DOT);
+  applyLabelStyle(data.systemSyncLabel, LV_TEXT_ALIGN_LEFT);
+  lv_obj_align(data.systemSyncLabel, LV_ALIGN_TOP_LEFT, 0, 18);
+
+  data.systemFooterLabel = lv_label_create(data.systemSummaryCard);
+  lv_obj_set_width(data.systemFooterLabel, kPageWidth - 20);
+  lv_label_set_long_mode(data.systemFooterLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.systemFooterLabel, LV_TEXT_ALIGN_LEFT);
+  lv_obj_align(data.systemFooterLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
+
+  data.systemRows[0] = createSystemRow(parent, kSystemRowsY, "凭据");
+  data.systemRows[1] = createSystemRow(parent, kSystemRowsY + (kSystemRowHeight + kSystemRowGap), "网络");
+  data.systemRows[2] = createSystemRow(parent, kSystemRowsY + (kSystemRowHeight + kSystemRowGap) * 2, "接口");
+  data.systemRows[3] = createSystemRow(parent, kSystemRowsY + (kSystemRowHeight + kSystemRowGap) * 3, "识别");
+  data.systemRows[4] = createSystemRow(parent, kSystemRowsY + (kSystemRowHeight + kSystemRowGap) * 4, "检测");
+  data.systemRows[5] = createSystemRow(parent, kSystemRowsY + (kSystemRowHeight + kSystemRowGap) * 5, "存储");
+  data.systemRows[6] = createSystemRow(parent, kSystemRowsY + (kSystemRowHeight + kSystemRowGap) * 6, "错误");
 }
 
 void createUi(LvglStatusDisplayData& data) {
@@ -984,11 +1639,23 @@ void createUi(LvglStatusDisplayData& data) {
   lv_obj_remove_flag(sidebar, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(sidebar, LV_SCROLLBAR_MODE_OFF);
 
-  lv_obj_t* sidebarTitle = lv_label_create(sidebar);
-  applyLabelStyle(sidebarTitle, LV_TEXT_ALIGN_CENTER);
-  lv_label_set_text(sidebarTitle, "Hitomi");
-  lv_obj_set_width(sidebarTitle, kSidebarWidth);
-  lv_obj_align(sidebarTitle, LV_ALIGN_TOP_MID, 0, kSidebarTitleY);
+  data.sidebarTitleLabel = lv_label_create(sidebar);
+  lv_obj_set_width(data.sidebarTitleLabel, kSidebarWidth - 8);
+  lv_label_set_long_mode(data.sidebarTitleLabel, LV_LABEL_LONG_WRAP);
+  applyLabelStyle(data.sidebarTitleLabel, LV_TEXT_ALIGN_CENTER);
+  lv_obj_align(data.sidebarTitleLabel, LV_ALIGN_TOP_MID, 0, kSidebarTitleY);
+
+  data.sidebarSubtitleLabel = lv_label_create(sidebar);
+  lv_obj_set_width(data.sidebarSubtitleLabel, kSidebarWidth - 10);
+  lv_label_set_long_mode(data.sidebarSubtitleLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.sidebarSubtitleLabel, LV_TEXT_ALIGN_CENTER);
+  lv_obj_align(data.sidebarSubtitleLabel, LV_ALIGN_TOP_MID, 0, kSidebarSubtitleY);
+
+  data.sidebarFooterLabel = lv_label_create(sidebar);
+  lv_obj_set_width(data.sidebarFooterLabel, kSidebarWidth - 10);
+  lv_label_set_long_mode(data.sidebarFooterLabel, LV_LABEL_LONG_DOT);
+  applyCaptionStyle(data.sidebarFooterLabel, LV_TEXT_ALIGN_CENTER);
+  lv_obj_align(data.sidebarFooterLabel, LV_ALIGN_BOTTOM_MID, 0, kSidebarFooterY);
 
   for (std::size_t index = 0; index < kSidebarPages.size(); index += 1) {
     createSidebarButton(data, sidebar, kSidebarPages[index], index);

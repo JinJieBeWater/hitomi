@@ -300,7 +300,7 @@ void applyEnrollmentReportResult(
       result.data->status == "success" || result.data->status == "failed" || result.data->status == "cancelled";
   if (result.data->applied || terminalStatus) {
     const std::string employeeName =
-        state.activeEnrollmentEmployeeName.value_or(report.employeeId.empty() ? "selected employee" : report.employeeId);
+        state.activeEnrollmentEmployeeName.value_or(report.employeeId.empty() ? "所选员工" : report.employeeId);
     const bool cancelledByServer = result.data->status == "cancelled";
     const bool cancelledLocally =
         report.failureReason.has_value() && report.failureReason.value() == "ENROLLMENT_CANCELLED";
@@ -320,9 +320,9 @@ void applyEnrollmentReportResult(
           : failedByServer ? EnrollmentRunState::Failed
                            : EnrollmentRunState::Done;
       state.enrollmentStatusDetail =
-          (cancelledByServer || cancelledLocally) ? std::optional<std::string>("Cancelled")
-          : failedByServer ? std::optional<std::string>("Failed")
-                           : std::optional<std::string>("Applied");
+          (cancelledByServer || cancelledLocally) ? std::optional<std::string>("已取消")
+          : failedByServer ? std::optional<std::string>("失败")
+                           : std::optional<std::string>("已完成");
       state.enrollmentFailureReason =
           (cancelledByServer || cancelledLocally) ? std::optional<std::string>("ENROLLMENT_CANCELLED")
           : failedByServer ? std::optional<std::string>("ENROLLMENT_FAILED")
@@ -341,9 +341,9 @@ void applyEnrollmentReportResult(
         (cancelledByServer || cancelledLocally) ? infra::DisplayNotificationLevel::Warning
         : failedByServer ? infra::DisplayNotificationLevel::Error
                          : infra::DisplayNotificationLevel::Success,
-        (cancelledByServer || cancelledLocally) ? ("Cancelled: " + employeeName)
-        : failedByServer ? ("Failed: " + employeeName)
-                         : ("Done: " + employeeName),
+        (cancelledByServer || cancelledLocally) ? ("已取消：" + employeeName)
+        : failedByServer ? ("失败：" + employeeName)
+                         : ("已完成：" + employeeName),
         (cancelledByServer || cancelledLocally) ? 2800 : 2200);
     state.renderDirty = true;
     return;
