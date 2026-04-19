@@ -219,6 +219,11 @@ async function openSerialConfigPage() {
   serialConnectLoading.value = true;
 
   try {
+    if (!serial.supported.value) {
+      await navigateTo("/devices/serial");
+      return;
+    }
+
     await serial.requestPortConnection();
     await navigateTo("/devices/serial");
   } catch (error: any) {

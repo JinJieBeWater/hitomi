@@ -48,6 +48,7 @@ const wifiProfiles = ref<WifiProfileFormItem[]>([]);
 const runtimeConfig = useRuntimeConfig();
 const configuredServerUrl =
   typeof runtimeConfig.public.serverUrl === "string" ? runtimeConfig.public.serverUrl.trim() : "";
+const chromeFlagsUrl = "chrome://flags/#unsafely-treat-insecure-origin-as-secure";
 
 const deviceId = computed(() => createdDevice.value?.id ?? dbDevice.value?.id ?? null);
 const currentOrigin = computed(() => (import.meta.client ? window.location.origin : ""));
@@ -188,6 +189,36 @@ const backendOriginDescription = computed(() => {
 });
 const logCount = computed(() => serial.serialLogs.value.length);
 const lastLogPreview = computed(() => serial.lastRawLine.value || "等待新的串口输出");
+const serialSupportTitle = computed(() => {
+  if (serial.supportInfo.value.reason === "insecure_context") {
+    return "当前页面不是安全上下文";
+  }
+
+  if (serial.supportInfo.value.reason === "unsupported_browser") {
+    return "当前浏览器不支持 Web Serial";
+  }
+
+  return "当前页面暂时无法访问 Web Serial";
+});
+const serialSupportDescription = computed(() => {
+  if (serial.supportInfo.value.reason === "insecure_context") {
+    return "当前页面不是 HTTPS 或 localhost。先把这个地址加入 Chrome 安全列表，再回来连接设备。";
+  }
+
+  if (serial.supportInfo.value.reason === "unsupported_browser") {
+    return "请改用桌面版 Chrome、Edge 或其他 Chromium 浏览器打开后台。";
+  }
+
+  return "请确认你使用的是桌面版 Chromium 浏览器，并通过 HTTPS 或 localhost 打开后台。";
+});
+const serialSupportTip = computed(() => {
+  if (serial.supportInfo.value.reason === "insecure_context") {
+    return "也可以直接用 localhost 打开后台，这样不需要额外配置。";
+  }
+
+  return "如果已经在 Chromium 浏览器中打开但仍不可用，请优先检查当前地址是否为 HTTPS 或 localhost。";
+});
+const serialWhitelistOrigin = computed(() => currentOrigin.value || "http://你的局域网IP:3001");
 
 function mkId() {
   return (
@@ -879,23 +910,38 @@ onBeforeUnmount(() => {
               <UIcon name="i-lucide-monitor-warning" class="mt-0.5 size-5 shrink-0 text-amber-600 dark:text-amber-400" />
               <div class="space-y-3">
                 <div>
-                  <div class="font-semibold text-amber-900 dark:text-amber-200">当前页面不支持 Web Serial</div>
+                  <div class="font-semibold text-amber-900 dark:text-amber-200">
+                    {{ serialSupportTitle }}
+                  </div>
                   <div class="mt-1 text-amber-800 dark:text-amber-300">
-                    Web Serial API 仅在<strong>安全上下文</strong>（HTTPS 或 localhost）下可用。
-                    通过局域网 IP 访问时需手动开启 Chrome 实验性标志。
+                    {{ serialSupportDescription }}
                   </div>
                 </div>
-                <div class="space-y-1.5">
-                  <div class="font-medium text-amber-900 dark:text-amber-200">解决方法：</div>
-                  <ol class="list-inside list-decimal space-y-1 text-amber-800 dark:text-amber-300">
-                    <li>在 Chrome 地址栏打开 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">chrome://flags/#unsafely-treat-insecure-origin-as-secure</code></li>
-                    <li>将当前页面地址（<code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">{{ currentOrigin }}</code>）填入输入框</li>
-                    <li>点击 <strong>Enabled</strong>，然后点击 <strong>Relaunch</strong> 重启浏览器</li>
-                    <li>重新打开本页面</li>
-                  </ol>
+                <div
+                  v-if="serial.supportInfo.value.reason === 'insecure_context'"
+                  class="space-y-3 rounded-2xl border border-amber-200/80 bg-white/70 p-3 dark:border-amber-800/60 dark:bg-black/10"
+                >
+                  <div class="space-y-1">
+                    <div class="font-medium text-amber-900 dark:text-amber-200">当前需要加入安全列表的地址</div>
+                    <div class="rounded-xl bg-amber-100/80 px-3 py-2 font-mono text-xs break-all text-amber-950 dark:bg-amber-900/50 dark:text-amber-100">
+                      {{ serialWhitelistOrigin }}
+                    </div>
+                    <div class="text-xs text-amber-700 dark:text-amber-400">
+                      请手动复制这个地址。
+                    </div>
+                  </div>
+
+                  <div class="space-y-1">
+                    <div class="font-medium text-amber-900 dark:text-amber-200">操作步骤</div>
+                    <ol class="list-inside list-decimal space-y-1 text-amber-800 dark:text-amber-300">
+                      <li>新开 Chrome 标签页，手动打开 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">{{ chromeFlagsUrl }}</code></li>
+                      <li>把 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">{{ serialWhitelistOrigin }}</code> 粘贴到 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">Insecure origins treated as secure</code> 输入框</li>
+                      <li>设为 <strong>Enabled</strong>，点击 <strong>Relaunch</strong>，然后回到本页重试</li>
+                    </ol>
+                  </div>
                 </div>
                 <div class="text-amber-700 dark:text-amber-400">
-                  或者直接在运行服务的机器上用 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">http://localhost</code> 访问浏览器端，无需额外配置；设备端后台地址会默认优先填充当前 Web 应用地址 <code class="rounded bg-amber-100 px-1 font-mono text-xs dark:bg-amber-900/60">{{ preferredBackendOrigin || "（未配置）" }}</code>。
+                  {{ serialSupportTip }}
                 </div>
               </div>
             </div>

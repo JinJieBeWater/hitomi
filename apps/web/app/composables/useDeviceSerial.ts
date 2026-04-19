@@ -1,5 +1,10 @@
 import { computed, ref } from "vue";
 
+import {
+  resolveDeviceSerialSupport,
+  type DeviceSerialSupportInfo,
+} from "~/utils/deviceSerialSupport";
+
 type SerialCommand =
   | { type: "get_config" }
   | {
@@ -63,12 +68,71 @@ type RestoreAuthorizedPortResult =
   | { status: "none" }
   | { status: "multiple" };
 
+type BrowserBrand = {
+  brand?: string;
+};
+
+type NavigatorWithSerial = Navigator & {
+  serial?: BrowserSerialApi;
+  userAgentData?: {
+    brands?: BrowserBrand[];
+  };
+};
+
 function getSerialApi(): BrowserSerialApi | null {
   if (!import.meta.client || typeof navigator === "undefined") {
     return null;
   }
 
-  return (navigator as Navigator & { serial?: BrowserSerialApi }).serial ?? null;
+  return (navigator as NavigatorWithSerial).serial ?? null;
+}
+
+function isChromiumBrowser() {
+  if (!import.meta.client || typeof navigator === "undefined") {
+    return false;
+  }
+
+  const brands = (navigator as NavigatorWithSerial).userAgentData?.brands ?? [];
+  if (
+    brands.some((item) =>
+      /\b(Chromium|Google Chrome|Microsoft Edge|Opera)\b/i.test(item.brand || ""),
+    )
+  ) {
+    return true;
+  }
+
+  const userAgent = navigator.userAgent || "";
+  return /\b(Chrome|Chromium|Edg|OPR)\b/i.test(userAgent) && !/\bFirefox\b/i.test(userAgent);
+}
+
+function getDeviceSerialSupportInfo(): DeviceSerialSupportInfo {
+  if (!import.meta.client || typeof window === "undefined") {
+    return resolveDeviceSerialSupport({
+      hasSerialApi: false,
+      isSecureContext: false,
+      isChromiumBrowser: false,
+    });
+  }
+
+  return resolveDeviceSerialSupport({
+    hasSerialApi: getSerialApi() !== null,
+    isSecureContext: window.isSecureContext,
+    isChromiumBrowser: isChromiumBrowser(),
+  });
+}
+
+function buildUnsupportedSerialMessage() {
+  const support = getDeviceSerialSupportInfo();
+
+  if (support.reason === "insecure_context") {
+    return "当前页面不是安全上下文。Chrome 仅在 HTTPS 或 localhost 下可用 Web Serial。";
+  }
+
+  if (support.reason === "unsupported_browser") {
+    return "当前浏览器不支持 Web Serial，请改用桌面版 Chromium 浏览器。";
+  }
+
+  return "当前页面暂时无法访问 Web Serial，请确认你使用的是桌面版 Chromium 浏览器，并通过 HTTPS 或 localhost 打开后台。";
 }
 
 function isProvisioningResponse(value: unknown): value is DeviceSerialResponse {
@@ -181,7 +245,8 @@ const sharedWriter = ref<WritableStreamDefaultWriter<Uint8Array> | null>(null);
 const sharedLineBuffer = ref("");
 const sharedLastRawLine = ref("");
 const sharedSerialLogs = ref<string[]>([]);
-const sharedSupported = computed(() => getSerialApi() !== null);
+const sharedSupportInfo = computed(() => getDeviceSerialSupportInfo());
+const sharedSupported = computed(() => sharedSupportInfo.value.available);
 const sharedConnected = computed(() => sharedPort.value !== null);
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -349,7 +414,7 @@ export function useDeviceSerial() {
 
     const serialApi = getSerialApi();
     if (!serialApi) {
-      throw new Error("当前浏览器不支持 Web Serial，请改用 Chromium 浏览器。");
+      throw new Error(buildUnsupportedSerialMessage());
     }
 
     const nextPort = await serialApi.requestPort();
@@ -452,6 +517,7 @@ export function useDeviceSerial() {
   }
 
   return {
+    supportInfo: sharedSupportInfo,
     supported: sharedSupported,
     connected: sharedConnected,
     lastRawLine: sharedLastRawLine,
