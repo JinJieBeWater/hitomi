@@ -18,6 +18,9 @@ std::vector<std::string> collectStaleTemplateEmployeeIds(
 
 std::optional<AttendanceRecordType> classifyAttendanceType(
     const AttendanceConfigSnapshot& config, uint64_t recognizedAt);
+bool isPlausibleUnixEpochMs(uint64_t epochMs);
+std::optional<uint64_t> projectUnixEpochMs(
+    uint64_t anchorEpochMs, uint64_t anchorUptimeMs, uint64_t currentUptimeMs);
 
 QueueMutationResult enqueueAttendanceRecord(
     std::vector<PendingAttendanceRecord>& queue, const PendingAttendanceRecord& candidate);

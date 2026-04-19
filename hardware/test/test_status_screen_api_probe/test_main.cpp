@@ -124,6 +124,24 @@ void testStatusScreenShowsEnrollmentCancelledState() {
   expect(view.captureActionLabel == "返回", "cancelled state should offer a return action");
 }
 
+void testStatusScreenPrefersProjectedWallClockTime() {
+  app::RuntimeStatus status = {};
+  status.currentWallClockTimeMs = 1'774'660'200'000ULL;
+  status.snapshots.attendanceConfig = core::AttendanceConfigSnapshot{
+      .id = "default",
+      .workStartMinute = 540,
+      .workEndMinute = 600,
+      .offStartMinute = 1080,
+      .offEndMinute = 1140,
+      .updatedAt = 1,
+  };
+  status.snapshots.lastServerTime = 1ULL;
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.periodLine == "时段：上班", "period line should use the projected wall-clock time");
+}
+
 }  // namespace
 
 int main() {
@@ -134,6 +152,7 @@ int main() {
     testStatusScreenShowsEnrollmentFailureState();
     testStatusScreenLocalizesEnrollmentFailureReason();
     testStatusScreenShowsEnrollmentCancelledState();
+    testStatusScreenPrefersProjectedWallClockTime();
     std::cout << "[PASS] status screen api probe" << '\n';
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

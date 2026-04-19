@@ -496,8 +496,8 @@ std::string apiLabel(const app::RuntimeStatus& status) {
 }
 
 uint64_t effectiveStatusTime(const app::RuntimeStatus& status) {
-  if (status.snapshots.lastServerTime > 0) {
-    return status.snapshots.lastServerTime;
+  if (status.currentWallClockTimeMs.has_value()) {
+    return status.currentWallClockTimeMs.value();
   }
 
   return static_cast<uint64_t>(std::time(nullptr)) * 1000ULL;

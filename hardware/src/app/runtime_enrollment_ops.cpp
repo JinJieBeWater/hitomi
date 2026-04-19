@@ -73,6 +73,17 @@ void enqueueEnrollmentReport(
   persistPendingEnrollmentReports(context, state);
 }
 
+face::EnrollmentResult normalizeEnrollmentResultTimestamp(
+    const RuntimeState& state,
+    const face::EnrollmentResult& result,
+    uint32_t nowMs) {
+  face::EnrollmentResult normalized = result;
+  if (const auto resolvedFinishedAt = resolveWallClockTimeMs(state, nowMs); resolvedFinishedAt.has_value()) {
+    normalized.finishedAt = resolvedFinishedAt.value();
+  }
+  return normalized;
+}
+
 void notify(
     const RuntimeContext& context,
     infra::DisplayNotificationLevel level,
@@ -236,10 +247,11 @@ void cancelEnrollmentTask(
     return;
   }
 
+  const auto normalizedResult = normalizeEnrollmentResultTimestamp(state, result.value(), nowMs);
   state.enrollmentFailureReason = "ENROLLMENT_CANCELLED";
   state.enrollmentState = EnrollmentRunState::Reporting;
   state.enrollmentStatusDetail = "正在上报取消结果";
-  enqueueEnrollmentReport(context, state, result.value(), std::optional<std::string>("ENROLLMENT_CANCELLED"));
+  enqueueEnrollmentReport(context, state, normalizedResult, std::optional<std::string>("ENROLLMENT_CANCELLED"));
   state.lastErrorCode = "ENROLLMENT_CANCELLED";
   notify(context, infra::DisplayNotificationLevel::Warning, "已取消，正在上报", 1800);
   state.renderDirty = true;
@@ -284,22 +296,23 @@ void processEnrollmentFrame(
     state.renderDirty = true;
     return;
   }
+  const auto normalizedResult = normalizeEnrollmentResultTimestamp(state, result.value(), nowMs);
 
-  state.enrollmentFailureReason = result->failureReason;
-  if (!result->success) {
+  state.enrollmentFailureReason = normalizedResult.failureReason;
+  if (!normalizedResult.success) {
     Serial.printf(
         "[APP] enrollment local failure task=%s employee=%s reason=%s\n",
-        result->taskId.c_str(),
-        result->employeeId.c_str(),
-        result->failureReason.has_value() ? result->failureReason->c_str() : "UNKNOWN");
+        normalizedResult.taskId.c_str(),
+        normalizedResult.employeeId.c_str(),
+        normalizedResult.failureReason.has_value() ? normalizedResult.failureReason->c_str() : "UNKNOWN");
     state.enrollmentState = EnrollmentRunState::Reporting;
     state.enrollmentStatusDetail = "正在上报录脸失败";
-    enqueueEnrollmentReport(context, state, result.value(), result->failureReason);
-    state.lastErrorCode = result->failureReason;
+    enqueueEnrollmentReport(context, state, normalizedResult, normalizedResult.failureReason);
+    state.lastErrorCode = normalizedResult.failureReason;
     notify(
         context,
         infra::DisplayNotificationLevel::Error,
-        "录脸失败：" + result->failureReason.value_or("UNKNOWN"),
+        "录脸失败：" + normalizedResult.failureReason.value_or("UNKNOWN"),
         3200);
     state.renderDirty = true;
     return;
@@ -309,23 +322,30 @@ void processEnrollmentFrame(
   state.enrollmentStatusDetail = "正在保存模板到 SD 卡";
   Serial.printf(
       "[APP] enrollment local success task=%s employee=%s templateBytes=%u\n",
-      result->taskId.c_str(),
-      result->employeeId.c_str(),
-      static_cast<unsigned>(result->templateBytes.size()));
-  if (!context.templateStore.upsertTemplate(result->employeeId, result->templateBytes, result->finishedAt)) {
+      normalizedResult.taskId.c_str(),
+      normalizedResult.employeeId.c_str(),
+      static_cast<unsigned>(normalizedResult.templateBytes.size()));
+  if (!context.templateStore.upsertTemplate(
+          normalizedResult.employeeId,
+          normalizedResult.templateBytes,
+          normalizedResult.finishedAt)) {
     const auto templateStatus = context.templateStore.status();
     Serial.printf(
         "[APP] enrollment template save failed employee=%s status=%s detail=%s ready=%d\n",
-        result->employeeId.c_str(),
+        normalizedResult.employeeId.c_str(),
         templateStatus.health.statusCode.c_str(),
         templateStatus.health.detail.c_str(),
         templateStatus.ready ? 1 : 0);
-    Serial.printf("[APP] enrollment template save failed employee=%s\n", result->employeeId.c_str());
+    Serial.printf("[APP] enrollment template save failed employee=%s\n", normalizedResult.employeeId.c_str());
     applyTemplateStoreStatus(context, state, context.templateStore.status(), false);
     persistStorageAux(context, state);
     state.enrollmentFailureReason = "TEMPLATE_STORE_WRITE_FAILED";
     state.enrollmentStatusDetail = "模板保存失败，正在上报失败";
-    enqueueEnrollmentReport(context, state, result.value(), std::optional<std::string>("TEMPLATE_STORE_WRITE_FAILED"));
+    enqueueEnrollmentReport(
+        context,
+        state,
+        normalizedResult,
+        std::optional<std::string>("TEMPLATE_STORE_WRITE_FAILED"));
     state.enrollmentState = EnrollmentRunState::Reporting;
     state.lastErrorCode = "TEMPLATE_STORE_WRITE_FAILED";
     notify(context, infra::DisplayNotificationLevel::Error, "模板保存失败", 2200);
@@ -335,10 +355,10 @@ void processEnrollmentFrame(
 
   applyTemplateStoreStatus(context, state, context.templateStore.status(), true);
   persistStorageAux(context, state);
-  Serial.printf("[APP] enrollment template saved employee=%s\n", result->employeeId.c_str());
+  Serial.printf("[APP] enrollment template saved employee=%s\n", normalizedResult.employeeId.c_str());
   state.enrollmentState = EnrollmentRunState::Reporting;
   state.enrollmentStatusDetail = "正在上报录脸成功";
-  enqueueEnrollmentReport(context, state, result.value(), std::nullopt);
+  enqueueEnrollmentReport(context, state, normalizedResult, std::nullopt);
   setLastError(state, std::nullopt);
   notify(context, infra::DisplayNotificationLevel::Success, "已保存，正在上报", 1800);
   state.renderDirty = true;

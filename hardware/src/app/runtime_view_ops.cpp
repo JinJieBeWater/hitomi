@@ -5,8 +5,8 @@
 
 namespace app {
 
-void updateView(const RuntimeContext& context, RuntimeState& state) {
-  context.display.render(ui::StatusScreenPresenter::build(buildRuntimeStatus(context, state)));
+void updateView(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
+  context.display.render(ui::StatusScreenPresenter::build(buildRuntimeStatus(context, state, nowMs)));
   state.renderDirty = false;
 }
 

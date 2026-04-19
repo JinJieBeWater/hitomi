@@ -28,10 +28,18 @@ struct WifiProfileRuntimeState {
   std::optional<uint8_t> lastDisconnectReason;
 };
 
+// The device only learns a coarse wall-clock after a successful sync.
+// Before that, camera and enrollment timestamps are monotonic uptime values.
+struct RuntimeWallClockState {
+  std::optional<uint64_t> anchorEpochMs;
+  std::optional<uint32_t> anchorUptimeMs;
+};
+
 struct RuntimeState {
   core::DeviceConfig deviceConfig;
   core::DeviceCredentials credentials;
   core::SnapshotBundle snapshots;
+  RuntimeWallClockState wallClock;
   std::vector<core::PendingEnrollmentReport> pendingEnrollmentReports;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
   std::vector<core::FailureLogEntry> failureLogs;
@@ -112,7 +120,9 @@ struct RuntimeState {
 };
 
 bool facePortsReady(const RuntimeContext& context);
-RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeState& state);
+RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeState& state, uint32_t nowMs);
+std::optional<uint64_t> resolveWallClockTimeMs(const RuntimeState& state, uint32_t nowMs);
+void updateWallClockFromSync(RuntimeState& state, uint64_t serverTime, uint32_t nowMs);
 void setLastError(RuntimeState& state, const std::optional<core::ApiError>& error);
 
 }  // namespace app

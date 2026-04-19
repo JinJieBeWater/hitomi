@@ -404,8 +404,9 @@ void handleAttendanceRecognition(
     RuntimeState& state,
     const StoredFaceTemplate& matched,
     float similarity,
-    uint64_t recognizedAt,
+    uint64_t capturedAtMs,
     uint32_t nowMs) {
+  const uint64_t recognizedAt = resolveWallClockTimeMs(state, nowMs).value_or(capturedAtMs);
   const std::string employeeName = employeeDisplayLabel(matched);
   if (!state.snapshots.attendanceConfig.has_value()) {
     publishAttendanceFeedback(

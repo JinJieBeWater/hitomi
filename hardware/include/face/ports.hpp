@@ -38,6 +38,7 @@ struct CameraFrameInfo {
   uint16_t height = 0;
   std::size_t bytes = 0;
   CameraPixelFormat pixelFormat = CameraPixelFormat::Unknown;
+  // Monotonic capture time since boot, not a Unix wall-clock timestamp.
   uint64_t capturedAtMs = 0;
 };
 

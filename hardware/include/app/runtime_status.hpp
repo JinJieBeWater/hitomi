@@ -57,6 +57,7 @@ struct RuntimeStatus {
   std::optional<std::string> apiProbeStatusCode;
   bool syncInFlight = false;
   bool uploadInFlight = false;
+  std::optional<uint64_t> currentWallClockTimeMs;
   EnrollmentRunState enrollmentState = EnrollmentRunState::Idle;
   std::size_t enrollmentPendingCount = 0;
   std::size_t enrollmentCapturedSamples = 0;

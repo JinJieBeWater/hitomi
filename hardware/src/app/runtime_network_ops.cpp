@@ -239,7 +239,11 @@ void applyActivationResult(
   state.renderDirty = true;
 }
 
-void applySyncResult(const RuntimeContext& context, RuntimeState& state, const CompletedNetworkRequest& completed) {
+void applySyncResult(
+    const RuntimeContext& context,
+    RuntimeState& state,
+    const CompletedNetworkRequest& completed,
+    uint32_t nowMs) {
   state.syncInFlight = false;
   state.manualSyncRequested = false;
 
@@ -254,6 +258,7 @@ void applySyncResult(const RuntimeContext& context, RuntimeState& state, const C
   }
 
   state.snapshots = core::applySyncSnapshot(state.snapshots, result.data.value(), completed.requestedAtMs);
+  updateWallClockFromSync(state, result.data->serverTime, nowMs);
   state.apiProbeSucceeded = true;
   state.apiProbeStatusCode = std::nullopt;
   persistSnapshots(context, state);
@@ -485,7 +490,7 @@ void consumeCompletedNetworkRequest(const RuntimeContext& context, RuntimeState&
       applyEnrollmentReportResult(context, state, *completed);
       return;
     case NetworkRequestType::Sync:
-      applySyncResult(context, state, *completed);
+      applySyncResult(context, state, *completed, nowMs);
       return;
     case NetworkRequestType::Upload:
       applyUploadResult(context, state, *completed);

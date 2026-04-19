@@ -1,6 +1,7 @@
 #include "app/runtime_state.hpp"
 
 #include "board/app_config.hpp"
+#include "core/use_cases.hpp"
 #include "face/ports.hpp"
 
 namespace app {
@@ -10,12 +11,40 @@ bool facePortsReady(const RuntimeContext& context) {
       (context.enrollmentService.available() || context.recognitionService.available());
 }
 
-RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeState& state) {
+std::optional<uint64_t> resolveWallClockTimeMs(const RuntimeState& state, uint32_t nowMs) {
+  if (state.wallClock.anchorEpochMs.has_value() && state.wallClock.anchorUptimeMs.has_value()) {
+    const auto projected = core::projectUnixEpochMs(
+        state.wallClock.anchorEpochMs.value(),
+        state.wallClock.anchorUptimeMs.value(),
+        nowMs);
+    if (projected.has_value()) {
+      return projected;
+    }
+  }
+
+  if (core::isPlausibleUnixEpochMs(state.snapshots.lastServerTime)) {
+    return state.snapshots.lastServerTime;
+  }
+
+  return std::nullopt;
+}
+
+void updateWallClockFromSync(RuntimeState& state, uint64_t serverTime, uint32_t nowMs) {
+  if (!core::isPlausibleUnixEpochMs(serverTime)) {
+    return;
+  }
+
+  state.wallClock.anchorEpochMs = serverTime;
+  state.wallClock.anchorUptimeMs = nowMs;
+}
+
+RuntimeStatus buildRuntimeStatus(const RuntimeContext& context, const RuntimeState& state, uint32_t nowMs) {
   // Keep status projection separate from orchestration so app-only edits stay local.
   RuntimeStatus status = {};
   status.firmwareTag = board::kFirmwareTag;
   status.credentials = state.credentials;
   status.snapshots = state.snapshots;
+  status.currentWallClockTimeMs = resolveWallClockTimeMs(state, nowMs);
   status.pendingQueueSize = state.pendingAttendanceRecords.size();
   status.failureLogCount = state.failureLogs.size();
   status.connectivity = state.connectivity;

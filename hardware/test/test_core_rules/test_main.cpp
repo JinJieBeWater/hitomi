@@ -146,6 +146,19 @@ void testClassifyAttendanceTypeUsesShanghaiWindows() {
   expect(offWindow == AttendanceRecordType::ClockOut, "18:10 CST should be clock_out");
 }
 
+void testProjectUnixEpochMsUsesCurrentBootAnchor() {
+  const auto projected = core::projectUnixEpochMs(1'745'028'102'000ULL, 12'345ULL, 17'345ULL);
+
+  expect(projected.has_value(), "projected time should exist when uptime moves forward");
+  expect(projected.value() == 1'745'028'107'000ULL, "projected time should advance by uptime delta");
+}
+
+void testProjectUnixEpochMsRejectsBackwardsUptime() {
+  const auto projected = core::projectUnixEpochMs(1'745'028'102'000ULL, 12'345ULL, 11'000ULL);
+
+  expect(!projected.has_value(), "projected time should be rejected when uptime anchor is stale");
+}
+
 void testCollectStaleTemplateEmployeeIdsFindsRemovedEmployees() {
   const std::vector<std::string> storedTemplateEmployeeIds = {"emp_001", "emp_legacy", "emp_002"};
   const std::vector<EmployeeSnapshot> employees = {
@@ -673,6 +686,8 @@ int main() {
   try {
     testApplySyncSnapshotReplacesRemoteSnapshots();
     testClassifyAttendanceTypeUsesShanghaiWindows();
+    testProjectUnixEpochMsUsesCurrentBootAnchor();
+    testProjectUnixEpochMsRejectsBackwardsUptime();
     testCollectStaleTemplateEmployeeIdsFindsRemovedEmployees();
     testEnqueueAttendanceRecordKeepsEarlierDuplicate();
     testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected();

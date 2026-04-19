@@ -5,6 +5,6 @@
 
 namespace app {
 
-void updateView(const RuntimeContext& context, RuntimeState& state);
+void updateView(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs);
 
 }  // namespace app

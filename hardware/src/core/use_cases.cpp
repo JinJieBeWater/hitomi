@@ -10,6 +10,7 @@ namespace core {
 namespace {
 
 constexpr int kShanghaiUtcOffsetSeconds = 8 * 60 * 60;
+constexpr uint64_t kMinPlausibleUnixEpochMs = 1'704'067'200'000ULL;  // 2024-01-01 guard
 
 std::tm toShanghaiTm(uint64_t epochMs) {
   std::time_t localSeconds = static_cast<std::time_t>(epochMs / 1000ULL) + kShanghaiUtcOffsetSeconds;
@@ -104,6 +105,19 @@ std::optional<AttendanceRecordType> classifyAttendanceType(
     return AttendanceRecordType::ClockOut;
   }
   return std::nullopt;
+}
+
+bool isPlausibleUnixEpochMs(uint64_t epochMs) {
+  return epochMs >= kMinPlausibleUnixEpochMs;
+}
+
+std::optional<uint64_t> projectUnixEpochMs(
+    uint64_t anchorEpochMs, uint64_t anchorUptimeMs, uint64_t currentUptimeMs) {
+  if (!isPlausibleUnixEpochMs(anchorEpochMs) || currentUptimeMs < anchorUptimeMs) {
+    return std::nullopt;
+  }
+
+  return anchorEpochMs + (currentUptimeMs - anchorUptimeMs);
 }
 
 QueueMutationResult enqueueAttendanceRecord(

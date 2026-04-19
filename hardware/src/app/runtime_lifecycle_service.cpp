@@ -697,9 +697,9 @@ void pollBootButton(RuntimeState& state, uint32_t nowMs) {
   Serial.println(pressed ? "BOOT pressed" : "BOOT released");
 }
 
-void printRuntimeCheck(const RuntimeContext& context, const RuntimeState& state) {
+void printRuntimeCheck(const RuntimeContext& context, const RuntimeState& state, uint32_t nowMs) {
   const esp_partition_t* partition = esp_ota_get_running_partition();
-  const RuntimeDiagnostics diagnostics = buildRuntimeDiagnostics(buildRuntimeStatus(context, state));
+  const RuntimeDiagnostics diagnostics = buildRuntimeDiagnostics(buildRuntimeStatus(context, state, nowMs));
 
   Serial.println();
   Serial.println("=== Hitomi Device Runtime ===");

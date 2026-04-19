@@ -93,8 +93,8 @@ void AppRuntime::setup() {
   processWifiDriverEvents(context, state, nowMs);
   ensureWifiConnection(context, state, nowMs);
   probeConnectivity(context, state, nowMs);
-  printRuntimeCheck(context, state);
-  updateView(context, state);
+  printRuntimeCheck(context, state, nowMs);
+  updateView(context, state, nowMs);
 }
 
 void AppRuntime::tick(uint32_t nowMs) {
@@ -125,7 +125,7 @@ void AppRuntime::tick(uint32_t nowMs) {
   dispatchNetworkRequest(context, state, nowMs);
 
   if (state.renderDirty) {
-    updateView(context, state);
+    updateView(context, state, nowMs);
   }
 }
 
