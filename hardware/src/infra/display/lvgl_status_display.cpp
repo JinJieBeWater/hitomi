@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <lvgl.h>
+#include <libs/tiny_ttf/lv_tiny_ttf.h>
 
 #include <algorithm>
 #include <array>
@@ -13,6 +14,7 @@
 #include <vector>
 
 #include "board/app_config.hpp"
+#include "fonts/hitomi_ui_subset_ttf.h"
 #include "infra/display/szpi_lvgl_display.hpp"
 
 namespace infra {
@@ -36,12 +38,9 @@ constexpr lv_coord_t kNavStepY = 38;
 constexpr lv_coord_t kHomePeriodY = 0;
 constexpr lv_coord_t kHomePeriodHeight = 28;
 constexpr lv_coord_t kHomeStatusY = 36;
-constexpr lv_coord_t kHomeStatusHeight = 36;
-constexpr lv_coord_t kHomeStatusGap = 8;
-constexpr lv_coord_t kHomeCameraY = 80;
-constexpr lv_coord_t kHomeCameraHeight = 92;
-constexpr lv_coord_t kHomeAttendanceY = 180;
-constexpr lv_coord_t kHomeAttendanceHeight = 38;
+constexpr lv_coord_t kHomeStatusHeight = 0;
+constexpr lv_coord_t kHomeCameraY = 36;
+constexpr lv_coord_t kHomeCameraHeight = (kPageWidth * 3) / 4;
 
 constexpr lv_coord_t kEnrollHeaderY = 0;
 constexpr lv_coord_t kEnrollSummaryY = 18;
@@ -73,8 +72,8 @@ constexpr std::size_t kCaptureSampleIndicatorCount = 5;
 constexpr lv_coord_t kSystemSummaryHeight = 54;
 constexpr lv_coord_t kSystemSummaryY = 0;
 constexpr lv_coord_t kSystemRowsY = 64;
-constexpr lv_coord_t kSystemRowHeight = 34;
-constexpr lv_coord_t kSystemRowGap = 8;
+constexpr lv_coord_t kSystemRowHeight = 20;
+constexpr lv_coord_t kSystemRowGap = 2;
 
 constexpr uint32_t kSidebarBackgroundHex = 0x0D3B2A;
 constexpr uint32_t kPaneBackgroundHex = 0x1F8A3B;
@@ -132,17 +131,17 @@ enum class StatusTone : uint8_t {
   Error,
 };
 
-struct CompactStatusChip {
+struct StatusRow {
   lv_obj_t* panel = nullptr;
   lv_obj_t* led = nullptr;
   lv_obj_t* titleLabel = nullptr;
   lv_obj_t* valueLabel = nullptr;
 };
 
-struct StatusRow {
-  lv_obj_t* panel = nullptr;
-  lv_obj_t* led = nullptr;
-  lv_obj_t* valueLabel = nullptr;
+struct PreviewBuffer {
+  std::vector<uint16_t> pixels = {};
+  lv_coord_t width = 0;
+  lv_coord_t height = 0;
 };
 
 struct LvglStatusDisplayData {
@@ -156,14 +155,14 @@ struct LvglStatusDisplayData {
   lv_obj_t* sidebarFooterLabel = nullptr;
 
   lv_obj_t* homePeriodLabel = nullptr;
-  std::array<CompactStatusChip, 3> homeStatusChips = {};
+  lv_obj_t* homeStatusLabel = nullptr;
   lv_obj_t* homeCameraImage = nullptr;
   lv_obj_t* homeCameraFrame = nullptr;
   lv_obj_t* homeCameraLabel = nullptr;
-  lv_obj_t* homeAttendanceLabel = nullptr;
-  lv_obj_t* homeAttendanceMetaLabel = nullptr;
+  lv_image_dsc_t previewImageDsc = {};
   std::array<lv_obj_t*, DisplayRgb565Frame::kMaxFaceBoxes> homeFaceBoxOverlays = {};
-  std::vector<uint16_t> homeCameraPreviewBuffer = {};
+  std::array<PreviewBuffer, 2> previewBuffers = {};
+  std::size_t activePreviewBufferIndex = 0;
   bool homeCameraPreviewReady = false;
   DisplayRgb565Frame latestPreviewFrame = {};
 
@@ -199,6 +198,7 @@ struct LvglStatusDisplayData {
   SidebarPage currentPage = SidebarPage::Home;
   bool hasViewModel = false;
   bool previewNeedsPresent = false;
+  uint32_t lastPreviewPresentMs = 0;
   std::string selectedEnrollmentTaskId;
   bool enrollmentRequestQueued = false;
   std::array<DisplayCommand, kDisplayCommandQueueCapacity> commandQueue = {};
@@ -220,6 +220,48 @@ struct DisplayPreviewPerfWindow {
   uint64_t resampleUs = 0;
   uint64_t lvglUs = 0;
 };
+
+lv_font_t* gUiFont12 = nullptr;
+lv_font_t* gUiFont14 = nullptr;
+
+bool initUiFonts() {
+  if (gUiFont12 != nullptr && gUiFont14 != nullptr) {
+    return true;
+  }
+
+  if (gUiFont12 == nullptr) {
+    gUiFont12 = lv_tiny_ttf_create_data(hitomi_ui_subset_ttf, hitomi_ui_subset_ttf_len, 12);
+  }
+  if (gUiFont14 == nullptr) {
+    gUiFont14 = lv_tiny_ttf_create_data(hitomi_ui_subset_ttf, hitomi_ui_subset_ttf_len, 14);
+  }
+
+  if (gUiFont12 != nullptr && gUiFont14 != nullptr) {
+    return true;
+  }
+
+  Serial.println("[LVGL] tiny_ttf UI font init failed; falling back to builtin font");
+  if (gUiFont12 != nullptr) {
+    lv_tiny_ttf_destroy(gUiFont12);
+    gUiFont12 = nullptr;
+  }
+  if (gUiFont14 != nullptr) {
+    lv_tiny_ttf_destroy(gUiFont14);
+    gUiFont14 = nullptr;
+  }
+  return false;
+}
+
+void destroyUiFonts() {
+  if (gUiFont12 != nullptr) {
+    lv_tiny_ttf_destroy(gUiFont12);
+    gUiFont12 = nullptr;
+  }
+  if (gUiFont14 != nullptr) {
+    lv_tiny_ttf_destroy(gUiFont14);
+    gUiFont14 = nullptr;
+  }
+}
 
 DisplayPreviewPerfWindow& displayPreviewPerfWindow() {
   static DisplayPreviewPerfWindow window;
@@ -281,14 +323,22 @@ void printLvglLog(lv_log_level_t level, const char* message) {
   Serial.printf("[LVGL][%s] %s\n", lvglLogLevelName(level), message);
 }
 
+const lv_font_t* uiLabelFont() {
+  return gUiFont14 != nullptr ? gUiFont14 : &lv_font_source_han_sans_sc_14_cjk;
+}
+
+const lv_font_t* uiCaptionFont() {
+  return gUiFont12 != nullptr ? gUiFont12 : &lv_font_source_han_sans_sc_14_cjk;
+}
+
 void applyLabelStyle(lv_obj_t* label, lv_text_align_t align, uint32_t colorHex = kTextColorHex) {
-  lv_obj_set_style_text_font(label, &hitomi_ui_zh_14, 0);
+  lv_obj_set_style_text_font(label, uiLabelFont(), 0);
   lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
   lv_obj_set_style_text_align(label, align, 0);
 }
 
 void applyCaptionStyle(lv_obj_t* label, lv_text_align_t align, uint32_t colorHex = kMutedTextHex) {
-  lv_obj_set_style_text_font(label, &hitomi_ui_zh_12, 0);
+  lv_obj_set_style_text_font(label, uiCaptionFont(), 0);
   lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
   lv_obj_set_style_text_align(label, align, 0);
 }
@@ -307,9 +357,15 @@ void applyPanelStyle(
 }
 
 void applyCompactValueStyle(lv_obj_t* label, lv_text_align_t align, uint32_t colorHex = kTextColorHex) {
-  lv_obj_set_style_text_font(label, &hitomi_ui_zh_12, 0);
+  lv_obj_set_style_text_font(label, uiCaptionFont(), 0);
   lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
   lv_obj_set_style_text_align(label, align, 0);
+}
+
+void applyNavLabelStyle(lv_obj_t* label, uint32_t colorHex = kTextColorHex) {
+  lv_obj_set_style_text_font(label, uiCaptionFont(), 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(colorHex), 0);
+  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
 }
 
 std::string lowerCopy(std::string value) {
@@ -477,19 +533,6 @@ void setLedTone(lv_obj_t* led, StatusTone tone) {
   lv_led_on(led);
 }
 
-std::string compactWifiValue(const std::string& line) {
-  if (startsWith(line, "已连接") || startsWith(line, "Connected")) {
-    return "在线";
-  }
-  if (startsWith(line, "未连接") || startsWith(line, "Disconnected")) {
-    return "离线";
-  }
-  if (startsWith(line, "未知") || startsWith(line, "Unknown")) {
-    return "未知";
-  }
-  return line;
-}
-
 std::string compactSyncValue(const std::string& line) {
   const std::string value = startsWith(line, "同步：") ? stripPrefix(line, "同步：") : stripPrefix(line, "Sync: ");
   if (value.find("已就绪") != std::string::npos || value.find("Ready") != std::string::npos) {
@@ -505,59 +548,6 @@ std::string compactSyncValue(const std::string& line) {
     return "未启用";
   }
   return value;
-}
-
-std::string compactTaskValue(const std::string& line) {
-  if (line == "暂无任务" || line == "No tasks") {
-    return line;
-  }
-  if (line == "结果待上报" || line == "Report pending") {
-    return "待上报";
-  }
-  return line;
-}
-
-std::string compactApiValue(const std::string& line) {
-  if (line == "可达" || line == "Reachable") {
-    return "可达";
-  }
-  if (line == "等待 Wi-Fi" || line == "Waiting for WiFi") {
-    return "等 Wi-Fi";
-  }
-  if (line == "缺少地址" || line == "Missing origin") {
-    return "需地址";
-  }
-  if (line == "探测中" || line == "Probing") {
-    return "探测中";
-  }
-  if (startsWith(line, "失败") || startsWith(line, "Failed")) {
-    return "失败";
-  }
-  return line;
-}
-
-StatusTone queueTone(uint16_t pendingQueueCount) {
-  if (pendingQueueCount == 0) {
-    return StatusTone::Neutral;
-  }
-  if (pendingQueueCount < 4) {
-    return StatusTone::Warn;
-  }
-  return StatusTone::Error;
-}
-
-std::string homeMetaValue(const ui::AppViewModel& viewModel) {
-  if (viewModel.pendingQueueCount > 0) {
-    return viewModel.queueLine;
-  }
-  return compactApiValue(viewModel.apiLine);
-}
-
-StatusTone homeMetaTone(const ui::AppViewModel& viewModel) {
-  if (viewModel.pendingQueueCount > 0) {
-    return queueTone(viewModel.pendingQueueCount);
-  }
-  return apiToneFromLine(viewModel.apiLine);
 }
 
 uint32_t notificationColorHex(DisplayNotificationLevel level) {
@@ -644,53 +634,6 @@ lv_obj_t* createPageLabel(lv_obj_t* parent, lv_coord_t y, lv_coord_t width, uint
   return label;
 }
 
-CompactStatusChip createCompactStatusChip(
-    lv_obj_t* parent,
-    lv_coord_t x,
-    lv_coord_t y,
-    lv_coord_t width,
-    const char* title) {
-  CompactStatusChip chip = {};
-  chip.panel = lv_obj_create(parent);
-  lv_obj_set_size(chip.panel, width, kHomeStatusHeight);
-  lv_obj_align(chip.panel, LV_ALIGN_TOP_LEFT, x, y);
-  applyPanelStyle(chip.panel, kPanelMutedHex, kPanelBorderHex, 14);
-  lv_obj_set_style_pad_left(chip.panel, 8, 0);
-  lv_obj_set_style_pad_right(chip.panel, 8, 0);
-  lv_obj_set_style_pad_top(chip.panel, 6, 0);
-  lv_obj_set_style_pad_bottom(chip.panel, 6, 0);
-  lv_obj_remove_flag(chip.panel, LV_OBJ_FLAG_SCROLLABLE);
-
-  chip.led = lv_led_create(chip.panel);
-  lv_obj_set_size(chip.led, 10, 10);
-  lv_obj_align(chip.led, LV_ALIGN_TOP_LEFT, 0, 1);
-
-  chip.titleLabel = lv_label_create(chip.panel);
-  applyCaptionStyle(chip.titleLabel, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(chip.titleLabel, title);
-  lv_obj_align(chip.titleLabel, LV_ALIGN_TOP_LEFT, 16, 0);
-
-  chip.valueLabel = lv_label_create(chip.panel);
-  lv_obj_set_width(chip.valueLabel, width - 16);
-  lv_label_set_long_mode(chip.valueLabel, LV_LABEL_LONG_DOT);
-  applyCompactValueStyle(chip.valueLabel, LV_TEXT_ALIGN_LEFT);
-  lv_obj_align(chip.valueLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
-  return chip;
-}
-
-void setCompactStatusChip(
-    const CompactStatusChip& chip,
-    const std::string& value,
-    StatusTone tone) {
-  if (chip.panel != nullptr) {
-    applyPanelStyle(chip.panel, tonePanelHex(tone), toneBorderHex(tone), 14);
-  }
-  if (chip.valueLabel != nullptr) {
-    lv_label_set_text(chip.valueLabel, value.c_str());
-  }
-  setLedTone(chip.led, tone);
-}
-
 StatusRow createSystemRow(lv_obj_t* parent, lv_coord_t y, const char* title) {
   StatusRow row = {};
   row.panel = lv_obj_create(parent);
@@ -704,20 +647,21 @@ StatusRow createSystemRow(lv_obj_t* parent, lv_coord_t y, const char* title) {
   lv_obj_remove_flag(row.panel, LV_OBJ_FLAG_SCROLLABLE);
 
   row.led = lv_led_create(row.panel);
-  lv_obj_set_size(row.led, 10, 10);
-  lv_obj_align(row.led, LV_ALIGN_TOP_LEFT, 0, 2);
+  lv_obj_set_size(row.led, 8, 8);
+  lv_obj_align(row.led, LV_ALIGN_LEFT_MID, 0, 0);
   setLedTone(row.led, StatusTone::Neutral);
 
-  lv_obj_t* titleLabel = lv_label_create(row.panel);
-  applyCaptionStyle(titleLabel, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(titleLabel, title);
-  lv_obj_align(titleLabel, LV_ALIGN_TOP_LEFT, 18, 0);
+  row.titleLabel = lv_label_create(row.panel);
+  lv_obj_set_width(row.titleLabel, 34);
+  applyCaptionStyle(row.titleLabel, LV_TEXT_ALIGN_LEFT);
+  lv_label_set_text(row.titleLabel, title);
+  lv_obj_align(row.titleLabel, LV_ALIGN_LEFT_MID, 14, 0);
 
   row.valueLabel = lv_label_create(row.panel);
-  lv_obj_set_width(row.valueLabel, kPageWidth - 36);
+  lv_obj_set_width(row.valueLabel, kPageWidth - 56);
   lv_label_set_long_mode(row.valueLabel, LV_LABEL_LONG_DOT);
   applyLabelStyle(row.valueLabel, LV_TEXT_ALIGN_LEFT);
-  lv_obj_align(row.valueLabel, LV_ALIGN_BOTTOM_LEFT, 18, 0);
+  lv_obj_align(row.valueLabel, LV_ALIGN_LEFT_MID, 48, 0);
   return row;
 }
 
@@ -906,32 +850,7 @@ void refreshChrome(LvglStatusDisplayData& data) {
 
 void refreshHomePage(LvglStatusDisplayData& data) {
   lv_label_set_text(data.homePeriodLabel, data.lastViewModel.periodLine.c_str());
-  setCompactStatusChip(
-      data.homeStatusChips[0],
-      compactWifiValue(data.lastViewModel.wifiLine),
-      wifiToneFromLine(data.lastViewModel.wifiLine));
-  setCompactStatusChip(
-      data.homeStatusChips[1],
-      compactSyncValue(data.lastViewModel.syncLine),
-      syncToneFromLine(data.lastViewModel.syncLine));
-  setCompactStatusChip(
-      data.homeStatusChips[2],
-      compactTaskValue(data.lastViewModel.enrollmentTaskSummaryLine),
-      taskToneFromSummary(data.lastViewModel.enrollmentTaskSummaryLine));
   lv_label_set_text(data.homeCameraLabel, data.lastViewModel.cameraHintLine.c_str());
-  lv_label_set_text(
-      data.homeAttendanceLabel,
-      (data.lastViewModel.attendanceResultLine.empty() ? "准备识别"
-                                                       : data.lastViewModel.attendanceResultLine)
-          .c_str());
-  if (data.homeAttendanceMetaLabel != nullptr) {
-    const StatusTone metaTone = homeMetaTone(data.lastViewModel);
-    lv_label_set_text(data.homeAttendanceMetaLabel, homeMetaValue(data.lastViewModel).c_str());
-    lv_obj_set_style_text_color(data.homeAttendanceMetaLabel, lv_color_hex(toneLedHex(metaTone)), 0);
-  }
-  if (data.homeCameraImage != nullptr) {
-    lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
-  }
   if (data.homeCameraFrame != nullptr) {
     const StatusTone cameraTone = genericSystemTone(data.lastViewModel.faceDetectLine);
     applyPanelStyle(
@@ -941,10 +860,12 @@ void refreshHomePage(LvglStatusDisplayData& data) {
         18);
   }
   if (data.homeCameraPreviewReady) {
+    lv_obj_add_flag(data.homeCameraLabel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_align(data.homeCameraLabel, LV_ALIGN_BOTTOM_LEFT, 10, -8);
     lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_LEFT, 0);
     lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
   } else {
+    lv_obj_remove_flag(data.homeCameraLabel, LV_OBJ_FLAG_HIDDEN);
     lv_obj_center(data.homeCameraLabel);
     lv_obj_set_style_text_align(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
@@ -1044,9 +965,6 @@ void refreshCapturePage(LvglStatusDisplayData& data) {
     }
   }
 
-  if (data.capturePreviewImage != nullptr) {
-    lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
-  }
   if (data.capturePreviewFrame != nullptr) {
     applyPanelStyle(
         data.capturePreviewFrame,
@@ -1150,39 +1068,46 @@ void presentPreview(LvglStatusDisplayData& data) {
     return;
   }
 
-  lv_coord_t targetX = kPageX;
-  lv_coord_t targetY = kPageY + kHomeCameraY;
-  lv_coord_t targetWidth = kPageWidth;
-  lv_coord_t targetHeight = kHomeCameraHeight;
-  auto* targetFrame = data.homeCameraFrame;
+  lv_obj_t* targetImage = data.homeCameraImage;
   auto overlays = data.homeFaceBoxOverlays;
   if (data.currentPage == SidebarPage::Capture) {
-    targetY = kPageY + kCapturePreviewY;
-    targetHeight = kCapturePreviewHeight;
-    targetFrame = data.capturePreviewFrame;
+    targetImage = data.capturePreviewImage;
     overlays = data.captureFaceBoxOverlays;
   } else if (data.currentPage != SidebarPage::Home) {
+    return;
+  }
+
+  const PreviewBuffer& activeBuffer = data.previewBuffers[data.activePreviewBufferIndex];
+  if (activeBuffer.pixels.empty() || activeBuffer.width <= 0 || activeBuffer.height <= 0) {
     return;
   }
 
   const auto crop = computePreviewCrop(
       data.latestPreviewFrame.width,
       data.latestPreviewFrame.height,
-      targetWidth,
-      targetHeight);
+      activeBuffer.width,
+      activeBuffer.height);
 
-  if (!data.homeCameraPreviewBuffer.empty() &&
-      data.driver.drawPreviewBitmap(
-          targetX,
-          targetY,
-          targetX + targetWidth,
-          targetY + targetHeight,
-          data.homeCameraPreviewBuffer.data())) {
-    updateFaceBoxOverlays(data.latestPreviewFrame, crop, targetWidth, targetHeight, overlays);
+  if (targetImage != nullptr) {
+    data.previewImageDsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    data.previewImageDsc.header.cf = LV_COLOR_FORMAT_RGB565;
+    data.previewImageDsc.header.flags = 0;
+    data.previewImageDsc.header.w = static_cast<uint32_t>(activeBuffer.width);
+    data.previewImageDsc.header.h = static_cast<uint32_t>(activeBuffer.height);
+    data.previewImageDsc.header.stride = static_cast<uint32_t>(activeBuffer.width) * sizeof(uint16_t);
+    data.previewImageDsc.data_size = static_cast<uint32_t>(activeBuffer.pixels.size() * sizeof(uint16_t));
+    data.previewImageDsc.data = reinterpret_cast<const uint8_t*>(activeBuffer.pixels.data());
+    data.previewImageDsc.reserved = nullptr;
+    data.previewImageDsc.reserved_2 = nullptr;
+
+    lv_image_set_src(targetImage, &data.previewImageDsc);
+    lv_obj_clear_flag(targetImage, LV_OBJ_FLAG_HIDDEN);
+    updateFaceBoxOverlays(data.latestPreviewFrame, crop, activeBuffer.width, activeBuffer.height, overlays);
     data.previewNeedsPresent = false;
+    data.lastPreviewPresentMs = millis();
   }
 
-  if (!data.homeCameraPreviewReady || targetFrame == nullptr) {
+  if (!data.homeCameraPreviewReady || targetImage == nullptr) {
     for (auto* overlay : overlays) {
       if (overlay != nullptr) {
         lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
@@ -1356,7 +1281,9 @@ void createSidebarButton(LvglStatusDisplayData& data, lv_obj_t* parent, const Si
   lv_obj_add_event_cb(button, sidebarButtonEventCallback, LV_EVENT_CLICKED, &data.navBindings[index]);
 
   lv_obj_t* label = lv_label_create(button);
-  applyLabelStyle(label, LV_TEXT_ALIGN_CENTER);
+  lv_obj_set_width(label, kNavButtonWidth - 8);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+  applyNavLabelStyle(label);
   lv_label_set_text(label, spec.label);
   lv_obj_center(label);
 }
@@ -1373,23 +1300,18 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   applyLabelStyle(data.homePeriodLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
   lv_obj_center(data.homePeriodLabel);
 
-  const lv_coord_t chipWidth = (kPageWidth - (kHomeStatusGap * 2)) / 3;
-  data.homeStatusChips[0] = createCompactStatusChip(parent, 0, kHomeStatusY, chipWidth, "网络");
-  data.homeStatusChips[1] =
-      createCompactStatusChip(parent, chipWidth + kHomeStatusGap, kHomeStatusY, chipWidth, "同步");
-  data.homeStatusChips[2] =
-      createCompactStatusChip(parent, (chipWidth + kHomeStatusGap) * 2, kHomeStatusY, chipWidth, "任务");
-
   lv_obj_t* cameraFrame = lv_obj_create(parent);
   data.homeCameraFrame = cameraFrame;
   lv_obj_set_size(cameraFrame, kPageWidth, kHomeCameraHeight);
   lv_obj_align(cameraFrame, LV_ALIGN_TOP_LEFT, 0, kHomeCameraY);
   applyPanelStyle(cameraFrame, kCameraPlaceholderHex, kPanelBorderMutedHex, 18);
+  lv_obj_set_style_pad_all(cameraFrame, 0, 0);
   lv_obj_remove_flag(cameraFrame, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(cameraFrame, LV_SCROLLBAR_MODE_OFF);
   data.homeCameraImage = lv_image_create(cameraFrame);
+  lv_obj_set_size(data.homeCameraImage, kPageWidth, kHomeCameraHeight);
+  lv_obj_align(data.homeCameraImage, LV_ALIGN_TOP_LEFT, 0, 0);
   lv_obj_add_flag(data.homeCameraImage, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_center(data.homeCameraImage);
   for (auto& overlay : data.homeFaceBoxOverlays) {
     overlay = lv_obj_create(cameraFrame);
     lv_obj_remove_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
@@ -1403,30 +1325,6 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_label_set_long_mode(data.homeCameraLabel, LV_LABEL_LONG_WRAP);
   applyLabelStyle(data.homeCameraLabel, LV_TEXT_ALIGN_CENTER, kMutedTextHex);
   lv_obj_center(data.homeCameraLabel);
-
-  lv_obj_t* attendanceCard = lv_obj_create(parent);
-  lv_obj_set_size(attendanceCard, kPageWidth, kHomeAttendanceHeight);
-  lv_obj_align(attendanceCard, LV_ALIGN_TOP_LEFT, 0, kHomeAttendanceY);
-  applyPanelStyle(attendanceCard, kPanelHex, kPanelBorderHex, 14);
-  lv_obj_set_style_pad_all(attendanceCard, 10, 0);
-  lv_obj_remove_flag(attendanceCard, LV_OBJ_FLAG_SCROLLABLE);
-
-  lv_obj_t* attendanceCaption = lv_label_create(attendanceCard);
-  applyCaptionStyle(attendanceCaption, LV_TEXT_ALIGN_LEFT);
-  lv_label_set_text(attendanceCaption, "考勤");
-  lv_obj_align(attendanceCaption, LV_ALIGN_TOP_LEFT, 0, 0);
-
-  data.homeAttendanceMetaLabel = lv_label_create(attendanceCard);
-  lv_obj_set_width(data.homeAttendanceMetaLabel, 92);
-  lv_label_set_long_mode(data.homeAttendanceMetaLabel, LV_LABEL_LONG_DOT);
-  applyCaptionStyle(data.homeAttendanceMetaLabel, LV_TEXT_ALIGN_RIGHT);
-  lv_obj_align(data.homeAttendanceMetaLabel, LV_ALIGN_TOP_RIGHT, 0, 0);
-
-  data.homeAttendanceLabel = lv_label_create(attendanceCard);
-  lv_obj_set_width(data.homeAttendanceLabel, kPageWidth - 20);
-  lv_label_set_long_mode(data.homeAttendanceLabel, LV_LABEL_LONG_DOT);
-  applyLabelStyle(data.homeAttendanceLabel, LV_TEXT_ALIGN_LEFT);
-  lv_obj_align(data.homeAttendanceLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
 }
 
 void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
@@ -1458,8 +1356,8 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   applyPanelStyle(data.enrollSelectionCard, kPanelMutedHex, kPanelBorderHex, 16);
   lv_obj_set_style_pad_left(data.enrollSelectionCard, 10, 0);
   lv_obj_set_style_pad_right(data.enrollSelectionCard, 10, 0);
-  lv_obj_set_style_pad_top(data.enrollSelectionCard, 8, 0);
-  lv_obj_set_style_pad_bottom(data.enrollSelectionCard, 8, 0);
+  lv_obj_set_style_pad_top(data.enrollSelectionCard, 4, 0);
+  lv_obj_set_style_pad_bottom(data.enrollSelectionCard, 4, 0);
   lv_obj_remove_flag(data.enrollSelectionCard, LV_OBJ_FLAG_SCROLLABLE);
 
   data.enrollSelectionLed = lv_led_create(data.enrollSelectionCard);
@@ -1476,7 +1374,7 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_width(data.enrollSelectionMetaLabel, kPageWidth - 20);
   lv_label_set_long_mode(data.enrollSelectionMetaLabel, LV_LABEL_LONG_DOT);
   applyCaptionStyle(data.enrollSelectionMetaLabel, LV_TEXT_ALIGN_LEFT);
-  lv_obj_align(data.enrollSelectionMetaLabel, LV_ALIGN_TOP_LEFT, 0, 16);
+  lv_obj_align(data.enrollSelectionMetaLabel, LV_ALIGN_TOP_LEFT, 0, 18);
 
   const lv_coord_t actionButtonWidth = (kPageWidth - 20 - kEnrollActionGap) / 2;
 
@@ -1513,12 +1411,14 @@ void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_size(previewFrame, kPageWidth, kCapturePreviewHeight);
   lv_obj_align(previewFrame, LV_ALIGN_TOP_LEFT, 0, kCapturePreviewY);
   applyPanelStyle(previewFrame, kCameraPlaceholderHex, kPanelBorderMutedHex, 18);
+  lv_obj_set_style_pad_all(previewFrame, 0, 0);
   lv_obj_remove_flag(previewFrame, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(previewFrame, LV_SCROLLBAR_MODE_OFF);
 
   data.capturePreviewImage = lv_image_create(previewFrame);
+  lv_obj_set_size(data.capturePreviewImage, kPageWidth, kCapturePreviewHeight);
+  lv_obj_align(data.capturePreviewImage, LV_ALIGN_TOP_LEFT, 0, 0);
   lv_obj_add_flag(data.capturePreviewImage, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_center(data.capturePreviewImage);
   for (auto& overlay : data.captureFaceBoxOverlays) {
     overlay = lv_obj_create(previewFrame);
     lv_obj_remove_flag(overlay, LV_OBJ_FLAG_SCROLLABLE);
@@ -1594,7 +1494,10 @@ void createSystemPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_size(data.systemSummaryCard, kPageWidth, kSystemSummaryHeight);
   lv_obj_align(data.systemSummaryCard, LV_ALIGN_TOP_LEFT, 0, kSystemSummaryY);
   applyPanelStyle(data.systemSummaryCard, kPanelMutedHex, kPanelBorderHex, 16);
-  lv_obj_set_style_pad_all(data.systemSummaryCard, 10, 0);
+  lv_obj_set_style_pad_left(data.systemSummaryCard, 8, 0);
+  lv_obj_set_style_pad_right(data.systemSummaryCard, 8, 0);
+  lv_obj_set_style_pad_top(data.systemSummaryCard, 6, 0);
+  lv_obj_set_style_pad_bottom(data.systemSummaryCard, 6, 0);
   lv_obj_remove_flag(data.systemSummaryCard, LV_OBJ_FLAG_SCROLLABLE);
 
   data.systemActivationLabel = lv_label_create(data.systemSummaryCard);
@@ -1751,42 +1654,6 @@ void processNotificationQueue(LvglStatusDisplayData& data, uint32_t nowMs) {
   showNotificationNow(data, notification, nowMs);
 }
 
-void drawPreviewRect(
-    std::vector<uint16_t>& destination,
-    lv_coord_t targetWidth,
-    lv_coord_t targetHeight,
-    lv_coord_t left,
-    lv_coord_t top,
-    lv_coord_t right,
-    lv_coord_t bottom,
-    uint16_t color) {
-  if (targetWidth <= 0 || targetHeight <= 0) {
-    return;
-  }
-
-  left = LV_CLAMP(0, left, targetWidth - 1);
-  right = LV_CLAMP(0, right, targetWidth - 1);
-  top = LV_CLAMP(0, top, targetHeight - 1);
-  bottom = LV_CLAMP(0, bottom, targetHeight - 1);
-  if (left >= right || top >= bottom) {
-    return;
-  }
-
-  const auto paintPixel = [&](lv_coord_t x, lv_coord_t y) {
-    destination[static_cast<std::size_t>(y) * static_cast<std::size_t>(targetWidth) + static_cast<std::size_t>(x)] =
-        color;
-  };
-
-  for (lv_coord_t x = left; x <= right; x += 1) {
-    paintPixel(x, top);
-    paintPixel(x, bottom);
-  }
-  for (lv_coord_t y = top; y <= bottom; y += 1) {
-    paintPixel(left, y);
-    paintPixel(right, y);
-  }
-}
-
 PreviewCropRect computePreviewCrop(
     uint16_t sourceWidth,
     uint16_t sourceHeight,
@@ -1812,6 +1679,9 @@ PreviewCropRect computePreviewCrop(
   crop.usesScale = true;
   const uint32_t sourceAspectScaled = static_cast<uint32_t>(sourceWidth) * static_cast<uint32_t>(targetHeight);
   const uint32_t targetAspectScaled = static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth);
+  if (sourceAspectScaled == targetAspectScaled) {
+    return crop;
+  }
   if (sourceAspectScaled > targetAspectScaled) {
     crop.cropWidth = (static_cast<uint32_t>(sourceHeight) * static_cast<uint32_t>(targetWidth)) /
         static_cast<uint32_t>(targetHeight);
@@ -1880,18 +1750,22 @@ void updateFaceBoxOverlays(
       continue;
     }
 
-    const lv_coord_t left =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.left) - static_cast<int32_t>(crop.cropX)) * targetWidth /
-                                static_cast<int32_t>(crop.cropWidth));
-    const lv_coord_t top =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.top) - static_cast<int32_t>(crop.cropY)) * targetHeight /
-                                static_cast<int32_t>(crop.cropHeight));
-    const lv_coord_t right =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.right) - static_cast<int32_t>(crop.cropX)) * targetWidth /
-                                static_cast<int32_t>(crop.cropWidth));
-    const lv_coord_t bottom =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.bottom) - static_cast<int32_t>(crop.cropY)) * targetHeight /
-                                static_cast<int32_t>(crop.cropHeight));
+    const int32_t rawLeft =
+        (static_cast<int32_t>(box.left) - static_cast<int32_t>(crop.cropX)) * targetWidth /
+        static_cast<int32_t>(crop.cropWidth);
+    const int32_t rawTop =
+        (static_cast<int32_t>(box.top) - static_cast<int32_t>(crop.cropY)) * targetHeight /
+        static_cast<int32_t>(crop.cropHeight);
+    const int32_t rawRight =
+        (static_cast<int32_t>(box.right) - static_cast<int32_t>(crop.cropX)) * targetWidth /
+        static_cast<int32_t>(crop.cropWidth);
+    const int32_t rawBottom =
+        (static_cast<int32_t>(box.bottom) - static_cast<int32_t>(crop.cropY)) * targetHeight /
+        static_cast<int32_t>(crop.cropHeight);
+    const lv_coord_t left = static_cast<lv_coord_t>(std::clamp<int32_t>(rawLeft, 0, targetWidth));
+    const lv_coord_t top = static_cast<lv_coord_t>(std::clamp<int32_t>(rawTop, 0, targetHeight));
+    const lv_coord_t right = static_cast<lv_coord_t>(std::clamp<int32_t>(rawRight, 0, targetWidth));
+    const lv_coord_t bottom = static_cast<lv_coord_t>(std::clamp<int32_t>(rawBottom, 0, targetHeight));
     if (right <= left || bottom <= top) {
       continue;
     }
@@ -1912,10 +1786,7 @@ void resampleCameraPreview(
     lv_coord_t targetHeight,
     const uint8_t* source,
     uint16_t sourceWidth,
-    uint16_t sourceHeight,
-    const std::array<face::FaceBox, DisplayRgb565Frame::kMaxFaceBoxes>& faceBoxes,
-    std::size_t faceBoxCount,
-    std::optional<std::size_t> primaryFaceBoxIndex) {
+    uint16_t sourceHeight) {
   auto readSourcePixel = [&](uint32_t x, uint32_t y) -> uint16_t {
     const std::size_t sourceIndex = (static_cast<std::size_t>(y) * static_cast<std::size_t>(sourceWidth) + static_cast<std::size_t>(x)) * 2U;
     const uint8_t first = source[sourceIndex];
@@ -1972,45 +1843,15 @@ void resampleCameraPreview(
     }
   }
 
-  constexpr uint16_t kFaceBoxColor = 0x07E0;
-  constexpr uint16_t kPrimaryFaceBoxColor = 0xFD20;
-  const std::size_t cappedBoxCount = std::min<std::size_t>(faceBoxCount, faceBoxes.size());
-  for (std::size_t index = 0; index < cappedBoxCount; index += 1) {
-    const auto& box = faceBoxes[index];
-    if (box.right <= box.left || box.bottom <= box.top) {
-      continue;
-    }
-
-    const lv_coord_t left =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.left) - static_cast<int32_t>(cropX)) * targetWidth /
-                                static_cast<int32_t>(cropWidth));
-    const lv_coord_t top =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.top) - static_cast<int32_t>(cropY)) * targetHeight /
-                                static_cast<int32_t>(cropHeight));
-    const lv_coord_t right =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.right) - static_cast<int32_t>(cropX)) * targetWidth /
-                                static_cast<int32_t>(cropWidth));
-    const lv_coord_t bottom =
-        static_cast<lv_coord_t>((static_cast<int32_t>(box.bottom) - static_cast<int32_t>(cropY)) * targetHeight /
-                                static_cast<int32_t>(cropHeight));
-    drawPreviewRect(
-        destination,
-        targetWidth,
-        targetHeight,
-        left,
-        top,
-        right,
-        bottom,
-        primaryFaceBoxIndex.has_value() && primaryFaceBoxIndex.value() == index ? kPrimaryFaceBoxColor
-                                                                                : kFaceBoxColor);
-  }
 }
 
 }  // namespace
 
 LvglStatusDisplay::LvglStatusDisplay() : impl_(std::make_unique<Impl>()) {}
 
-LvglStatusDisplay::~LvglStatusDisplay() = default;
+LvglStatusDisplay::~LvglStatusDisplay() {
+  destroyUiFonts();
+}
 
 LvglStatusDisplay::LvglStatusDisplay(LvglStatusDisplay&&) noexcept = default;
 
@@ -2019,6 +1860,7 @@ LvglStatusDisplay& LvglStatusDisplay::operator=(LvglStatusDisplay&&) noexcept = 
 bool LvglStatusDisplay::init() {
   lv_init();
   lv_log_register_print_cb(printLvglLog);
+  initUiFonts();
 
   if (!impl_->driver.init()) {
     Serial.println("[DISPLAY] driver init failed");
@@ -2062,33 +1904,32 @@ void LvglStatusDisplay::updateCameraPreview(const DisplayRgb565Frame& frame) {
   const lv_coord_t targetWidth = kPageWidth;
   const lv_coord_t targetHeight =
       impl_->currentPage == SidebarPage::Capture ? kCapturePreviewHeight : kHomeCameraHeight;
+  const std::size_t nextBufferIndex = (impl_->activePreviewBufferIndex + 1) % impl_->previewBuffers.size();
+  PreviewBuffer& nextBuffer = impl_->previewBuffers[nextBufferIndex];
   const auto crop = computePreviewCrop(frame.width, frame.height, targetWidth, targetHeight);
   if (crop.usesScale) {
     const std::size_t bufferSize = static_cast<std::size_t>(targetWidth) * static_cast<std::size_t>(targetHeight);
-    if (impl_->homeCameraPreviewBuffer.size() != bufferSize) {
-      impl_->homeCameraPreviewBuffer.assign(bufferSize, 0);
+    if (nextBuffer.pixels.size() != bufferSize) {
+      nextBuffer.pixels.assign(bufferSize, 0);
     }
 
     const uint32_t resampleStartedUs = micros();
     resampleCameraPreview(
-        impl_->homeCameraPreviewBuffer,
+        nextBuffer.pixels,
         targetWidth,
         targetHeight,
         frame.data,
         frame.width,
-        frame.height,
-        frame.faceBoxes,
-        frame.faceBoxCount,
-        frame.primaryFaceBoxIndex);
+        frame.height);
     perf.resampleUs += static_cast<uint64_t>(micros() - resampleStartedUs);
   } else {
     const std::size_t bufferSize = static_cast<std::size_t>(targetWidth) * static_cast<std::size_t>(targetHeight);
-    if (impl_->homeCameraPreviewBuffer.size() != bufferSize) {
-      impl_->homeCameraPreviewBuffer.assign(bufferSize, 0);
+    if (nextBuffer.pixels.size() != bufferSize) {
+      nextBuffer.pixels.assign(bufferSize, 0);
     }
     const uint32_t copyStartedUs = micros();
     copyCroppedCameraPreview(
-        impl_->homeCameraPreviewBuffer,
+        nextBuffer.pixels,
         targetWidth,
         targetHeight,
         frame.data,
@@ -2098,6 +1939,9 @@ void LvglStatusDisplay::updateCameraPreview(const DisplayRgb565Frame& frame) {
   }
   perf.previewUpdates += 1;
 
+  nextBuffer.width = targetWidth;
+  nextBuffer.height = targetHeight;
+  impl_->activePreviewBufferIndex = nextBufferIndex;
   impl_->homeCameraPreviewReady = true;
   impl_->latestPreviewFrame = frame;
   impl_->previewNeedsPresent = true;
@@ -2119,6 +1963,13 @@ void LvglStatusDisplay::clearCameraPreview() {
   impl_->homeCameraPreviewReady = false;
   impl_->latestPreviewFrame = {};
   impl_->previewNeedsPresent = false;
+  impl_->lastPreviewPresentMs = 0;
+  impl_->activePreviewBufferIndex = 0;
+  for (auto& buffer : impl_->previewBuffers) {
+    buffer.pixels.clear();
+    buffer.width = 0;
+    buffer.height = 0;
+  }
   for (auto* overlay : impl_->homeFaceBoxOverlays) {
     if (overlay != nullptr) {
       lv_obj_add_flag(overlay, LV_OBJ_FLAG_HIDDEN);
@@ -2167,6 +2018,11 @@ void LvglStatusDisplay::tick(uint32_t nowMs) {
   impl_->lastLvglTickMs = nowMs;
   processNotificationQueue(*impl_, nowMs);
   lv_timer_handler_run_in_period(board::kLvglHandlerPeriodMs);
+  if (impl_->homeCameraPreviewReady &&
+      (impl_->currentPage == SidebarPage::Home || impl_->currentPage == SidebarPage::Capture) &&
+      (impl_->lastPreviewPresentMs == 0 || nowMs - impl_->lastPreviewPresentMs >= 50U)) {
+    impl_->previewNeedsPresent = true;
+  }
   if (impl_->previewNeedsPresent) {
     presentPreview(*impl_);
   }

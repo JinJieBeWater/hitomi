@@ -16,6 +16,19 @@ bool startsWith(const std::string& text, std::string_view prefix) {
   return text.size() >= prefix.size() && text.compare(0, prefix.size(), prefix.data()) == 0;
 }
 
+bool isAsciiDisplaySafe(std::string_view value) {
+  for (const unsigned char ch : value) {
+    if (ch < 0x20 || ch > 0x7e) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::string asciiDisplayOrEmpty(const std::string& value) {
+  return isAsciiDisplaySafe(value) ? value : "";
+}
+
 std::string normalizeEmployeeLabel(const std::string& value) {
   if (startsWith(value, "Employee ")) {
     return "员工 " + value.substr(9);
@@ -94,7 +107,8 @@ std::string activeEnrollmentSubject(const app::RuntimeStatus& status) {
 
   if (status.activeEnrollmentEmployeeName.has_value()) {
     const std::string normalized = normalizeEmployeeLabel(status.activeEnrollmentEmployeeName.value());
-    if (startsWith(normalized, "员工 ")) {
+    if (startsWith(normalized, "员工 ") &&
+        isAsciiDisplaySafe(std::string_view(normalized).substr(std::string("员工 ").size()))) {
       return normalized;
     }
   }
@@ -114,14 +128,22 @@ std::string enrollmentProgressSuffix(const app::RuntimeStatus& status) {
 
 std::string subtitleLabel(const app::RuntimeStatus& status) {
   if (status.credentials.configured()) {
-    return status.credentials.deviceCode;
+    const std::string deviceCode = asciiDisplayOrEmpty(status.credentials.deviceCode);
+    if (!deviceCode.empty()) {
+      return deviceCode;
+    }
+    return "设备";
   }
   return "SZPI ESP32-S3";
 }
 
 std::string credentialsLabel(const app::RuntimeStatus& status) {
   if (status.credentials.configured()) {
-    return status.credentials.deviceCode;
+    const std::string deviceCode = asciiDisplayOrEmpty(status.credentials.deviceCode);
+    if (!deviceCode.empty()) {
+      return deviceCode;
+    }
+    return "已配置";
   }
   if (status.bootstrapConfigured) {
     return "仅引导配置";
@@ -609,13 +631,18 @@ std::string cameraLabel(const app::RuntimeStatus& status) {
 
   if (!status.cameraReady) {
     if (!status.cameraLastError.empty()) {
-      return "摄像头初始化失败\n" + status.cameraLastError;
+      const std::string cameraError = asciiDisplayOrEmpty(status.cameraLastError);
+      if (!cameraError.empty()) {
+        return "摄像头初始化失败\n" + cameraError;
+      }
+      return "摄像头初始化失败";
     }
     return "摄像头已连接\n等待初始化";
   }
 
+  const std::string sensorModel = asciiDisplayOrEmpty(status.cameraSensorModel);
   std::ostringstream oss;
-  oss << (status.cameraSensorModel.empty() ? "摄像头已就绪" : status.cameraSensorModel + " 已就绪");
+  oss << (sensorModel.empty() ? "摄像头已就绪" : sensorModel + " 已就绪");
   if (status.cameraLastFrame.bytes > 0) {
     oss << "\n" << status.cameraLastFrame.width << "x" << status.cameraLastFrame.height << " "
         << face::cameraPixelFormatName(status.cameraLastFrame.pixelFormat) << " #" << status.cameraCaptureCount;
@@ -651,8 +678,13 @@ AppViewModel StatusScreenPresenter::build(const app::RuntimeStatus& status) {
   view.enrollmentTaskSummaryLine = enrollmentTaskSummary(status);
   view.credentialsLine = credentialsLabel(status);
   view.storageLine = storageLabel(status);
-  view.wifiLine = connectivityLabel(status.connectivity) +
-      (status.activeWifiSsid.has_value() ? " (" + status.activeWifiSsid.value() + ")" : "");
+  view.wifiLine = connectivityLabel(status.connectivity);
+  if (status.activeWifiSsid.has_value()) {
+    const std::string ssid = asciiDisplayOrEmpty(status.activeWifiSsid.value());
+    if (!ssid.empty()) {
+      view.wifiLine += " (" + ssid + ")";
+    }
+  }
   view.activationLine = activationLabel(status);
   view.apiLine = apiLabel(status);
   view.faceDetectLine = app::formatFaceDetectLine(status, app::FaceLineStyle::Presenter);

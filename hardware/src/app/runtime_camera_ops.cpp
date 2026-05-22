@@ -61,6 +61,26 @@ void markPreviewRendered(RuntimeState& state, uint32_t nowMs) {
   state.lastCameraPreviewRenderMs = nowMs;
 }
 
+infra::DisplayRgb565Frame buildDetectionPreviewFrame(
+    const RuntimeState& state,
+    const face::CameraFrameInfo& frameInfo,
+    const uint8_t* frameData) {
+  infra::DisplayRgb565Frame preview = {
+      .data = frameData,
+      .width = frameInfo.width,
+      .height = frameInfo.height,
+      .faceBoxes = {},
+      .faceBoxCount = 0,
+      .primaryFaceBoxIndex = std::nullopt,
+  };
+  for (std::size_t index = 0; index < state.faceBoxCount && index < preview.faceBoxes.size(); index += 1) {
+    preview.faceBoxes[index] = state.faceBoxes[index];
+  }
+  preview.faceBoxCount = std::min(state.faceBoxCount, preview.faceBoxes.size());
+  preview.primaryFaceBoxIndex = state.primaryFaceBoxIndex;
+  return preview;
+}
+
 }  // namespace
 
 void initializeCamera(RuntimeContext& context, RuntimeState& state) {
@@ -129,19 +149,16 @@ void pollCamera(RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
 
     if (shouldPreview) {
       const uint32_t previewStartedUs = micros();
-      infra::DisplayRgb565Frame preview = {
-          .data = frame->data(),
-          .width = frame->info().width,
-          .height = frame->info().height,
-          .faceBoxes = {},
-          .faceBoxCount = context.enrollmentService.active() ? 0U : state.faceBoxCount,
-          .primaryFaceBoxIndex = context.enrollmentService.active() ? std::nullopt : state.primaryFaceBoxIndex,
-      };
-      if (!context.enrollmentService.active()) {
-        for (std::size_t index = 0; index < state.faceBoxCount && index < preview.faceBoxes.size(); index += 1) {
-          preview.faceBoxes[index] = state.faceBoxes[index];
-        }
-      }
+      const infra::DisplayRgb565Frame preview = context.enrollmentService.active()
+          ? infra::DisplayRgb565Frame{
+                .data = frame->data(),
+                .width = frame->info().width,
+                .height = frame->info().height,
+                .faceBoxes = {},
+                .faceBoxCount = 0,
+                .primaryFaceBoxIndex = std::nullopt,
+            }
+          : buildDetectionPreviewFrame(state, frame->info(), frame->data());
       context.display.updateCameraPreview(preview);
       perf.previewUpdates += 1;
       perf.previewSubmitUs += static_cast<uint64_t>(micros() - previewStartedUs);

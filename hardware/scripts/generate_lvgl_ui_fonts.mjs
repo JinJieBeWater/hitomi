@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -10,38 +11,50 @@ const scriptDir = path.dirname(scriptPath);
 const hardwareDir = path.resolve(scriptDir, "..");
 const fontDir = path.join(hardwareDir, "src/fonts");
 const symbolsFile = path.join(fontDir, "hitomi_ui_font_symbols.txt");
-
-const uiStringFiles = [
-  "include/app/runtime_face_status.hpp",
-  "src/app/runtime_enrollment_ops.cpp",
-  "src/app/runtime_face_engine_ops.cpp",
-  "src/app/runtime_network_ops.cpp",
-  "src/infra/display/lvgl_status_display.cpp",
-  "src/infra/face/esp_who_enrollment_service.cpp",
-  "src/ui/status_screen_presenter.cpp",
-];
-
-const fontTargets = [
-  {
-    size: 12,
-    fontName: "hitomi_ui_zh_12",
-    outputPath: path.join(fontDir, "hitomi_ui_zh_12.c"),
-  },
-  {
-    size: 14,
-    fontName: "hitomi_ui_zh_14",
-    outputPath: path.join(fontDir, "hitomi_ui_zh_14.c"),
-  },
-];
+const subsetDataFile = path.join(fontDir, "hitomi_ui_subset_ttf.c");
+const subsetWorkDir = path.join(os.tmpdir(), "hitomi-ui-fonts");
+const subsetTtfFile = path.join(subsetWorkDir, "hitomi_ui_subset.ttf");
+const sourceRoots = ["include", "src"];
+const sourceExtensions = new Set([".hpp", ".cpp", ".c"]);
 
 function cppStringLiterals(source) {
   return source.match(/"(?:\\.|[^"\\])*"/g) ?? [];
 }
 
+function walkSourceFiles(directoryPath, files = []) {
+  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
+    const absolutePath = path.join(directoryPath, entry.name);
+    const relativePath = path.relative(hardwareDir, absolutePath);
+
+    if (entry.isDirectory()) {
+      if (relativePath === "src/fonts") {
+        continue;
+      }
+      walkSourceFiles(absolutePath, files);
+      continue;
+    }
+
+    if (!sourceExtensions.has(path.extname(entry.name))) {
+      continue;
+    }
+
+    files.push(relativePath);
+  }
+
+  return files;
+}
+
+function collectUiSourceFiles() {
+  // Scan all checked-in device sources so new static UI copy doesn't require
+  // manually updating a file allowlist before regenerating fonts.
+  return sourceRoots.flatMap((root) => walkSourceFiles(path.join(hardwareDir, root))).sort();
+}
+
 function extractUiSymbols() {
   const symbols = new Set();
+  const sourceFiles = collectUiSourceFiles();
 
-  for (const relativePath of uiStringFiles) {
+  for (const relativePath of sourceFiles) {
     const absolutePath = path.join(hardwareDir, relativePath);
     const source = readFileSync(absolutePath, "utf8");
     for (const literal of cppStringLiterals(source)) {
@@ -64,8 +77,8 @@ function resolveFontPath() {
   const candidates = [
     process.env.HITOMI_UI_FONT_PATH,
     "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    "/System/Library/Fonts/Supplemental/NISC18030.ttf",
     "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/Supplemental/NISC18030.ttf",
   ].filter(Boolean);
 
   for (const candidate of candidates) {
@@ -79,43 +92,56 @@ function resolveFontPath() {
   );
 }
 
-function runLvFontConv(fontPath, symbols, target) {
+function resolveAsciiSymbols() {
+  let asciiSymbols = "";
+  for (let code = 0x20; code <= 0x7e; code += 1) {
+    asciiSymbols += String.fromCharCode(code);
+  }
+  return asciiSymbols;
+}
+
+function runFontSubset(fontPath, symbols) {
+  mkdirSync(subsetWorkDir, { recursive: true });
+  const textFile = path.join(subsetWorkDir, "hitomi_ui_subset_chars.txt");
+  writeFileSync(textFile, `${resolveAsciiSymbols()}${symbols}\n`, "utf8");
+
   const args = [
-    "--yes",
-    "lv_font_conv",
-    "--size",
-    String(target.size),
-    "--bpp",
-    "4",
-    "--format",
-    "lvgl",
-    "--lv-include",
-    "lvgl.h",
-    "--font",
+    "-m",
+    "fontTools.subset",
     fontPath,
-    "-r",
-    "0x20-0x7F",
-    "--symbols",
-    symbols,
-    "--force-fast-kern-format",
-    "--lv-font-name",
-    target.fontName,
-    "-o",
-    target.outputPath,
+    `--text-file=${textFile}`,
+    `--output-file=${subsetTtfFile}`,
+    "--no-hinting",
   ];
 
-  const result = spawnSync("npx", args, {
+  const result = spawnSync("python3", args, {
     cwd: hardwareDir,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      npm_config_cache: process.env.npm_config_cache || "/tmp/codex-npm-cache",
-    },
   });
 
   if (result.status !== 0) {
-    throw new Error(result.stderr || result.stdout || "lv_font_conv failed");
+    throw new Error(
+      "fontTools subset failed. Install fonttools first, for example: python3 -m pip install fonttools",
+    );
   }
+}
+
+function runXxd() {
+  const args = ["-i", "-n", "hitomi_ui_subset_ttf", subsetTtfFile];
+
+  const result = spawnSync("xxd", args, {
+    cwd: hardwareDir,
+    encoding: "utf8",
+  });
+
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "xxd failed");
+  }
+
+  const source = result.stdout
+    .replace(/^unsigned char /m, "const unsigned char ")
+    .replace(/^unsigned int /m, "const unsigned int ");
+  writeFileSync(subsetDataFile, source, "utf8");
 }
 
 function ensureCoverageMatchesCurrentStrings(currentSymbols) {
@@ -137,12 +163,12 @@ function generate() {
   writeFileSync(symbolsFile, `${symbols}\n`, "utf8");
 
   const fontPath = resolveFontPath();
-  for (const target of fontTargets) {
-    runLvFontConv(fontPath, symbols, target);
-  }
+  runFontSubset(fontPath, symbols);
+  runXxd();
 
   console.log(`Generated fonts from ${fontPath}`);
   console.log(`Symbols: ${symbols.length}`);
+  console.log(`Embedded data: ${subsetDataFile}`);
 }
 
 function check() {
