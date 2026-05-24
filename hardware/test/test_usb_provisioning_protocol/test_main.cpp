@@ -33,6 +33,13 @@ void testParseBootstrapIdentityCommand() {
   expect(command->bootstrapIdentity.deviceSerial == "BOOT-001", "device serial should parse");
 }
 
+void testParseResetDeviceConfigCommand() {
+  auto command = app::parseUsbProvisioningCommand(R"({"type":"reset_device_config"})");
+
+  expect(command.has_value(), "reset command should parse");
+  expect(command->type == app::UsbProvisioningCommandType::ResetDeviceConfig, "command type should match");
+}
+
 void testBuildProvisioningResponseOmitsSecrets() {
   core::DeviceConfig config = {};
   config.backendLocator.origin = "http://192.168.1.10:3000";
@@ -62,6 +69,7 @@ int main() {
   try {
     testParseSetWifiProfilesCommand();
     testParseBootstrapIdentityCommand();
+    testParseResetDeviceConfigCommand();
     testBuildProvisioningResponseOmitsSecrets();
     std::cout << "[PASS] usb provisioning protocol" << '\n';
     return EXIT_SUCCESS;

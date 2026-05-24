@@ -7,7 +7,9 @@
 #include "app/runtime_network_ops.hpp"
 #include "app/runtime_storage_ops.hpp"
 #include "app/usb_provisioning_protocol.hpp"
+#include "board/app_config.hpp"
 #include "core/use_cases.hpp"
+#include "infra/template_store_port.hpp"
 
 namespace app {
 namespace {
@@ -74,9 +76,21 @@ bool applyUsbProvisioningCommand(
       resetConnectivity(state);
       return true;
     case UsbProvisioningCommandType::ResetDeviceConfig:
+      if (board::kEnableTemplateStore) {
+        if (!state.templateStoreReady || !context.templateStore.clearTemplates()) {
+          Serial.println("[APP] template reset failed; keeping device config unchanged");
+          applyTemplateStoreStatus(context, state, context.templateStore.status(), false);
+          persistStorageAux(context, state);
+          return false;
+        }
+        applyTemplateStoreStatus(context, state, context.templateStore.status(), true);
+        persistStorageAux(context, state);
+      }
       state.deviceConfig = {};
       state.credentials = {};
+      state.faceModuleEnabled = false;
       context.localStore.clearDeviceConfig();
+      context.localStore.saveCredentials(state.credentials);
       resetConnectivity(state);
       return true;
     case UsbProvisioningCommandType::Invalid:

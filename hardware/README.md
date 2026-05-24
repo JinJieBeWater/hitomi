@@ -164,6 +164,8 @@ Supported commands:
 {"type":"reset_device_config"}
 ```
 
+`reset_device_config` is the factory-reset path. It clears the device config and the project's SD-backed face template library under `/templates`; it does not format the whole SD card or delete unrelated files.
+
 Responses include the current editable config snapshot for Web Serial forms, while still omitting activation secrets such as the runtime `apiKey`.
 
 ## Wi-Fi Connection Mechanism

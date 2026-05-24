@@ -66,6 +66,7 @@ class TemplateStorePort {
   virtual std::optional<TemplateBlob> readTemplate(const std::string& employeeId) = 0;
   virtual bool upsertTemplate(const std::string& employeeId, const std::vector<uint8_t>& bytes, uint64_t updatedAt) = 0;
   virtual bool removeTemplate(const std::string& employeeId) = 0;
+  virtual bool clearTemplates() = 0;
 };
 
 class NoopTemplateStorePort final : public TemplateStorePort {
@@ -103,6 +104,10 @@ class NoopTemplateStorePort final : public TemplateStorePort {
 
   bool removeTemplate(const std::string& employeeId) override {
     (void)employeeId;
+    return false;
+  }
+
+  bool clearTemplates() override {
     return false;
   }
 

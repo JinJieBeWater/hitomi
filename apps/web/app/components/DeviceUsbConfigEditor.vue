@@ -87,6 +87,7 @@ const emptyClass = computed(() =>
         size="xs"
         variant="outline"
         icon="i-lucide-plus"
+        class="shrink-0 whitespace-nowrap"
         @click="emit('add:wifi-profile')"
       >
         {{ addLabel }}

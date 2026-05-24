@@ -18,6 +18,7 @@ class SdMmcTemplateStore final : public TemplateStorePort {
   std::optional<TemplateBlob> readTemplate(const std::string& employeeId) override;
   bool upsertTemplate(const std::string& employeeId, const std::vector<uint8_t>& bytes, uint64_t updatedAt) override;
   bool removeTemplate(const std::string& employeeId) override;
+  bool clearTemplates() override;
 
  private:
   struct ManifestLoadResult {

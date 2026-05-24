@@ -4,6 +4,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -346,6 +347,53 @@ bool SdMmcTemplateStore::removeTemplate(const std::string& employeeId) {
   }
 
   setReadyState(manifest_, templateStatusCodeForCount(manifest_->items.size()), "ok");
+  return true;
+}
+
+bool SdMmcTemplateStore::clearTemplates() {
+  if (!status_.ready) {
+    return false;
+  }
+
+  if (!ensureTemplateDirectory()) {
+    setUnavailableState(kTemplateStoreIoError, errnoDetail("mkdir", mountedPath(kTemplatesDirPath)), true);
+    return false;
+  }
+
+  const std::string mountedDir = mountedPath(kTemplatesDirPath);
+  DIR* dir = ::opendir(mountedDir.c_str());
+  if (dir == nullptr) {
+    setUnavailableState(kTemplateStoreIoError, errnoDetail("opendir", mountedDir), true);
+    return false;
+  }
+
+  bool ok = true;
+  while (dirent* entry = ::readdir(dir)) {
+    const std::string name = entry->d_name;
+    if (name == "." || name == "..") {
+      continue;
+    }
+
+    const std::string path = mountedDir + "/" + name;
+    if (std::remove(path.c_str()) != 0) {
+      ok = false;
+      break;
+    }
+  }
+  ::closedir(dir);
+
+  if (!ok) {
+    setUnavailableState(kTemplateStoreIoError, "failed to clear template directory", true);
+    return false;
+  }
+
+  manifest_ = TemplateManifest{.schemaVersion = 1, .updatedAt = nowMs(), .items = {}};
+  if (!writeManifest()) {
+    setUnavailableState(kTemplateStoreIoError, "failed to write empty manifest", true);
+    return false;
+  }
+
+  setReadyState(manifest_, kTemplateStoreMountedEmpty, "cleared");
   return true;
 }
 

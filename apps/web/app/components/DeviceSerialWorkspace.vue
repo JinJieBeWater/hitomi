@@ -612,7 +612,7 @@ async function pollUntilActivated() {
 }
 
 async function executeReset(type: "credentials" | "full") {
-  if (!deviceId.value) {
+  if (!serial.connected.value) {
     return;
   }
 
@@ -633,11 +633,15 @@ async function executeReset(type: "credentials" | "full") {
     });
 
     statusMessage.value =
-      type === "credentials" ? "凭证已清除，设备将重新激活。" : "设备已完全重置，进入待激活状态。";
+      type === "credentials"
+        ? "凭证已清除，设备将重新激活。"
+        : "设备配置和本地人脸模板已清空，进入待激活状态。";
     toast.add({ title: type === "credentials" ? "凭证已清除" : "设备已完全重置" });
     view.value = "provision";
     step.value = "action";
-    await pollUntilActivated();
+    if (type === "credentials") {
+      await pollUntilActivated();
+    }
   } catch (error: any) {
     errorMessage.value = error?.message || "重置失败。";
   } finally {
@@ -1144,7 +1148,7 @@ onBeforeUnmount(() => {
               <div class="mt-3 space-y-3">
                 <div class="border-b border-neutral-200/70 pb-3 dark:border-neutral-800/80">
                   <div class="text-sm font-medium text-highlighted">清除运行时凭证</div>
-                  <p class="mt-1 text-xs text-muted">保留 WiFi 和后台地址，仅清除激活凭证，设备将重新激活。</p>
+                  <p class="mt-1 text-xs text-muted">保留 Wi-Fi、后台地址和本地人脸模板，仅清除激活凭证，设备将重新激活。</p>
                   <div class="mt-3">
                     <template v-if="confirmingReset === 'credentials'">
                       <p class="mb-2 text-xs text-amber-600 dark:text-amber-400">确认执行？</p>
@@ -1153,7 +1157,7 @@ onBeforeUnmount(() => {
                         <UButton size="sm" variant="outline" color="neutral" :disabled="busy" @click="confirmingReset = null">取消</UButton>
                       </div>
                     </template>
-                    <UButton v-else size="sm" color="warning" variant="outline" icon="i-lucide-key-round" :disabled="!deviceId" @click="confirmingReset = 'credentials'">
+                    <UButton v-else size="sm" color="warning" variant="outline" icon="i-lucide-key-round" :disabled="!serial.connected.value" @click="confirmingReset = 'credentials'">
                       清除凭证
                     </UButton>
                   </div>
@@ -1161,16 +1165,16 @@ onBeforeUnmount(() => {
 
                 <div class="pt-1">
                   <div class="text-sm font-medium text-red-700 dark:text-red-400">完全重置</div>
-                  <p class="mt-1 text-xs text-muted">清除全部配置，设备恢复出厂状态。</p>
+                  <p class="mt-1 text-xs text-muted">清除全部配置和 SD 卡内的人脸模板，设备恢复出厂状态。</p>
                   <div class="mt-3">
                     <template v-if="confirmingReset === 'full'">
-                      <p class="mb-2 text-xs text-red-600 dark:text-red-400">此操作不可撤销，确认完全重置？</p>
+                      <p class="mb-2 text-xs text-red-600 dark:text-red-400">此操作会删除本地人脸模板且不可撤销，确认完全重置？</p>
                       <div class="flex gap-2">
                         <UButton size="sm" color="error" icon="i-lucide-check" :loading="busy" @click="executeReset('full')">确认重置</UButton>
                         <UButton size="sm" variant="outline" color="neutral" :disabled="busy" @click="confirmingReset = null">取消</UButton>
                       </div>
                     </template>
-                    <UButton v-else size="sm" color="error" variant="outline" icon="i-lucide-rotate-ccw" :disabled="!deviceId" @click="confirmingReset = 'full'">
+                    <UButton v-else size="sm" color="error" variant="outline" icon="i-lucide-rotate-ccw" :disabled="!serial.connected.value" @click="confirmingReset = 'full'">
                       完全重置
                     </UButton>
                   </div>
