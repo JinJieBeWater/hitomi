@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <cstdio>
+#include <list>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -9,6 +10,7 @@
 #include "board/app_config.hpp"
 #include "dl_image_define.hpp"
 #include "esp_err.h"
+#include "face/model_lock.hpp"
 #include "human_face_detect.hpp"
 #include "human_face_recognition.hpp"
 
@@ -272,7 +274,13 @@ void EspWhoEnrollmentService::processFrame(
       .pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565,
   };
 
-  const auto& detections = impl_->detector->run(image);
+  if (!face::tryLockModel(20)) {
+    impl_->progress.detail = "模型忙碌中";
+    impl_->logProgressIfChanged(nowMs);
+    return;
+  }
+  const std::list<dl::detect::result_t> detections = impl_->detector->run(image);
+  face::unlockModel();
   impl_->progress.detectedFaceCount = detections.size();
 
   if (detections.empty()) {
@@ -297,7 +305,17 @@ void EspWhoEnrollmentService::processFrame(
   }
 
   Serial.printf("[ENROLL] extracting template task=%s\n", impl_->request.taskId.c_str());
-  if (!impl_->recreateRecognizer() || impl_->recognizer->enroll(image, detections) != ESP_OK) {
+  if (!impl_->recreateRecognizer()) {
+    impl_->finishFailure("ENROLLMENT_FEATURE_EXTRACTION_FAILED", nowMs);
+    return;
+  }
+  if (!face::tryLockModel(1000)) {
+    impl_->finishFailure("ENROLLMENT_MODEL_BUSY", nowMs);
+    return;
+  }
+  const esp_err_t enrollResult = impl_->recognizer->enroll(image, detections);
+  face::unlockModel();
+  if (enrollResult != ESP_OK) {
     impl_->finishFailure("ENROLLMENT_FEATURE_EXTRACTION_FAILED", nowMs);
     return;
   }

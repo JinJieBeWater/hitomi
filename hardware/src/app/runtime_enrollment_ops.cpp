@@ -4,6 +4,7 @@
 
 #include <optional>
 
+#include "app/runtime_face_engine_ops.hpp"
 #include "app/runtime_storage_ops.hpp"
 #include "board/app_config.hpp"
 #include "core/use_cases.hpp"
@@ -184,6 +185,7 @@ void startEnrollmentTask(
     return;
   }
 
+  discardPendingRecognition();
   if (!context.enrollmentService.start(face::EnrollmentRequest{
           .taskId = task->taskId,
           .employeeId = task->employeeId,

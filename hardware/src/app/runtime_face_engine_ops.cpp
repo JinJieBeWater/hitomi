@@ -1,6 +1,10 @@
 #include "app/runtime_face_engine_ops.hpp"
 
 #include <Arduino.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#include <esp_heap_caps.h>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -8,6 +12,7 @@
 #include <iomanip>
 #include <list>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -16,6 +21,7 @@
 #include "core/use_cases.hpp"
 #include "dl_detect_define.hpp"
 #include "dl_image_define.hpp"
+#include "face/model_lock.hpp"
 #include "human_face_detect.hpp"
 #include "human_face_recognition.hpp"
 #include "app/runtime_storage_ops.hpp"
@@ -45,10 +51,43 @@ struct StoredFaceTemplate {
   std::vector<float> feature;
 };
 
+struct RecognitionSnapshotKey {
+  uint64_t attendanceConfigSyncedAt = 0;
+  uint64_t employeesSyncedAt = 0;
+  uint64_t templateManifestUpdatedAt = 0;
+  std::size_t templateCount = 0;
+};
+
+struct PendingRecognitionRequest {
+  face::CameraFrameInfo frameInfo = {};
+  RecognitionSnapshotKey snapshotKey = {};
+  std::optional<uint64_t> capturedWallClockMs;
+  uint32_t generation = 0;
+  std::list<dl::detect::result_t> results;
+  std::vector<StoredFaceTemplate> templates;
+};
+
+struct PendingRecognitionResult {
+  StoredFaceTemplate matched;
+  float similarity = 0.0F;
+  uint64_t capturedAtMs = 0;
+  uint64_t recognizedAt = 0;
+  RecognitionSnapshotKey snapshotKey = {};
+  uint32_t generation = 0;
+};
+
 struct FaceDetectionRuntime {
   std::unique_ptr<HumanFaceDetect> detector;
   std::unique_ptr<HumanFaceFeat> featureModel;
   std::vector<StoredFaceTemplate> templates;
+  SemaphoreHandle_t recognitionMutex = nullptr;
+  TaskHandle_t recognitionTask = nullptr;
+  std::optional<PendingRecognitionRequest> recognitionRequest;
+  std::optional<PendingRecognitionResult> recognitionResult;
+  uint8_t* recognitionFrameBuffer = nullptr;
+  std::size_t recognitionFrameBufferSize = 0;
+  bool recognitionBusy = false;
+  uint32_t recognitionGeneration = 1;
   uint64_t templateManifestUpdatedAt = 0;
   uint64_t employeesSyncedAt = 0;
   std::size_t templateCount = 0;
@@ -62,6 +101,29 @@ FaceDetectionRuntime& faceDetectionRuntime() {
 FacePerfWindow& facePerfWindow() {
   static FacePerfWindow window;
   return window;
+}
+
+RecognitionSnapshotKey recognitionSnapshotKey(const RuntimeState& state) {
+  return RecognitionSnapshotKey{
+      .attendanceConfigSyncedAt = state.snapshots.attendanceConfigSyncedAt,
+      .employeesSyncedAt = state.snapshots.employeesSyncedAt,
+      .templateManifestUpdatedAt = state.storageAux.templateLibrarySummary.manifestUpdatedAt,
+      .templateCount = state.storageAux.templateLibrarySummary.templateCount,
+  };
+}
+
+bool sameSnapshotKey(const RecognitionSnapshotKey& left, const RecognitionSnapshotKey& right) {
+  return left.attendanceConfigSyncedAt == right.attendanceConfigSyncedAt &&
+      left.employeesSyncedAt == right.employeesSyncedAt &&
+      left.templateManifestUpdatedAt == right.templateManifestUpdatedAt &&
+      left.templateCount == right.templateCount;
+}
+
+bool employeeExists(const RuntimeState& state, const std::string& employeeId) {
+  return std::any_of(
+      state.snapshots.employees.begin(),
+      state.snapshots.employees.end(),
+      [&](const core::EmployeeSnapshot& employee) { return employee.id == employeeId; });
 }
 
 void maybeLogFacePerf(uint32_t nowMs) {
@@ -310,14 +372,11 @@ const dl::detect::result_t* primaryFaceResult(const std::list<dl::detect::result
       }));
 }
 
-std::optional<std::pair<const StoredFaceTemplate*, float>> recognizeEmployee(
-    const RuntimeContext& context,
-    RuntimeState& state,
+std::optional<std::pair<StoredFaceTemplate, float>> recognizeEmployeeFromLoadedTemplates(
     const dl::image::img_t& image,
-    const std::list<dl::detect::result_t>& results) {
-  reloadRecognitionTemplates(context, state);
-  auto& runtime = faceDetectionRuntime();
-  if (runtime.templates.empty() || !ensureFeatureModel()) {
+    const std::list<dl::detect::result_t>& results,
+    const std::vector<StoredFaceTemplate>& templates) {
+  if (templates.empty() || !ensureFeatureModel()) {
     return std::nullopt;
   }
 
@@ -326,25 +385,207 @@ std::optional<std::pair<const StoredFaceTemplate*, float>> recognizeEmployee(
     return std::nullopt;
   }
 
+  auto& runtime = faceDetectionRuntime();
+  if (!face::tryLockModel(20)) {
+    return std::nullopt;
+  }
   dl::TensorBase* feature = runtime.featureModel->run(image, primaryFace->keypoint);
   if (feature == nullptr) {
+    face::unlockModel();
     return std::nullopt;
   }
 
   const StoredFaceTemplate* bestTemplate = nullptr;
   float bestSimilarity = board::kFaceRecognitionThreshold;
-  for (const auto& templateItem : runtime.templates) {
+  for (const auto& templateItem : templates) {
     const float similarity = compareFeatureSimilarity(feature, templateItem.feature);
     if (similarity > bestSimilarity) {
       bestSimilarity = similarity;
       bestTemplate = &templateItem;
     }
   }
+  face::unlockModel();
 
   if (bestTemplate == nullptr) {
     return std::nullopt;
   }
-  return std::make_pair(bestTemplate, bestSimilarity);
+  return std::make_pair(*bestTemplate, bestSimilarity);
+}
+
+void handleAttendanceRecognition(
+    const RuntimeContext& context,
+    RuntimeState& state,
+    const StoredFaceTemplate& matched,
+    float similarity,
+    uint64_t recognizedAt,
+    uint32_t nowMs);
+
+void recognitionTaskMain(void*) {
+  auto& runtime = faceDetectionRuntime();
+  while (true) {
+    std::optional<PendingRecognitionRequest> request;
+    if (runtime.recognitionMutex != nullptr && xSemaphoreTake(runtime.recognitionMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+      if (runtime.recognitionRequest.has_value()) {
+        request = std::move(runtime.recognitionRequest);
+        runtime.recognitionRequest.reset();
+      }
+      xSemaphoreGive(runtime.recognitionMutex);
+    }
+
+    if (!request.has_value()) {
+      vTaskDelay(pdMS_TO_TICKS(10));
+      continue;
+    }
+
+    const uint32_t startedUs = micros();
+    dl::image::img_t image = {
+        .data = runtime.recognitionFrameBuffer,
+        .width = request->frameInfo.width,
+        .height = request->frameInfo.height,
+        .pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565,
+    };
+    const auto match = recognizeEmployeeFromLoadedTemplates(image, request->results, request->templates);
+
+    if (runtime.recognitionMutex != nullptr && xSemaphoreTake(runtime.recognitionMutex, portMAX_DELAY) == pdTRUE) {
+      if (match.has_value()) {
+        runtime.recognitionResult = PendingRecognitionResult{
+            .matched = match->first,
+            .similarity = match->second,
+            .capturedAtMs = request->frameInfo.capturedAtMs,
+            .recognizedAt = request->capturedWallClockMs.value_or(0),
+            .snapshotKey = request->snapshotKey,
+            .generation = request->generation,
+        };
+      }
+      runtime.recognitionBusy = false;
+      xSemaphoreGive(runtime.recognitionMutex);
+    }
+
+    Serial.printf(
+        "[FACE] recognition async matched=%s elapsed_us=%lu\n",
+        match.has_value() ? "yes" : "no",
+        static_cast<unsigned long>(micros() - startedUs));
+  }
+}
+
+bool ensureRecognitionTask() {
+  auto& runtime = faceDetectionRuntime();
+  if (runtime.recognitionTask != nullptr) {
+    return true;
+  }
+  if (runtime.recognitionMutex == nullptr) {
+    runtime.recognitionMutex = xSemaphoreCreateMutex();
+  }
+  if (runtime.recognitionMutex == nullptr) {
+    return false;
+  }
+  return xTaskCreatePinnedToCore(
+             recognitionTaskMain,
+             "face_recognition",
+             8 * 1024,
+             nullptr,
+             1,
+             &runtime.recognitionTask,
+             0) == pdPASS;
+}
+
+bool ensureRecognitionFrameBuffer(FaceDetectionRuntime& runtime, std::size_t bytes) {
+  constexpr std::size_t kMaxRecognitionFrameBytes = 320U * 240U * 2U;
+  if (bytes == 0 || bytes > kMaxRecognitionFrameBytes) {
+    return false;
+  }
+  if (runtime.recognitionFrameBuffer != nullptr && runtime.recognitionFrameBufferSize >= bytes) {
+    return true;
+  }
+  if (runtime.recognitionFrameBuffer != nullptr) {
+    heap_caps_free(runtime.recognitionFrameBuffer);
+    runtime.recognitionFrameBuffer = nullptr;
+    runtime.recognitionFrameBufferSize = 0;
+  }
+
+  runtime.recognitionFrameBuffer = static_cast<uint8_t*>(heap_caps_malloc(bytes, MALLOC_CAP_8BIT | MALLOC_CAP_SPIRAM));
+  if (runtime.recognitionFrameBuffer == nullptr) {
+    return false;
+  }
+  runtime.recognitionFrameBufferSize = bytes;
+  return true;
+}
+
+bool enqueueRecognitionRequest(
+    const RuntimeContext& context,
+    RuntimeState& state,
+    const face::CameraFrameInfo& frameInfo,
+    const uint8_t* frameData,
+    const std::list<dl::detect::result_t>& results) {
+  if (frameData == nullptr || frameInfo.bytes == 0 || results.empty()) {
+    return false;
+  }
+  auto& runtime = faceDetectionRuntime();
+
+  reloadRecognitionTemplates(context, state);
+  if (runtime.templates.empty() || !ensureRecognitionTask()) {
+    return false;
+  }
+
+  if (xSemaphoreTake(runtime.recognitionMutex, pdMS_TO_TICKS(2)) != pdTRUE) {
+    return false;
+  }
+  if (runtime.recognitionBusy || runtime.recognitionRequest.has_value()) {
+    xSemaphoreGive(runtime.recognitionMutex);
+    return false;
+  }
+  if (!ensureRecognitionFrameBuffer(runtime, frameInfo.bytes)) {
+    xSemaphoreGive(runtime.recognitionMutex);
+    return false;
+  }
+  std::memcpy(runtime.recognitionFrameBuffer, frameData, frameInfo.bytes);
+
+  PendingRecognitionRequest request = {
+      .frameInfo = frameInfo,
+      .snapshotKey = recognitionSnapshotKey(state),
+      .capturedWallClockMs = resolveWallClockTimeMs(state, static_cast<uint32_t>(frameInfo.capturedAtMs)),
+      .generation = runtime.recognitionGeneration,
+      .results = results,
+      .templates = runtime.templates,
+  };
+  if (!request.capturedWallClockMs.has_value()) {
+    xSemaphoreGive(runtime.recognitionMutex);
+    return false;
+  }
+  runtime.recognitionRequest = std::move(request);
+  runtime.recognitionBusy = true;
+  xSemaphoreGive(runtime.recognitionMutex);
+  return true;
+}
+
+void consumeRecognitionResult(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
+  auto& runtime = faceDetectionRuntime();
+  if (runtime.recognitionMutex == nullptr) {
+    return;
+  }
+  std::optional<PendingRecognitionResult> result;
+  if (xSemaphoreTake(runtime.recognitionMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
+    result = std::move(runtime.recognitionResult);
+    runtime.recognitionResult.reset();
+    xSemaphoreGive(runtime.recognitionMutex);
+  }
+  if (!result.has_value()) {
+    return;
+  }
+  if (context.enrollmentService.active() || result->recognizedAt == 0 ||
+      result->generation != runtime.recognitionGeneration ||
+      !sameSnapshotKey(result->snapshotKey, recognitionSnapshotKey(state)) ||
+      !employeeExists(state, result->matched.employeeId)) {
+    return;
+  }
+
+  handleAttendanceRecognition(
+      context,
+      state,
+      result->matched,
+      result->similarity,
+      result->recognizedAt,
+      nowMs);
 }
 
 std::string attendanceTypeLabel(core::AttendanceRecordType type) {
@@ -404,9 +645,8 @@ void handleAttendanceRecognition(
     RuntimeState& state,
     const StoredFaceTemplate& matched,
     float similarity,
-    uint64_t capturedAtMs,
+    uint64_t recognizedAt,
     uint32_t nowMs) {
-  const uint64_t recognizedAt = resolveWallClockTimeMs(state, nowMs).value_or(capturedAtMs);
   const std::string employeeName = employeeDisplayLabel(matched);
   if (!state.snapshots.attendanceConfig.has_value()) {
     publishAttendanceFeedback(
@@ -499,6 +739,41 @@ void initializeFaceEngine(RuntimeState& state) {
   Serial.printf("[FACE] %s\n", state.faceEngineStatusDetail.value_or("unavailable").c_str());
 }
 
+void prepareFaceRecognition(const RuntimeContext& context, RuntimeState& state) {
+  if (!state.faceEngineReady) {
+    return;
+  }
+
+  const uint32_t startedUs = micros();
+  const bool featureReady = ensureFeatureModel();
+  reloadRecognitionTemplates(context, state);
+  const auto& runtime = faceDetectionRuntime();
+  Serial.printf(
+      "[FACE] recognition prepared feature=%s templates=%u elapsed_us=%lu\n",
+      featureReady ? "ready" : "unavailable",
+      static_cast<unsigned>(runtime.templates.size()),
+      static_cast<unsigned long>(micros() - startedUs));
+}
+
+void discardPendingRecognition() {
+  auto& runtime = faceDetectionRuntime();
+  if (runtime.recognitionMutex == nullptr) {
+    runtime.recognitionGeneration += 1;
+    return;
+  }
+  if (xSemaphoreTake(runtime.recognitionMutex, pdMS_TO_TICKS(20)) != pdTRUE) {
+    return;
+  }
+  runtime.recognitionGeneration += 1;
+  const bool hadQueuedRequest = runtime.recognitionRequest.has_value();
+  runtime.recognitionRequest.reset();
+  runtime.recognitionResult.reset();
+  if (hadQueuedRequest) {
+    runtime.recognitionBusy = false;
+  }
+  xSemaphoreGive(runtime.recognitionMutex);
+}
+
 void runFaceDetection(
     const RuntimeContext& context,
     RuntimeState& state,
@@ -515,6 +790,7 @@ void runFaceDetection(
   }
   if (state.lastFaceDetectionMs != 0 &&
       nowMs - state.lastFaceDetectionMs < board::kFaceDetectIntervalMs) {
+    consumeRecognitionResult(context, state, nowMs);
     return;
   }
   state.lastFaceDetectionMs = nowMs;
@@ -530,7 +806,11 @@ void runFaceDetection(
       .pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565,
   };
   const uint32_t detectStartedUs = micros();
-  const auto& results = runtime.detector->run(image);
+  if (!face::tryLockModel(20)) {
+    return;
+  }
+  const std::list<dl::detect::result_t> results = runtime.detector->run(image);
+  face::unlockModel();
   perf.detectRuns += 1;
   perf.detectUs += static_cast<uint64_t>(micros() - detectStartedUs);
   const bool detected = !results.empty();
@@ -538,20 +818,14 @@ void runFaceDetection(
   const std::optional<float> score = detected ? std::optional<float>(topScore(results)) : std::nullopt;
   storeFaceBoxes(state, results);
   applyFaceDetectionResult(state, detected, count, score);
+  consumeRecognitionResult(context, state, nowMs);
 
   if (detected) {
     perf.detectHits += 1;
     if (recognitionComputationDue(state, nowMs)) {
-      const uint32_t recognitionStartedUs = micros();
-      state.lastRecognitionComputeMs = nowMs;
-      if (const auto matched = recognizeEmployee(context, state, image, results); matched.has_value()) {
+      if (enqueueRecognitionRequest(context, state, frameInfo, frameData, results)) {
+        state.lastRecognitionComputeMs = nowMs;
         perf.recognitionRuns += 1;
-        perf.recognitionHits += 1;
-        perf.recognitionUs += static_cast<uint64_t>(micros() - recognitionStartedUs);
-        handleAttendanceRecognition(context, state, *matched->first, matched->second, frameInfo.capturedAtMs, nowMs);
-      } else if (!faceDetectionRuntime().templates.empty()) {
-        perf.recognitionRuns += 1;
-        perf.recognitionUs += static_cast<uint64_t>(micros() - recognitionStartedUs);
       }
     }
     Serial.printf(

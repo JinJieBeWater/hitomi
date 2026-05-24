@@ -75,6 +75,7 @@ void AppRuntime::setup() {
   }
   initWifi();
   initializeFaceEngine(state);
+  prepareFaceRecognition(context, state);
 
   state.displayReady = context.display.init();
   if (!state.displayReady) {
