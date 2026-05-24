@@ -41,8 +41,8 @@ void testStatusScreenShowsFaceDetectState() {
   ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
 
   expect(
-      view.faceLine.find("已连接（模型延后加载）") != std::string::npos,
-      "face line should surface engine state detail");
+      view.faceLine == "已连接",
+      "face line should keep the presenter diagnostics compact");
   expect(
       view.faceDetectLine.find("1 张人脸") != std::string::npos &&
           view.faceDetectLine.find("@0.93") != std::string::npos,
@@ -110,6 +110,29 @@ void testStatusScreenLocalizesEnrollmentFailureReason() {
       "error line should localize common enrollment failure reasons");
 }
 
+void testStatusScreenKeepsDeviceCodeOnSystemLineOnly() {
+  app::RuntimeStatus status = {};
+  status.credentials = core::DeviceCredentials{
+      .deviceCode = "DEV-001",
+      .apiKey = "secret",
+  };
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.subtitle == "设备", "sidebar subtitle should not repeat the device code");
+  expect(view.credentialsLine == "DEV-001", "system credentials line should keep the device code");
+}
+
+void testStatusScreenKeepsUnknownErrorsCompact() {
+  app::RuntimeStatus status = {};
+  status.lastErrorCode = std::optional<std::string>("A_VERY_LONG_UNMAPPED_ERROR_CODE");
+
+  ui::AppViewModel view = ui::StatusScreenPresenter::build(status);
+
+  expect(view.errorLine == "未知错误", "system error line should not render long unmapped codes");
+  expect(view.attendanceResultLine == "错误：未知错误", "home error feedback should stay compact");
+}
+
 void testStatusScreenShowsEnrollmentCancelledState() {
   app::RuntimeStatus status = {};
   status.enrollmentState = app::EnrollmentRunState::Cancelled;
@@ -151,6 +174,8 @@ int main() {
     testStatusScreenShowsEnrollmentGuidance();
     testStatusScreenShowsEnrollmentFailureState();
     testStatusScreenLocalizesEnrollmentFailureReason();
+    testStatusScreenKeepsDeviceCodeOnSystemLineOnly();
+    testStatusScreenKeepsUnknownErrorsCompact();
     testStatusScreenShowsEnrollmentCancelledState();
     testStatusScreenPrefersProjectedWallClockTime();
     std::cout << "[PASS] status screen api probe" << '\n';

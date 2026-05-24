@@ -16,7 +16,7 @@ enum class FaceLineStyle {
 
 inline std::string localizeFaceEngineDetailForPresenter(const std::string& detail) {
   if (detail == "Linked (model load deferred)") {
-    return "已连接（模型延后加载）";
+    return "已连接";
   }
   if (detail == "Link check failed") {
     return "链接检查失败";
@@ -50,14 +50,14 @@ inline std::string localizeFaceDetectDetailForPresenter(const std::string& detai
 }
 
 inline std::string formatFaceEngineLine(const RuntimeStatus& status, FaceLineStyle style) {
-  const char* readyLabel = style == FaceLineStyle::Presenter ? "识别引擎：已就绪" : "Face engine: ready";
-  const char* failedPrefix = style == FaceLineStyle::Presenter ? "识别引擎：不可用（" : "Face engine: failed (";
+  const char* readyLabel = style == FaceLineStyle::Presenter ? "已就绪" : "Face engine: ready";
+  const char* failedPrefix = style == FaceLineStyle::Presenter ? "不可用（" : "Face engine: failed (";
   if (status.faceEngineReady) {
     if (status.faceEngineStatusDetail.has_value() && !status.faceEngineStatusDetail->empty()) {
       const std::string detail = style == FaceLineStyle::Presenter
           ? localizeFaceEngineDetailForPresenter(status.faceEngineStatusDetail.value())
           : status.faceEngineStatusDetail.value();
-      return std::string(style == FaceLineStyle::Presenter ? "识别引擎：" : "Face engine: ") + detail;
+      return std::string(style == FaceLineStyle::Presenter ? "" : "Face engine: ") + detail;
     }
     return readyLabel;
   }
@@ -67,7 +67,7 @@ inline std::string formatFaceEngineLine(const RuntimeStatus& status, FaceLineSty
         : status.faceEngineStatusDetail.value();
     return std::string(failedPrefix) + detail + ")";
   }
-  return style == FaceLineStyle::Presenter ? "识别引擎：不可用" : "Face engine: unavailable";
+  return style == FaceLineStyle::Presenter ? "不可用" : "Face engine: unavailable";
 }
 
 inline std::string formatFaceDetectLine(const RuntimeStatus& status, FaceLineStyle style) {

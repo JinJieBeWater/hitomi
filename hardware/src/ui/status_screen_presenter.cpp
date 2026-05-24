@@ -128,10 +128,6 @@ std::string enrollmentProgressSuffix(const app::RuntimeStatus& status) {
 
 std::string subtitleLabel(const app::RuntimeStatus& status) {
   if (status.credentials.configured()) {
-    const std::string deviceCode = asciiDisplayOrEmpty(status.credentials.deviceCode);
-    if (!deviceCode.empty()) {
-      return deviceCode;
-    }
     return "设备";
   }
   return "SZPI ESP32-S3";
@@ -201,7 +197,42 @@ std::string translateEnrollmentFailureReason(const std::string& reason) {
 }
 
 std::string translateDisplayErrorCode(const std::string& code) {
-  return translateEnrollmentFailureReason(code);
+  if (code == "DEVICE_AUTH_FAILED") {
+    return "设备鉴权失败";
+  }
+  if (code == "DEVICE_DISABLED") {
+    return "设备已禁用";
+  }
+  if (code == "INVALID_REQUEST") {
+    return "请求无效";
+  }
+  if (code == "INTERNAL_ERROR") {
+    return "服务异常";
+  }
+  if (code == "ATTENDANCE_CONFIG_MISSING") {
+    return "考勤配置缺失";
+  }
+  if (code == "ATTENDANCE_NOT_IN_WINDOW") {
+    return "非考勤时段";
+  }
+  if (code == "ATTENDANCE_DUPLICATE_LATER_OR_EQUAL") {
+    return "重复打卡";
+  }
+  if (code == "EMPLOYEE_NOT_FOUND") {
+    return "员工不存在";
+  }
+  if (code == "TASK_CANCELLED") {
+    return "任务已取消";
+  }
+  if (code == "ENROLLMENT_TASK_NOT_FOUND") {
+    return "录脸任务不存在";
+  }
+  if (code == "ENROLLMENT_TASK_MISMATCH") {
+    return "录脸任务不匹配";
+  }
+
+  const std::string localized = translateEnrollmentFailureReason(code);
+  return localized == code ? "未知错误" : localized;
 }
 
 std::string localizedEnrollmentDetail(const app::RuntimeStatus& status) {

@@ -49,8 +49,9 @@ constexpr lv_coord_t kEnrollTaskY = 40;
 constexpr lv_coord_t kEnrollTaskHeight = 44;
 constexpr lv_coord_t kEnrollTaskGap = 6;
 constexpr lv_coord_t kEnrollTaskListHeight = 112;
-constexpr lv_coord_t kEnrollDetailY = 160;
-constexpr lv_coord_t kEnrollDetailHeight = 58;
+constexpr lv_coord_t kEnrollTaskListRightInset = 10;
+constexpr lv_coord_t kEnrollDetailY = 154;
+constexpr lv_coord_t kEnrollDetailHeight = 64;
 constexpr lv_coord_t kEnrollActionHeight = 22;
 constexpr lv_coord_t kEnrollActionGap = 8;
 
@@ -785,6 +786,18 @@ std::string enrollSelectionFooter(const LvglStatusDisplayData& data) {
   return compactSyncValue(data.lastViewModel.syncLine);
 }
 
+std::string enrollSelectionDetail(const LvglStatusDisplayData& data, bool hasTask) {
+  const std::string meta = enrollSelectionMeta(data, hasTask);
+  const std::string footer = enrollSelectionFooter(data);
+  if (meta.empty() || meta == footer) {
+    return footer;
+  }
+  if (footer.empty()) {
+    return meta;
+  }
+  return meta + "  |  " + footer;
+}
+
 std::string captureFaceStateText(const ui::AppViewModel& viewModel) {
   if (viewModel.captureDetectedFaceCount == 0) {
     return "无人脸";
@@ -841,10 +854,10 @@ void refreshChrome(LvglStatusDisplayData& data) {
     lv_label_set_text(data.sidebarTitleLabel, data.lastViewModel.title.c_str());
   }
   if (data.sidebarSubtitleLabel != nullptr) {
-    lv_label_set_text(data.sidebarSubtitleLabel, data.lastViewModel.subtitle.c_str());
+    lv_label_set_text(data.sidebarSubtitleLabel, "");
   }
   if (data.sidebarFooterLabel != nullptr) {
-    lv_label_set_text(data.sidebarFooterLabel, data.lastViewModel.footer.c_str());
+    lv_label_set_text(data.sidebarFooterLabel, "");
   }
 }
 
@@ -857,7 +870,7 @@ void refreshHomePage(LvglStatusDisplayData& data) {
         data.homeCameraFrame,
         kCameraPlaceholderHex,
         cameraTone == StatusTone::Neutral ? kPanelBorderMutedHex : toneBorderHex(cameraTone),
-        18);
+        0);
   }
   if (data.homeCameraPreviewReady) {
     lv_obj_add_flag(data.homeCameraLabel, LV_OBJ_FLAG_HIDDEN);
@@ -893,7 +906,7 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
     for (std::size_t index = 0; index < visibleCount; index += 1) {
       const auto& task = data.lastViewModel.enrollmentTasks[index];
       lv_obj_t* button = lv_button_create(data.enrollTaskList);
-      lv_obj_set_size(button, kPageWidth - 6, kEnrollTaskHeight);
+      lv_obj_set_size(button, kPageWidth - kEnrollTaskListRightInset, kEnrollTaskHeight);
       lv_obj_set_style_radius(button, 14, 0);
       lv_obj_set_style_margin_bottom(button, kEnrollTaskGap, 0);
       lv_obj_set_style_pad_left(button, 10, 0);
@@ -905,13 +918,13 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
 
       lv_obj_t* titleLabel = lv_label_create(button);
       applyLabelStyle(titleLabel, LV_TEXT_ALIGN_LEFT);
-      lv_obj_set_width(titleLabel, kPageWidth - 26);
+      lv_obj_set_width(titleLabel, kPageWidth - kEnrollTaskListRightInset - 20);
       lv_label_set_text(titleLabel, task.title.c_str());
       lv_obj_align(titleLabel, LV_ALIGN_TOP_LEFT, 0, 0);
 
       lv_obj_t* metaLabel = lv_label_create(button);
       applyCaptionStyle(metaLabel, LV_TEXT_ALIGN_LEFT);
-      lv_obj_set_width(metaLabel, kPageWidth - 26);
+      lv_obj_set_width(metaLabel, kPageWidth - kEnrollTaskListRightInset - 20);
       lv_label_set_text(metaLabel, task.meta.c_str());
       lv_obj_align(metaLabel, LV_ALIGN_BOTTOM_LEFT, 0, 0);
     }
@@ -929,8 +942,7 @@ void refreshEnrollPage(LvglStatusDisplayData& data) {
     lv_label_set_text(data.enrollSelectionTitleLabel, enrollSelectionTitle(data, hasTask).c_str());
   }
   if (data.enrollSelectionMetaLabel != nullptr) {
-    const std::string detail = enrollSelectionMeta(data, hasTask) + "  |  " + enrollSelectionFooter(data);
-    lv_label_set_text(data.enrollSelectionMetaLabel, detail.c_str());
+    lv_label_set_text(data.enrollSelectionMetaLabel, enrollSelectionDetail(data, hasTask).c_str());
   }
 }
 
@@ -991,8 +1003,7 @@ void refreshSystemPage(LvglStatusDisplayData& data) {
     lv_obj_set_style_text_color(data.systemSyncLabel, lv_color_hex(toneLedHex(syncTone)), 0);
   }
   if (data.systemFooterLabel != nullptr) {
-    const std::string footer = data.lastViewModel.subtitle + " | " + data.lastViewModel.footer;
-    lv_label_set_text(data.systemFooterLabel, footer.c_str());
+    lv_label_set_text(data.systemFooterLabel, "");
   }
 
   setSystemRowValue(data.systemRows[0], data.lastViewModel.credentialsLine, credentialsToneFromLine(data.lastViewModel.credentialsLine));
@@ -1304,7 +1315,7 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   data.homeCameraFrame = cameraFrame;
   lv_obj_set_size(cameraFrame, kPageWidth, kHomeCameraHeight);
   lv_obj_align(cameraFrame, LV_ALIGN_TOP_LEFT, 0, kHomeCameraY);
-  applyPanelStyle(cameraFrame, kCameraPlaceholderHex, kPanelBorderMutedHex, 18);
+  applyPanelStyle(cameraFrame, kCameraPlaceholderHex, kPanelBorderMutedHex, 0);
   lv_obj_set_style_pad_all(cameraFrame, 0, 0);
   lv_obj_remove_flag(cameraFrame, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_scrollbar_mode(cameraFrame, LV_SCROLLBAR_MODE_OFF);
@@ -1342,11 +1353,11 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   applyCaptionStyle(data.enrollMetaLabel, LV_TEXT_ALIGN_RIGHT);
   lv_obj_align(data.enrollMetaLabel, LV_ALIGN_TOP_RIGHT, 0, kEnrollMetaY);
   data.enrollTaskList = lv_obj_create(parent);
-  lv_obj_set_size(data.enrollTaskList, kPageWidth + 6, kEnrollTaskListHeight);
+  lv_obj_set_size(data.enrollTaskList, kPageWidth, kEnrollTaskListHeight);
   lv_obj_align(data.enrollTaskList, LV_ALIGN_TOP_LEFT, 0, kEnrollTaskY);
   applyPanelStyle(data.enrollTaskList, kPanelMutedHex, kPanelBorderMutedHex, 16);
   lv_obj_set_style_pad_all(data.enrollTaskList, 0, 0);
-  lv_obj_set_style_pad_right(data.enrollTaskList, 6, 0);
+  lv_obj_set_style_pad_right(data.enrollTaskList, kEnrollTaskListRightInset, 0);
   lv_obj_set_scroll_dir(data.enrollTaskList, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(data.enrollTaskList, LV_SCROLLBAR_MODE_AUTO);
 
@@ -1374,7 +1385,7 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_set_width(data.enrollSelectionMetaLabel, kPageWidth - 20);
   lv_label_set_long_mode(data.enrollSelectionMetaLabel, LV_LABEL_LONG_DOT);
   applyCaptionStyle(data.enrollSelectionMetaLabel, LV_TEXT_ALIGN_LEFT);
-  lv_obj_align(data.enrollSelectionMetaLabel, LV_ALIGN_TOP_LEFT, 0, 18);
+  lv_obj_align(data.enrollSelectionMetaLabel, LV_ALIGN_TOP_LEFT, 0, 15);
 
   const lv_coord_t actionButtonWidth = (kPageWidth - 20 - kEnrollActionGap) / 2;
 
