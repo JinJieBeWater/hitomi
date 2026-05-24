@@ -39,7 +39,6 @@ const end = computed(() =>
       active-variant="solid"
       size="sm"
       show-edges
-      class="workspace-secondary-action"
       @update:page="emit('update:page', $event)"
     />
   </div>

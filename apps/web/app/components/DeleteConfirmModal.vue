@@ -69,19 +69,11 @@ function handleConfirm() {
     :close="!props.submitting"
     :title="`确认删除${props.entityLabel}`"
     description="删除后不可恢复，相关录脸任务和考勤记录会一并移除。"
-    :ui="{
-      content: 'workspace-dialog-content sm:max-w-xl',
-      header: 'workspace-dialog-header',
-      body: 'workspace-dialog-body',
-      footer: 'workspace-dialog-footer',
-      title: 'workspace-dialog-title',
-      description: 'workspace-dialog-description',
-      close: 'workspace-dialog-close',
-    }"
+    :ui="{ content: 'sm:max-w-xl' }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
-      <div class="workspace-dialog-stack">
+      <div class="flex flex-col gap-4">
         <div v-if="props.loading" class="space-y-3">
           <USkeleton class="h-5 w-40 rounded-full" />
           <USkeleton class="h-16 w-full rounded-2xl" />
@@ -90,7 +82,7 @@ function handleConfirm() {
         </div>
 
         <template v-else-if="props.impact">
-          <div class="workspace-dialog-panel space-y-4">
+          <div class="space-y-4 rounded-lg border border-default bg-default p-4">
             <div class="border-b border-neutral-200/70 pb-4 dark:border-neutral-800/80">
               <div class="workspace-section-label">{{ props.entityLabel }}</div>
               <div class="mt-2 text-base font-semibold tracking-tight text-highlighted">
@@ -140,7 +132,6 @@ function handleConfirm() {
           <UButton
             variant="outline"
             color="neutral"
-            class="workspace-secondary-action"
             :disabled="props.submitting"
             @click="emit('update:open', false)"
           >
@@ -150,7 +141,6 @@ function handleConfirm() {
           <UButton
             color="error"
             icon="i-lucide-trash-2"
-            class="workspace-primary-action"
             data-testid="delete-confirm-submit-button"
             :loading="props.submitting"
             :disabled="!isMatched || props.loading || !props.impact"

@@ -33,6 +33,7 @@ const groups = [
       id: item.to,
       label: item.label,
       icon: item.icon,
+      to: item.to,
       onSelect: item.onSelect,
     })),
   },
@@ -46,8 +47,8 @@ function sidebarControlClass(collapsed: boolean): string {
 
 function sidebarNavLinkClass(collapsed: boolean): string {
   return collapsed
-    ? "workspace-sidebar-nav-link workspace-sidebar-nav-link-collapsed before:rounded-[0.22rem] before:inset-[1px]"
-    : "workspace-sidebar-nav-link before:rounded-[0.22rem] before:inset-[1px]";
+    ? "workspace-sidebar-nav-link workspace-sidebar-nav-link-collapsed"
+    : "workspace-sidebar-nav-link";
 }
 </script>
 
@@ -59,7 +60,7 @@ function sidebarNavLinkClass(collapsed: boolean): string {
       mode="slideover"
       collapsible
       resizable
-      class="border-r border-neutral-400/70 bg-[var(--workspace-panel)] dark:border-neutral-700/80 dark:bg-[var(--workspace-panel)]"
+      class="border-r border-default bg-default"
       :ui="{
         header: 'px-3 pt-3',
         body: 'px-3 py-2',
@@ -101,7 +102,7 @@ function sidebarNavLinkClass(collapsed: boolean): string {
               root: collapsed ? 'flex flex-col items-center gap-2' : 'flex flex-col gap-2',
               list: collapsed ? 'flex flex-col items-center gap-2' : 'flex flex-col gap-2',
               item: collapsed ? 'flex justify-center' : '',
-              link: `${sidebarNavLinkClass(collapsed)} transition-colors uppercase tracking-[0.14em]`,
+              link: `${sidebarNavLinkClass(collapsed)} transition-colors`,
               label: 'workspace-sidebar-nav-label',
               linkLeadingIcon: collapsed ? 'size-5' : 'size-5',
             }"

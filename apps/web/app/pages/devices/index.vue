@@ -5,6 +5,7 @@ import { computed, ref, watch } from "vue";
 import { formatDeviceSerialConnectError, useDeviceSerial } from "~/composables/useDeviceSerial";
 import { usePagedListState } from "~/composables/usePagedListState";
 import { colorDeviceStatus, formatDateTime, labelDeviceStatus } from "~/utils/format";
+import { fetchAllPages } from "~/utils/pagination";
 
 definePageMeta({
   layout: "dashboard",
@@ -16,6 +17,7 @@ const queryClient = useQueryClient();
 const toast = useToast();
 const serial = useDeviceSerial();
 const pageSize = 20;
+const optionPageSize = 100;
 
 const page = ref(1);
 const keyword = ref("");
@@ -56,6 +58,25 @@ const devicesQuery = useQuery(
   ),
 );
 
+const allDevicesQuery = useQuery({
+  queryKey: ["device-list-all"],
+  queryFn: () =>
+    fetchAllPages((currentPage) =>
+      queryClient.fetchQuery(
+        $orpc.device.list.queryOptions({
+          input: {
+            page: currentPage,
+            pageSize: optionPageSize,
+          },
+        }),
+      ),
+    ),
+});
+
+const pendingActivationsQuery = useQuery(
+  $orpc.device.listPendingActivations.queryOptions({ input: { status: "pending" } }),
+);
+
 const removeDevice = useMutation($orpc.device.remove.mutationOptions());
 const updateDevice = useMutation($orpc.device.update.mutationOptions());
 
@@ -68,41 +89,43 @@ const { total, resetPage } = usePagedListState({
 });
 
 const metrics = computed(() => {
-  const list = rows.value;
+  const list = allDevicesQuery.data.value ?? [];
   const now = Date.now();
   const day = 24 * 60 * 60 * 1000;
 
   return [
     {
       label: "设备总数",
-      value: total.value,
-      caption: "当前筛选",
+      value: list.length,
+      caption: "全部设备",
       icon: "i-lucide-monitor-smartphone",
       color: "primary" as const,
     },
     {
       label: "启用中",
       value: list.filter((item) => item.status === "active").length,
-      caption: "当前页",
+      caption: "全部设备",
       icon: "i-lucide-circle-check-big",
       color: "success" as const,
     },
     {
       label: "已禁用",
       value: list.filter((item) => item.status === "disabled").length,
-      caption: "当前页",
+      caption: "全部设备",
       icon: "i-lucide-circle-off",
       color: "neutral" as const,
     },
     {
       label: "近 24 小时在线",
       value: list.filter((item) => item.lastSeenAt && now - item.lastSeenAt <= day).length,
-      caption: "当前页",
+      caption: "全部设备",
       icon: "i-lucide-activity",
       color: "warning" as const,
     },
   ];
 });
+
+const pendingActivationDevices = computed(() => pendingActivationsQuery.data.value ?? []);
 
 const deviceColumns = [
   { accessorKey: "name", header: "设备名称" },
@@ -215,25 +238,55 @@ async function copyText(label: string, value: string) {
   }
 }
 
+async function copyCreatedDeviceCredentials() {
+  if (!lastCreated.value) {
+    return;
+  }
+
+  await copyText(
+    "首配信息",
+    [
+      `设备名称：${lastCreated.value.name}`,
+      `设备码：${lastCreated.value.deviceCode}`,
+      `Bootstrap 序列号：${lastCreated.value.bootstrapSerial}`,
+      `Bootstrap 密钥：${lastCreated.value.bootstrapSecret}`,
+    ].join("\n"),
+  );
+}
+
 async function openSerialConfigPage() {
   serialConnectLoading.value = true;
 
   try {
     if (!serial.supported.value) {
       await navigateTo("/devices/serial");
-      return;
+      return true;
     }
 
     await serial.requestPortConnection();
     await navigateTo("/devices/serial");
+    return true;
   } catch (error: any) {
     toast.add({
       title: "连接设备失败",
       description: formatDeviceSerialConnectError(error),
       color: "error",
     });
+    return false;
   } finally {
     serialConnectLoading.value = false;
+  }
+}
+
+async function handleOpenSerialConfigPage() {
+  await openSerialConfigPage();
+}
+
+async function startActivationFromCreatedDevice() {
+  const connected = await openSerialConfigPage();
+
+  if (connected) {
+    createdResultOpen.value = false;
   }
 }
 
@@ -242,6 +295,16 @@ function resetFilters() {
   keyword.value = "";
   status.value = undefined;
 }
+
+async function refreshDevices() {
+  await Promise.all([
+    devicesQuery.refetch(),
+    allDevicesQuery.refetch(),
+    pendingActivationsQuery.refetch(),
+  ]);
+}
+
+const hasActiveFilters = computed(() => Boolean(keyword.value || status.value));
 
 async function openDeleteDevice(item: { id: string } | null | undefined) {
   if (!item?.id) {
@@ -328,19 +391,18 @@ function getRowActions(item: any) {
     <template #header>
       <PageHeader title="设备管理" :badges="headerBadges">
         <template #actions>
-          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="devicesQuery.refetch()">刷新</UButton>
+          <UButton variant="outline" icon="i-lucide-refresh-cw" @click="refreshDevices"
+            >刷新</UButton
+          >
           <UButton
             variant="outline"
             icon="i-lucide-usb"
             :loading="serialConnectLoading"
-            class="workspace-secondary-action"
-            @click="openSerialConfigPage"
+            @click="handleOpenSerialConfigPage"
           >
             连接设备
           </UButton>
-          <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()">
-            创建设备
-          </UButton>
+          <UButton icon="i-lucide-plus" @click="openCreate()"> 创建设备 </UButton>
         </template>
       </PageHeader>
     </template>
@@ -348,6 +410,52 @@ function getRowActions(item: any) {
     <template #body>
       <div class="workspace-page-stack">
         <MetricStrip :metrics="metrics" />
+
+        <DataSurface
+          title="待激活设备"
+          subtitle="新建设备完成后，请使用 bootstrap 凭据通过串口配置完成首配。"
+          icon="i-lucide-usb"
+        >
+          <div
+            v-if="pendingActivationDevices.length"
+            class="grid gap-3 md:grid-cols-2 xl:grid-cols-3"
+          >
+            <UCard v-for="item in pendingActivationDevices" :key="item.deviceId">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <div class="truncate font-medium text-highlighted">{{ item.deviceName }}</div>
+                  <div class="mt-1 font-mono text-sm text-toned">{{ item.deviceCode }}</div>
+                  <div class="mt-1 text-xs text-toned">Bootstrap：{{ item.bootstrapSerial }}</div>
+                </div>
+                <UBadge label="待激活" color="warning" variant="soft" />
+              </div>
+
+              <template #footer>
+                <div class="flex items-center justify-between gap-3">
+                  <div class="text-sm text-toned">更新于 {{ formatDateTime(item.updatedAt) }}</div>
+                  <UButton
+                    size="sm"
+                    variant="outline"
+                    icon="i-lucide-cable"
+                    :loading="serialConnectLoading"
+                    @click="handleOpenSerialConfigPage"
+                  >
+                    去首配
+                  </UButton>
+                </div>
+              </template>
+            </UCard>
+          </div>
+
+          <UAlert
+            v-else
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-circle-check"
+            title="暂无待激活设备"
+            description="如果刚创建设备，请在创建设备结果弹窗中保存 bootstrap 凭据并进入串口配置。"
+          />
+        </DataSurface>
 
         <UAlert
           v-if="actionError"
@@ -382,8 +490,8 @@ function getRowActions(item: any) {
             <UButton
               variant="outline"
               color="neutral"
-              class="workspace-secondary-action"
               icon="i-lucide-rotate-ccw"
+              :disabled="!hasActiveFilters"
               @click="resetFilters()"
               >清空筛选</UButton
             >
@@ -399,9 +507,7 @@ function getRowActions(item: any) {
             empty-description="当前筛选条件下没有可显示的设备记录。"
           >
             <template #empty-actions>
-              <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()"
-                >创建设备</UButton
-              >
+              <UButton icon="i-lucide-plus" @click="openCreate()">创建设备</UButton>
             </template>
 
             <div class="workspace-surface-table workspace-table-shell hidden md:block">
@@ -412,13 +518,12 @@ function getRowActions(item: any) {
                 :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[820px]' }"
               >
                 <template #status-cell="{ row }">
-                    <UBadge
-                      :label="labelDeviceStatus(row.original.status)"
-                      :color="colorDeviceStatus(row.original.status)"
-                      variant="outline"
-                      class="workspace-status-chip"
-                    />
-                  </template>
+                  <UBadge
+                    :label="labelDeviceStatus(row.original.status)"
+                    :color="colorDeviceStatus(row.original.status)"
+                    variant="soft"
+                  />
+                </template>
 
                 <template #lastSeenAt-cell="{ row }">
                   <div class="text-sm text-toned">
@@ -450,8 +555,7 @@ function getRowActions(item: any) {
                     <UBadge
                       :label="labelDeviceStatus(item.status)"
                       :color="colorDeviceStatus(item.status)"
-                      variant="outline"
-                      class="workspace-status-chip"
+                      variant="soft"
                     />
                     <RowActions :items="getRowActions(item)" trigger-size="sm" />
                   </div>
@@ -481,7 +585,6 @@ function getRowActions(item: any) {
             />
           </template>
         </DataSurface>
-
       </div>
 
       <DeviceSlideoverEditor
@@ -495,10 +598,15 @@ function getRowActions(item: any) {
       <DeviceCredentialsModal
         v-model:open="createdResultOpen"
         :device="lastCreated"
+        @copy:all="copyCreatedDeviceCredentials"
         @copy:code="lastCreated && copyText('设备码', lastCreated.deviceCode)"
-        @copy:bootstrap-serial="lastCreated && copyText('Bootstrap 序列号', lastCreated.bootstrapSerial)"
-        @copy:bootstrap-secret="lastCreated && copyText('Bootstrap 密钥', lastCreated.bootstrapSecret)"
-        @start-activation="createdResultOpen = false; openSerialConfigPage()"
+        @copy:bootstrap-serial="
+          lastCreated && copyText('Bootstrap 序列号', lastCreated.bootstrapSerial)
+        "
+        @copy:bootstrap-secret="
+          lastCreated && copyText('Bootstrap 密钥', lastCreated.bootstrapSecret)
+        "
+        @start-activation="startActivationFromCreatedDevice"
       />
 
       <DeleteConfirmModal

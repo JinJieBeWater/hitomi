@@ -17,25 +17,25 @@ const metrics = computed(() => {
   return [
     {
       label: "员工总数",
-      value: data?.employeeCount ?? "--",
+      value: data?.employeeCount ?? 0,
       icon: "i-lucide-users",
       color: "primary" as const,
     },
     {
       label: "设备总数",
-      value: data?.deviceCount ?? "--",
+      value: data?.deviceCount ?? 0,
       icon: "i-lucide-monitor-smartphone",
       color: "success" as const,
     },
     {
       label: "今日上班打卡",
-      value: data?.todayClockInCount ?? "--",
+      value: data?.todayClockInCount ?? 0,
       icon: "i-lucide-sunrise",
       color: "warning" as const,
     },
     {
       label: "今日下班打卡",
-      value: data?.todayClockOutCount ?? "--",
+      value: data?.todayClockOutCount ?? 0,
       icon: "i-lucide-sunset",
       color: "neutral" as const,
     },
@@ -91,7 +91,7 @@ const shortcuts = [
               :to="item.to"
               color="neutral"
               variant="outline"
-              class="workspace-secondary-action h-12 justify-between"
+              class="h-12 justify-between"
               :icon="item.icon"
             >
               {{ item.label }}

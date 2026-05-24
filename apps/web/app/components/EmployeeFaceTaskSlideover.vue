@@ -125,20 +125,11 @@ async function handleCancel() {
     :open="open"
     :title="title"
     side="right"
-    :ui="{
-      content: 'workspace-dialog-content',
-      header: 'workspace-dialog-header',
-      body: 'workspace-dialog-body',
-      footer: 'workspace-dialog-footer',
-      title: 'workspace-dialog-title',
-      description: 'workspace-dialog-description',
-      close: 'workspace-dialog-close',
-    }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
-      <div v-if="employee" class="workspace-dialog-stack">
-        <div class="workspace-dialog-panel space-y-3">
+      <div v-if="employee" class="flex flex-col gap-4">
+        <div class="space-y-3 rounded-lg border border-default bg-default p-4">
           <div class="space-y-1">
             <div class="workspace-section-label">员工</div>
             <div class="text-lg font-semibold tracking-tight text-highlighted">
@@ -154,8 +145,7 @@ async function handleCancel() {
                 <UBadge
                   :label="labelFaceStatus(employee.faceProfile?.status)"
                   :color="colorFaceStatus(employee.faceProfile?.status)"
-                  variant="outline"
-                  class="workspace-status-chip"
+                  variant="soft"
                 />
               </div>
             </div>
@@ -202,7 +192,7 @@ async function handleCancel() {
             data-testid="employee-face-submit-button"
             :loading="assignFaceTask.isPending.value"
             :disabled="deviceOptions.length === 0"
-            class="workspace-primary-action w-full"
+            class="w-full"
             icon="i-lucide-scan-face"
             @click="handleSubmit()"
           >
@@ -215,7 +205,7 @@ async function handleCancel() {
             color="error"
             variant="outline"
             :loading="cancelFaceTask.isPending.value"
-            class="workspace-secondary-action w-full"
+            class="w-full"
             icon="i-lucide-ban"
             @click="handleCancel()"
           >
@@ -226,7 +216,7 @@ async function handleCancel() {
             type="button"
             variant="outline"
             color="neutral"
-            class="workspace-secondary-action w-full"
+            class="w-full"
             @click="emit('update:open', false)"
             >关闭</UButton
           >

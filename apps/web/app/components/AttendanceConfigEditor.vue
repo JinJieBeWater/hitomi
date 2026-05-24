@@ -4,6 +4,8 @@ import { computed, watch } from "vue";
 
 import { formatTimeRange, minutesToTimeInput, timeInputToMinutes } from "~/utils/format";
 
+type FieldKey = "workStart" | "workEnd" | "offStart" | "offEnd";
+
 const props = withDefaults(
   defineProps<{
     title?: string;
@@ -31,21 +33,28 @@ const form = ref({
   offEnd: "19:00",
 });
 const actionError = ref("");
+const fieldErrors = ref<Record<FieldKey, string>>({
+  workStart: "",
+  workEnd: "",
+  offStart: "",
+  offEnd: "",
+});
 
 const currentConfig = computed(() => configQuery.data.value?.config ?? null);
-const statusLabel = computed(() => (currentConfig.value ? "已配置" : "待配置"));
+const statusLabel = computed(() => (currentConfig.value ? "编辑配置" : "首次创建配置"));
 const windowCards = computed(() => [
   {
     label: "上班窗口",
-    value: formatTimeRange(
-      currentConfig.value?.workStartMinute,
-      currentConfig.value?.workEndMinute,
-    ),
+    value: currentConfig.value
+      ? formatTimeRange(currentConfig.value.workStartMinute, currentConfig.value.workEndMinute)
+      : `${form.value.workStart} - ${form.value.workEnd}`,
     icon: "i-lucide-sunrise",
   },
   {
     label: "下班窗口",
-    value: formatTimeRange(currentConfig.value?.offStartMinute, currentConfig.value?.offEndMinute),
+    value: currentConfig.value
+      ? formatTimeRange(currentConfig.value.offStartMinute, currentConfig.value.offEndMinute)
+      : `${form.value.offStart} - ${form.value.offEnd}`,
     icon: "i-lucide-sunset",
   },
 ]);
@@ -73,6 +82,7 @@ watch(
 
 function restoreCurrentConfig() {
   actionError.value = "";
+  clearFieldErrors();
 
   if (!currentConfig.value) {
     form.value = {
@@ -87,31 +97,104 @@ function restoreCurrentConfig() {
   syncForm(currentConfig.value);
 }
 
+function clearFieldErrors() {
+  fieldErrors.value = {
+    workStart: "",
+    workEnd: "",
+    offStart: "",
+    offEnd: "",
+  };
+}
+
+function setFieldError(key: FieldKey, message: string) {
+  fieldErrors.value[key] = fieldErrors.value[key] || message;
+}
+
+function validateForm() {
+  clearFieldErrors();
+
+  const times = {
+    workStartMinute: timeInputToMinutes(form.value.workStart),
+    workEndMinute: timeInputToMinutes(form.value.workEnd),
+    offStartMinute: timeInputToMinutes(form.value.offStart),
+    offEndMinute: timeInputToMinutes(form.value.offEnd),
+  };
+
+  const requiredFields: Array<[FieldKey, number | null]> = [
+    ["workStart", times.workStartMinute],
+    ["workEnd", times.workEndMinute],
+    ["offStart", times.offStartMinute],
+    ["offEnd", times.offEndMinute],
+  ];
+
+  for (const [key, value] of requiredFields) {
+    if (value === null) {
+      setFieldError(key, "请选择有效时间");
+    }
+  }
+
+  if (requiredFields.some(([, value]) => value === null)) {
+    return { ok: false as const, message: "请完整填写四个有效时间" };
+  }
+
+  const { workStartMinute, workEndMinute, offStartMinute, offEndMinute } = times as Record<
+    keyof typeof times,
+    number
+  >;
+
+  if (workStartMinute >= workEndMinute) {
+    setFieldError("workStart", "开始必须早于结束");
+    setFieldError("workEnd", "结束必须晚于开始");
+  }
+
+  if (offStartMinute >= offEndMinute) {
+    setFieldError("offStart", "开始必须早于结束");
+    setFieldError("offEnd", "结束必须晚于开始");
+  }
+
+  const hasRangeError = Object.values(fieldErrors.value).some(Boolean);
+
+  if (hasRangeError) {
+    return { ok: false as const, message: "时间窗口不允许跨天，且开始必须早于结束" };
+  }
+
+  const hasOverlap = workStartMinute < offEndMinute && offStartMinute < workEndMinute;
+
+  if (hasOverlap) {
+    setFieldError("workStart", "两个窗口不能重叠");
+    setFieldError("workEnd", "两个窗口不能重叠");
+    setFieldError("offStart", "两个窗口不能重叠");
+    setFieldError("offEnd", "两个窗口不能重叠");
+
+    return { ok: false as const, message: "上班窗口和下班窗口不能重叠或相互包含" };
+  }
+
+  return {
+    ok: true as const,
+    values: { workStartMinute, workEndMinute, offStartMinute, offEndMinute },
+  };
+}
+
+watch(
+  form,
+  () => {
+    if (actionError.value) actionError.value = "";
+    if (Object.values(fieldErrors.value).some(Boolean)) clearFieldErrors();
+  },
+  { deep: true },
+);
+
 async function handleSubmit() {
   actionError.value = "";
+  const validation = validateForm();
 
-  const workStartMinute = timeInputToMinutes(form.value.workStart);
-  const workEndMinute = timeInputToMinutes(form.value.workEnd);
-  const offStartMinute = timeInputToMinutes(form.value.offStart);
-  const offEndMinute = timeInputToMinutes(form.value.offEnd);
-
-  if (
-    workStartMinute === null ||
-    workEndMinute === null ||
-    offStartMinute === null ||
-    offEndMinute === null
-  ) {
-    actionError.value = "请输入有效的时间";
+  if (!validation.ok) {
+    actionError.value = validation.message;
     return;
   }
 
   try {
-    await saveConfig.mutateAsync({
-      workStartMinute,
-      workEndMinute,
-      offStartMinute,
-      offEndMinute,
-    });
+    await saveConfig.mutateAsync(validation.values);
 
     await queryClient.invalidateQueries();
     toast.add({ title: "考勤配置已保存" });
@@ -128,8 +211,7 @@ async function handleSubmit() {
         <UBadge
           :label="statusLabel"
           :color="currentConfig ? 'neutral' : 'primary'"
-          variant="outline"
-          class="workspace-status-chip"
+          variant="soft"
         />
         <UButton
           variant="outline"
@@ -152,20 +234,17 @@ async function handleSubmit() {
 
         <UAlert
           v-else-if="!currentConfig"
-          color="warning"
-          icon="i-lucide-badge-alert"
-          title="尚未保存考勤配置"
-          description="首次保存后，设备才能按统一时间窗口生成有效考勤记录。"
+          color="primary"
+          variant="soft"
+          icon="i-lucide-clock-3"
+          title="首次创建配置"
+          description="表单中的 09:00 - 10:00 / 18:00 - 19:00 仅为首次填写建议；点击保存后才会作为系统配置生效。"
         />
 
         <div class="grid gap-3 sm:grid-cols-2">
-          <div
-            v-for="item in windowCards"
-            :key="item.label"
-            class="workspace-mobile-card border border-neutral-200/70 bg-neutral-50/70 dark:border-neutral-800/80 dark:bg-neutral-900/60"
-          >
-            <div class="flex items-center gap-2 text-xs font-medium tracking-[0.14em] text-muted uppercase">
-              <UIcon :name="item.icon" class="h-4 w-4" />
+          <div v-for="item in windowCards" :key="item.label" class="workspace-mobile-card">
+            <div class="flex items-center gap-2 text-sm font-medium text-muted">
+              <UIcon :name="item.icon" class="size-4" />
               {{ item.label }}
             </div>
             <div class="mt-2 text-lg font-semibold tracking-tight text-highlighted">
@@ -180,7 +259,7 @@ async function handleSubmit() {
               <div class="text-sm font-semibold tracking-tight text-highlighted">上班窗口</div>
 
               <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                <UFormField label="开始">
+                <UFormField label="开始" required :error="fieldErrors.workStart">
                   <UInput
                     v-model="form.workStart"
                     data-testid="attendance-work-start-input"
@@ -189,7 +268,7 @@ async function handleSubmit() {
                   />
                 </UFormField>
 
-                <UFormField label="结束">
+                <UFormField label="结束" required :error="fieldErrors.workEnd">
                   <UInput
                     v-model="form.workEnd"
                     data-testid="attendance-work-end-input"
@@ -204,7 +283,7 @@ async function handleSubmit() {
               <div class="text-sm font-semibold tracking-tight text-highlighted">下班窗口</div>
 
               <div class="mt-4 grid gap-4 sm:grid-cols-2">
-                <UFormField label="开始">
+                <UFormField label="开始" required :error="fieldErrors.offStart">
                   <UInput
                     v-model="form.offStart"
                     data-testid="attendance-off-start-input"
@@ -213,7 +292,7 @@ async function handleSubmit() {
                   />
                 </UFormField>
 
-                <UFormField label="结束">
+                <UFormField label="结束" required :error="fieldErrors.offEnd">
                   <UInput
                     v-model="form.offEnd"
                     data-testid="attendance-off-end-input"
@@ -238,7 +317,7 @@ async function handleSubmit() {
               type="submit"
               data-testid="attendance-save-button"
               :loading="saveConfig.isPending.value"
-              class="workspace-primary-action w-full sm:w-auto"
+              class="w-full sm:w-auto"
               icon="i-lucide-save"
             >
               保存配置
@@ -248,7 +327,7 @@ async function handleSubmit() {
               type="button"
               variant="outline"
               color="neutral"
-              class="workspace-secondary-action w-full sm:w-auto"
+              class="w-full sm:w-auto"
               icon="i-lucide-rotate-ccw"
               @click="restoreCurrentConfig()"
             >
@@ -260,22 +339,20 @@ async function handleSubmit() {
     </DataSurface>
 
     <DataSurface v-if="props.showRules" title="配置说明" icon="i-lucide-badge-info">
-      <div class="divide-y divide-neutral-200/70 text-sm dark:divide-neutral-800/80">
+      <div class="divide-y divide-default text-sm">
         <div class="py-3 first:pt-0">
-          <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">唯一配置</div>
+          <div class="text-sm font-medium text-muted">唯一配置</div>
           <div class="mt-1 font-medium text-highlighted">系统只维护一套全局考勤时间段</div>
         </div>
 
         <div class="py-3">
-          <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">统一时区</div>
+          <div class="text-sm font-medium text-muted">统一时区</div>
           <div class="mt-1 font-medium text-highlighted">管理端与设备端统一按上海时区处理</div>
         </div>
 
         <div class="py-3 last:pb-0">
-          <div class="text-xs font-medium tracking-[0.14em] text-muted uppercase">生效方式</div>
-          <div class="mt-1 font-medium text-highlighted">
-            保存后新的上报会立即按最新窗口归类
-          </div>
+          <div class="text-sm font-medium text-muted">生效方式</div>
+          <div class="mt-1 font-medium text-highlighted">保存后新的上报会立即按最新窗口归类</div>
         </div>
       </div>
     </DataSurface>

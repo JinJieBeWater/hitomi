@@ -59,19 +59,19 @@ const backendOriginModel = computed({
 const hasProfiles = computed(() => props.wifiProfiles.length > 0);
 const rootClass = computed(() =>
   props.embedded
-    ? "space-y-3"
-    : "space-y-4 rounded-2xl border border-neutral-200/70 p-4 dark:border-neutral-800/80",
+    ? "flex flex-col gap-3"
+    : "flex flex-col gap-4 rounded-lg border border-default p-4",
 );
-const profileListClass = computed(() => (props.embedded ? "divide-y divide-neutral-200/70 dark:divide-neutral-800/80" : "space-y-3"));
+const profileListClass = computed(() => (props.embedded ? "divide-y divide-default" : "flex flex-col gap-3"));
 const profileItemClass = computed(() =>
   props.embedded
     ? "py-3 first:pt-0 last:pb-0"
-    : "rounded-2xl border border-neutral-200/70 p-3 dark:border-neutral-800/80",
+    : "rounded-lg border border-default p-3",
 );
 const emptyClass = computed(() =>
   props.embedded
-    ? "border border-dashed border-neutral-300/70 px-0 py-3 text-sm text-muted dark:border-neutral-700/70"
-    : "rounded-2xl border border-dashed border-neutral-300/80 px-4 py-5 text-sm text-muted dark:border-neutral-700/70",
+    ? "border border-dashed border-default px-0 py-3 text-sm text-muted"
+    : "rounded-lg border border-dashed border-default px-4 py-5 text-sm text-muted",
 );
 </script>
 
@@ -87,7 +87,6 @@ const emptyClass = computed(() =>
         size="xs"
         variant="outline"
         icon="i-lucide-plus"
-        class="workspace-secondary-action"
         @click="emit('add:wifi-profile')"
       >
         {{ addLabel }}
@@ -107,8 +106,7 @@ const emptyClass = computed(() =>
               v-if="profile.disabled"
               label="已禁用"
               color="neutral"
-              variant="outline"
-              class="workspace-status-chip"
+              variant="soft"
             />
           </div>
 
@@ -193,7 +191,7 @@ const emptyClass = computed(() =>
       :icon="submitIcon"
       :loading="submitLoading"
       :disabled="submitDisabled"
-      class="workspace-primary-action w-full"
+      class="w-full"
       @click="emit('submit')"
     >
       {{ submitLabel }}

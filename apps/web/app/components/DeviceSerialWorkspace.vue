@@ -32,7 +32,7 @@ const busy = ref(false);
 const polling = ref(false);
 const confirmingReset = ref<"credentials" | "full" | null>(null);
 const showProvisionForm = ref(false);
-const showSerialLogs = ref(true);
+const showSerialLogs = ref(false);
 
 const summary = ref<DeviceSerialSummary | null>(null);
 const dbDevice = ref<{ id: string; name: string; deviceCode: string } | null>(null);
@@ -692,8 +692,7 @@ onBeforeUnmount(() => {
             <UBadge
               :label="connectionLabel"
               :color="connectionTone"
-              variant="outline"
-              class="workspace-status-chip"
+              variant="soft"
             />
             <UBadge
               v-if="summary?.activationState"
@@ -705,8 +704,7 @@ onBeforeUnmount(() => {
                     : '未配置'
               "
               color="neutral"
-              variant="outline"
-              class="workspace-status-chip"
+              variant="soft"
             />
           </div>
 
@@ -730,7 +728,6 @@ onBeforeUnmount(() => {
             icon="i-lucide-usb"
             :loading="view === 'connecting'"
             :disabled="!serial.supported.value"
-            class="workspace-primary-action"
             @click="connect"
           >
             {{ serial.connected.value ? "重新选择串口" : "连接设备" }}
@@ -741,7 +738,6 @@ onBeforeUnmount(() => {
             color="neutral"
             icon="i-lucide-refresh-cw"
             :loading="busy"
-            class="workspace-secondary-action"
             @click="reloadCurrentConfig"
           >
             重新读取
@@ -751,7 +747,6 @@ onBeforeUnmount(() => {
             color="neutral"
             icon="i-lucide-unplug"
             :disabled="!serial.connected.value"
-            class="workspace-secondary-action"
             @click="disconnectDevice"
           >
             断开串口
@@ -762,7 +757,7 @@ onBeforeUnmount(() => {
       <div v-if="hasLoadedDevice" class="workspace-surface-body border-t border-neutral-200/70 py-4 dark:border-neutral-800/80">
         <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div v-for="item in summaryItems" :key="item.label" class="min-w-0">
-            <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
+            <div class="text-sm font-medium text-muted">
               {{ item.label }}
             </div>
             <div class="mt-1 break-all text-sm font-medium text-highlighted">
@@ -773,35 +768,28 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <div class="grid gap-5 xl:grid-cols-[minmax(0,1.72fr)_minmax(360px,0.9fr)] 2xl:grid-cols-[minmax(0,1.85fr)_minmax(360px,0.82fr)]">
-      <section class="workspace-surface overflow-hidden xl:order-1">
+    <div class="grid gap-5 xl:grid-cols-[minmax(360px,0.9fr)_minmax(0,1.55fr)] 2xl:grid-cols-[minmax(380px,0.82fr)_minmax(0,1.72fr)]">
+      <section class="order-2 workspace-surface overflow-hidden">
         <div class="workspace-surface-header border-b-0 pb-3">
           <div class="space-y-2">
             <div class="flex flex-wrap items-center gap-2">
               <UBadge
-                label="实时串口输出"
+                label="诊断日志"
                 color="neutral"
-                variant="outline"
-                class="workspace-status-chip"
+                variant="soft"
               />
               <UBadge
                 :label="`${logCount} 行`"
                 :color="logCount ? 'primary' : 'neutral'"
-                variant="outline"
-                class="workspace-status-chip"
+                variant="soft"
               />
-              <span
-                class="text-[11px] font-medium tracking-[0.16em] text-neutral-500 uppercase dark:text-neutral-400"
-              >
-                hardware link
-              </span>
             </div>
             <div>
               <h3 class="text-base font-semibold tracking-tight text-highlighted">
-                终端主视区
+                串口输出
               </h3>
               <p class="text-sm text-toned">
-                持续观察设备回包、运行状态和配置写入反馈。
+                默认收起，只在排查配置写入或设备回包时展开查看。
               </p>
             </div>
           </div>
@@ -812,7 +800,6 @@ onBeforeUnmount(() => {
               variant="outline"
               color="neutral"
               icon="i-lucide-trash-2"
-              class="workspace-secondary-action"
               @click="serial.clearLogs()"
             >
               清空
@@ -822,7 +809,8 @@ onBeforeUnmount(() => {
               variant="outline"
               color="neutral"
               :icon="showSerialLogs ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
-              class="workspace-secondary-action"
+              :aria-expanded="showSerialLogs"
+              aria-controls="serial-log-panel"
               @click="showSerialLogs = !showSerialLogs"
             >
               {{ showSerialLogs ? "折叠日志" : "展开日志" }}
@@ -831,39 +819,41 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="px-5 pt-5 pb-5">
-          <div class="overflow-hidden rounded-[24px] border border-neutral-900/90 bg-neutral-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-            <div class="flex items-center justify-between border-b border-white/8 px-4 py-3">
+          <div class="overflow-hidden rounded-2xl border border-neutral-200/80 bg-muted/20 dark:border-neutral-800/80">
+            <div class="flex items-center justify-between border-b border-neutral-200/70 px-4 py-3 dark:border-neutral-800/80">
               <div class="flex items-center gap-2">
                 <span
                   class="size-2 rounded-full bg-amber-500"
                   :class="serial.connected.value ? 'animate-pulse' : 'bg-neutral-500'"
                 />
-                <span class="text-[11px] font-medium tracking-[0.16em] text-neutral-400 uppercase">
-                  serial session
+                <span class="text-xs font-medium text-muted">
+                  serial session · {{ logCount }} 行
                 </span>
               </div>
-              <div class="font-mono text-[11px] text-neutral-400 uppercase">
+              <div class="font-mono text-xs text-muted">
                 {{ connectionLabel }}
               </div>
             </div>
 
-            <div
-              v-if="showSerialLogs"
-              class="h-[360px] border-t-0 xl:h-[440px] 2xl:h-[520px]"
-            >
-              <SerialLogTerminal :logs="serial.serialLogs.value" />
-            </div>
-            <div
-              v-else
-              class="grid h-[220px] place-items-center text-sm text-neutral-400"
-            >
-              日志已折叠，仍会持续接收新的串口输出。
+            <div id="serial-log-panel">
+              <div
+                v-if="showSerialLogs"
+                class="h-[300px] border-t-0 xl:h-[360px] 2xl:h-[440px]"
+              >
+                <SerialLogTerminal :logs="serial.serialLogs.value" />
+              </div>
+              <div
+                v-else
+                class="grid min-h-24 place-items-center px-4 py-6 text-center text-sm text-toned"
+              >
+                日志已折叠，仍会持续接收串口输出。需要排查时点击“展开日志”。
+              </div>
             </div>
           </div>
 
           <div class="mt-4 grid gap-4 border-t border-neutral-200/70 pt-4 text-sm dark:border-neutral-800/80 lg:grid-cols-[minmax(0,1fr)_220px]">
             <div class="min-w-0">
-              <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
+              <div class="text-sm font-medium text-muted">
                 最近一条输出
               </div>
               <div class="mt-2 break-all font-mono text-xs leading-6 text-toned">
@@ -872,7 +862,7 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="min-w-0">
-              <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
+              <div class="text-sm font-medium text-muted">
                 操作提示
               </div>
               <div class="mt-2 space-y-1.5 text-sm text-toned">
@@ -884,12 +874,12 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <aside class="workspace-surface overflow-hidden xl:order-2 xl:sticky xl:top-4 xl:self-start">
+      <aside class="order-1 workspace-surface overflow-hidden xl:sticky xl:top-4 xl:self-start">
         <div class="workspace-surface-header py-3">
           <div class="flex min-w-0 items-center justify-between gap-3">
             <div class="min-w-0">
-              <div class="text-[11px] font-medium tracking-[0.16em] text-muted uppercase">
-                control inspector
+              <div class="text-sm font-medium text-muted">
+                控制面板
               </div>
               <div class="mt-1 truncate text-sm font-semibold text-highlighted">
                 {{ workflowTitle }}
@@ -955,6 +945,15 @@ onBeforeUnmount(() => {
             :description="errorMessage"
           />
 
+          <div class="space-y-4 rounded-2xl border border-neutral-200/70 bg-muted/20 p-4 dark:border-neutral-800/80">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-highlighted">主要操作</p>
+                <p class="mt-1 text-xs text-muted">按当前设备状态完成连接、首配、激活或配置保存。</p>
+              </div>
+              <UBadge :label="connectionLabel" color="neutral" variant="soft" />
+            </div>
+
           <template v-if="view === 'idle'">
             <div class="space-y-4">
               <div class="text-sm text-toned">
@@ -963,7 +962,7 @@ onBeforeUnmount(() => {
               <UButton
                 icon="i-lucide-usb"
                 :disabled="!serial.supported.value"
-                class="workspace-primary-action w-full"
+                class="w-full"
                 @click="connect"
               >
                 连接设备
@@ -986,7 +985,7 @@ onBeforeUnmount(() => {
               <UFormField label="设备名称" required>
                 <UInput v-model="newDeviceName" placeholder="例如 前台一号机" icon="i-lucide-monitor" class="w-full" @keydown.enter="handleCreateDevice" />
               </UFormField>
-              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="workspace-primary-action w-full" @click="handleCreateDevice">
+              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="w-full" @click="handleCreateDevice">
                 创建设备
               </UButton>
             </div>
@@ -1026,7 +1025,7 @@ onBeforeUnmount(() => {
               </div>
             </template>
 
-            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-2xl border border-neutral-300/80 bg-[var(--workspace-panel-muted)] px-4 py-3 text-sm font-medium text-highlighted dark:border-neutral-700/80">
+            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-lg border border-default bg-muted/30 px-4 py-3 text-sm font-medium text-highlighted">
               <UIcon name="i-lucide-circle-check" class="size-4" />
               {{ statusMessage }}
             </div>
@@ -1047,16 +1046,26 @@ onBeforeUnmount(() => {
             </div>
 
             <template v-if="dbDevice && (step === 'action' || step === 'config')">
-              <UButton icon="i-lucide-key-round" :loading="polling" class="workspace-primary-action w-full" @click="pollUntilActivated">
+              <UButton icon="i-lucide-key-round" :loading="polling" class="w-full" @click="pollUntilActivated">
                 开始激活
               </UButton>
 
               <div class="border-t border-neutral-200/70 pt-2 dark:border-neutral-800/80">
-                <button class="flex w-full items-center justify-between py-2 text-sm font-medium text-highlighted" @click="showProvisionForm = !showProvisionForm">
+                <button
+                  type="button"
+                  class="flex w-full items-center justify-between py-2 text-sm font-medium text-highlighted"
+                  :aria-expanded="showProvisionForm"
+                  aria-controls="provision-config-panel"
+                  @click="showProvisionForm = !showProvisionForm"
+                >
                   重新配网（可选）
                   <UIcon :name="showProvisionForm ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-4 text-muted" />
                 </button>
-                <div v-if="showProvisionForm" class="border-t border-neutral-200/70 pt-4 dark:border-neutral-800/80">
+                <div
+                  id="provision-config-panel"
+                  v-show="showProvisionForm"
+                  class="border-t border-neutral-200/70 pt-4 dark:border-neutral-800/80"
+                >
                   <DeviceUsbConfigEditor
                     embedded
                     v-model:backend-origin="backendOrigin"
@@ -1082,7 +1091,7 @@ onBeforeUnmount(() => {
               <UFormField label="设备名称" required>
                 <UInput v-model="newDeviceName" placeholder="例如 前台一号机" icon="i-lucide-monitor" class="w-full" />
               </UFormField>
-              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="workspace-primary-action w-full" @click="handleCreateDevice">
+              <UButton icon="i-lucide-plus" :loading="busy" :disabled="!newDeviceName.trim()" class="w-full" @click="handleCreateDevice">
                 创建设备并覆盖凭证
               </UButton>
             </template>
@@ -1096,7 +1105,7 @@ onBeforeUnmount(() => {
                 设备最近错误：{{ summary.lastErrorCode }}
               </div>
             </template>
-            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-2xl border border-neutral-300/80 bg-[var(--workspace-panel-muted)] px-4 py-3 text-sm font-medium text-highlighted dark:border-neutral-700/80">
+            <div v-else-if="step === 'done'" class="flex items-center gap-2 rounded-lg border border-default bg-muted/30 px-4 py-3 text-sm font-medium text-highlighted">
               <UIcon name="i-lucide-circle-check" class="size-4" />
               {{ statusMessage }}
             </div>
@@ -1130,7 +1139,7 @@ onBeforeUnmount(() => {
             />
 
             <div class="border-t border-neutral-200/70 pt-5 dark:border-neutral-800/80">
-              <p class="text-xs font-medium tracking-[0.14em] text-muted uppercase">重置操作</p>
+              <p class="text-sm font-medium text-muted">重置操作</p>
 
               <div class="mt-3 space-y-3">
                 <div class="border-b border-neutral-200/70 pb-3 dark:border-neutral-800/80">
@@ -1141,7 +1150,7 @@ onBeforeUnmount(() => {
                       <p class="mb-2 text-xs text-amber-600 dark:text-amber-400">确认执行？</p>
                       <div class="flex gap-2">
                         <UButton size="sm" color="warning" icon="i-lucide-check" :loading="busy" @click="executeReset('credentials')">确认清除</UButton>
-                        <UButton size="sm" variant="outline" color="neutral" class="workspace-secondary-action" :disabled="busy" @click="confirmingReset = null">取消</UButton>
+                        <UButton size="sm" variant="outline" color="neutral" :disabled="busy" @click="confirmingReset = null">取消</UButton>
                       </div>
                     </template>
                     <UButton v-else size="sm" color="warning" variant="outline" icon="i-lucide-key-round" :disabled="!deviceId" @click="confirmingReset = 'credentials'">
@@ -1158,7 +1167,7 @@ onBeforeUnmount(() => {
                       <p class="mb-2 text-xs text-red-600 dark:text-red-400">此操作不可撤销，确认完全重置？</p>
                       <div class="flex gap-2">
                         <UButton size="sm" color="error" icon="i-lucide-check" :loading="busy" @click="executeReset('full')">确认重置</UButton>
-                        <UButton size="sm" variant="outline" color="neutral" class="workspace-secondary-action" :disabled="busy" @click="confirmingReset = null">取消</UButton>
+                        <UButton size="sm" variant="outline" color="neutral" :disabled="busy" @click="confirmingReset = null">取消</UButton>
                       </div>
                     </template>
                     <UButton v-else size="sm" color="error" variant="outline" icon="i-lucide-rotate-ccw" :disabled="!deviceId" @click="confirmingReset = 'full'">
@@ -1169,9 +1178,10 @@ onBeforeUnmount(() => {
               </div>
             </div>
           </template>
+          </div>
 
           <div class="border-t border-neutral-200/70 pt-4 text-xs text-toned dark:border-neutral-800/80">
-            控制面板负责配置与设备状态，左侧终端持续提供实时反馈。
+            串口日志已移到诊断区，日常首配只需要关注上方主要操作。
           </div>
         </div>
       </aside>

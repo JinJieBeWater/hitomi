@@ -23,7 +23,7 @@ const props = defineProps<{
 
     <div v-if="!props.collapsed" class="min-w-0 space-y-0.5">
       <div class="truncate text-sm font-semibold tracking-tight text-highlighted">Hitomi</div>
-      <div class="truncate text-[10px] font-semibold tracking-[0.2em] text-muted uppercase">
+      <div class="truncate text-xs text-muted">
         考勤后台
       </div>
     </div>

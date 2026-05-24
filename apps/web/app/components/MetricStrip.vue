@@ -11,26 +11,19 @@ const props = defineProps<{
   }>;
 }>();
 
-const hiddenCaptions = new Set(["当前页", "当前筛选"]);
-
-function toneClass(color?: MetricTone) {
-  if (color === "primary") return "border-amber-400/70 bg-amber-500/12 text-amber-700 dark:text-amber-300";
-  if (color === "success") return "border-neutral-400/70 bg-[var(--workspace-panel)] text-neutral-700 dark:border-neutral-700 dark:text-neutral-300";
-  if (color === "warning") return "border-neutral-400/70 bg-[var(--workspace-panel)] text-neutral-700 dark:border-neutral-700 dark:text-neutral-300";
-  if (color === "error") return "border-rose-500/40 bg-rose-500/10 text-rose-700 dark:text-rose-300";
-  if (color === "neutral") return "border-neutral-400/70 bg-[var(--workspace-panel)] text-neutral-700 dark:border-neutral-700 dark:text-neutral-300";
-
-  return "border-amber-400/70 bg-amber-500/12 text-amber-700 dark:text-amber-300";
+function toneColor(color?: MetricTone) {
+  return color ?? "primary";
 }
 
 function shouldShowCaption(caption?: string): boolean {
-  return typeof caption === "string" && caption.length > 0 && !hiddenCaptions.has(caption);
+  return typeof caption === "string" && caption.length > 0;
 }
 </script>
 
 <template>
   <div class="workspace-metric-grid">
-    <div v-for="item in props.metrics" :key="item.label" class="workspace-metric-item">
+    <UCard v-for="item in props.metrics" :key="item.label">
+      <div class="flex items-start justify-between gap-4">
       <div class="min-w-0 flex-1 space-y-1">
         <div class="workspace-metric-label">{{ item.label }}</div>
         <div class="workspace-metric-value">{{ item.value }}</div>
@@ -39,15 +32,10 @@ function shouldShowCaption(caption?: string): boolean {
         </div>
       </div>
 
-      <div
-        v-if="item.icon"
-        :class="[
-          'flex size-11 shrink-0 items-center justify-center border',
-          toneClass(item.color),
-        ]"
-      >
+      <UBadge v-if="item.icon" :color="toneColor(item.color)" variant="soft" size="lg" square>
         <UIcon :name="item.icon" class="size-5" />
+      </UBadge>
       </div>
-    </div>
+    </UCard>
   </div>
 </template>

@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useMutation, useQuery, useQueryClient } from "@tanstack/vue-query";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 
 import { usePagedListState } from "~/composables/usePagedListState";
 import { colorFaceStatus, formatDateTime, labelFaceStatus } from "~/utils/format";
+import { fetchAllPages } from "~/utils/pagination";
 
 definePageMeta({
   layout: "dashboard",
@@ -19,6 +20,13 @@ type FaceProfileStatusFilter = "pending" | "success" | "failed" | "cancelled" | 
 
 const page = ref(1);
 const status = ref<FaceProfileStatusFilter>();
+const employeeId = ref<string | undefined>();
+const deviceId = ref<string | undefined>();
+const taskModalOpen = ref(false);
+const taskEmployeeId = ref<string | undefined>();
+const taskDeviceId = ref<string | undefined>();
+const taskError = ref("");
+const optionPageSize = 100;
 
 const faceProfilesQuery = useQuery(
   computed(() =>
@@ -27,25 +35,112 @@ const faceProfilesQuery = useQuery(
         page: page.value,
         pageSize,
         status: status.value,
+        employeeId: employeeId.value,
+        deviceId: deviceId.value,
       },
     }),
   ),
 );
 
+const employeesQuery = useQuery({
+  queryKey: ["face-profile-employee-options"],
+  queryFn: () =>
+    fetchAllPages((currentPage) =>
+      queryClient.fetchQuery(
+        $orpc.employee.list.queryOptions({
+          input: {
+            page: currentPage,
+            pageSize: optionPageSize,
+          },
+        }),
+      ),
+    ),
+});
+
+const allDevicesQuery = useQuery({
+  queryKey: ["face-profile-all-device-options"],
+  queryFn: () =>
+    fetchAllPages((currentPage) =>
+      queryClient.fetchQuery(
+        $orpc.device.list.queryOptions({
+          input: {
+            page: currentPage,
+            pageSize: optionPageSize,
+          },
+        }),
+      ),
+    ),
+});
+
+const activeDevicesQuery = useQuery({
+  queryKey: ["face-profile-active-device-options"],
+  queryFn: () =>
+    fetchAllPages((currentPage) =>
+      queryClient.fetchQuery(
+        $orpc.device.list.queryOptions({
+          input: {
+            page: currentPage,
+            pageSize: optionPageSize,
+            status: "active",
+          },
+        }),
+      ),
+    ),
+});
+
 const cancelTask = useMutation($orpc.faceProfile.cancel.mutationOptions());
+const enqueueTask = useMutation($orpc.faceProfile.enqueue.mutationOptions());
 
 const rows = computed(() => faceProfilesQuery.data.value?.items ?? []);
+const hasActiveFilters = computed(() =>
+  Boolean(status.value || employeeId.value || deviceId.value),
+);
 const { total, resetPage } = usePagedListState({
   page,
   pageSize,
   getPageInfo: () => faceProfilesQuery.data.value?.pageInfo,
-  resetOn: [status],
+  resetOn: [status, employeeId, deviceId],
+});
+
+const employeeOptions = computed(() =>
+  (employeesQuery.data.value ?? []).map((item) => ({
+    label: `${item.name} · ${item.code}`,
+    value: item.id,
+    description: item.code,
+  })),
+);
+
+const deviceOptions = computed(() =>
+  (allDevicesQuery.data.value ?? []).map((item) => ({
+    label: item.name,
+    value: item.id,
+    description: item.deviceCode,
+  })),
+);
+
+const activeDeviceOptions = computed(() =>
+  (activeDevicesQuery.data.value ?? []).map((item) => ({
+    label: item.name,
+    value: item.id,
+    description: item.deviceCode,
+  })),
+);
+
+watch(taskModalOpen, (open) => {
+  if (!open) {
+    taskEmployeeId.value = undefined;
+    taskDeviceId.value = undefined;
+    taskError.value = "";
+  }
 });
 
 const faceProfileColumns = [
-  { accessorKey: "employee", header: "员工" },
-  { accessorKey: "device", header: "设备" },
+  { accessorKey: "employeeCode", header: "员工编号" },
+  { accessorKey: "employeeName", header: "员工姓名" },
+  { accessorKey: "deviceName", header: "设备名称" },
+  { accessorKey: "deviceCode", header: "设备码" },
   { accessorKey: "status", header: "状态" },
+  { accessorKey: "createdAt", header: "创建时间" },
   { accessorKey: "updatedAt", header: "更新时间" },
   { accessorKey: "actions", header: "" },
 ];
@@ -56,6 +151,29 @@ const statusOptions = [
   { label: "录入失败", value: "failed", description: "需要人工介入或重试" },
   { label: "已取消", value: "cancelled", description: "任务已停止，不再继续" },
 ];
+
+const headerBadges = computed(() => {
+  const list: Array<{ label: string; color: "primary" | "success" | "warning" | "neutral" }> = [];
+
+  if (status.value) {
+    const label = statusOptions.find((item) => item.value === status.value)?.label || status.value;
+    list.push({ label: `状态: ${label}`, color: "warning" });
+  }
+
+  if (employeeId.value) {
+    const label =
+      employeeOptions.value.find((item) => item.value === employeeId.value)?.label || "员工";
+    list.push({ label: `员工: ${label}`, color: "primary" });
+  }
+
+  if (deviceId.value) {
+    const label =
+      deviceOptions.value.find((item) => item.value === deviceId.value)?.label || "设备";
+    list.push({ label: `设备: ${label}`, color: "success" });
+  }
+
+  return list;
+});
 
 async function handleCancel(id: string) {
   try {
@@ -69,6 +187,42 @@ async function handleCancel(id: string) {
       color: "error",
     });
   }
+}
+
+async function handleEnqueue(input: { employeeId: string; deviceId: string }) {
+  taskError.value = "";
+
+  try {
+    await enqueueTask.mutateAsync(input);
+    await queryClient.invalidateQueries();
+    taskModalOpen.value = false;
+    taskEmployeeId.value = undefined;
+    taskDeviceId.value = undefined;
+    toast.add({ title: "录脸任务已创建" });
+  } catch (error: any) {
+    taskError.value = error?.message || "录脸任务创建失败";
+    toast.add({
+      title: "录脸任务创建失败",
+      description: taskError.value,
+      color: "error",
+    });
+  }
+}
+
+async function handleCreateTask() {
+  if (!taskEmployeeId.value || !taskDeviceId.value) {
+    taskError.value = "请选择员工和设备";
+    return;
+  }
+
+  await handleEnqueue({ employeeId: taskEmployeeId.value, deviceId: taskDeviceId.value });
+}
+
+function openTaskModal(input?: { employeeId?: string; deviceId?: string }) {
+  taskError.value = "";
+  taskEmployeeId.value = input?.employeeId;
+  taskDeviceId.value = input?.deviceId;
+  taskModalOpen.value = true;
 }
 
 async function goToEmployee(item: any) {
@@ -98,6 +252,19 @@ function getRowActions(item: any) {
           },
         ]
       : []),
+    ...(item.status === "failed" || item.status === "cancelled" || item.status === "success"
+      ? [
+          {
+            label: item.status === "success" ? "重新录脸" : "重新发起",
+            icon: "i-lucide-refresh-cw",
+            onSelect: () =>
+              openTaskModal({
+                employeeId: item.employeeId,
+                deviceId: item.device?.status === "active" ? item.deviceId : undefined,
+              }),
+          },
+        ]
+      : []),
   ];
 
   return [actions];
@@ -106,14 +273,17 @@ function getRowActions(item: any) {
 function resetFilters() {
   resetPage();
   status.value = undefined;
+  employeeId.value = undefined;
+  deviceId.value = undefined;
 }
 </script>
 
 <template>
   <UDashboardPanel id="face-profiles">
     <template #header>
-      <PageHeader title="录脸记录">
+      <PageHeader title="录脸记录" :badges="headerBadges">
         <template #actions>
+          <UButton icon="i-lucide-plus" @click="openTaskModal()">新建任务</UButton>
           <UButton variant="outline" icon="i-lucide-refresh-cw" @click="faceProfilesQuery.refetch()"
             >刷新</UButton
           >
@@ -123,28 +293,51 @@ function resetFilters() {
 
     <template #body>
       <div class="workspace-page-stack">
-        <DataSurface title="录脸记录列表">
-          <template #actions>
-            <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <FilterBar>
+          <div class="grid gap-3 md:grid-cols-3 xl:grid-cols-3">
+            <UFormField label="状态">
               <USelect
                 v-model="status"
                 :items="statusOptions"
                 placeholder="全部状态"
-                class="w-full sm:min-w-40"
+                class="w-full"
               />
-              <UButton
-                variant="outline"
-                color="neutral"
-                class="workspace-secondary-action"
-                icon="i-lucide-rotate-ccw"
-                :disabled="!status"
-                @click="resetFilters()"
-              >
-                清空
-              </UButton>
-            </div>
-          </template>
+            </UFormField>
 
+            <UFormField label="员工">
+              <USelect
+                v-model="employeeId"
+                :items="employeeOptions"
+                :loading="employeesQuery.isPending.value"
+                placeholder="全部员工"
+                class="w-full"
+              />
+            </UFormField>
+
+            <UFormField label="设备">
+              <USelect
+                v-model="deviceId"
+                :items="deviceOptions"
+                :loading="allDevicesQuery.isPending.value"
+                placeholder="全部设备"
+                class="w-full"
+              />
+            </UFormField>
+          </div>
+
+          <template #actions>
+            <UButton
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-rotate-ccw"
+              :disabled="!hasActiveFilters"
+              @click="resetFilters()"
+              >清空筛选</UButton
+            >
+          </template>
+        </FilterBar>
+
+        <DataSurface title="录脸记录列表">
           <QueryGuard
             :status="faceProfilesQuery.status.value"
             :error="faceProfilesQuery.error.value?.message"
@@ -157,36 +350,43 @@ function resetFilters() {
                 :data="rows"
                 :columns="faceProfileColumns"
                 empty="暂无录脸记录"
-                :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[760px]' }"
+                :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[1040px]' }"
               >
-                <template #employee-cell="{ row }">
-                  <div class="space-y-1">
-                    <div class="font-medium text-highlighted">
-                      {{ row.original.employee?.name || "-" }}
-                    </div>
-                    <div class="text-xs text-toned">{{ row.original.employee?.code || "-" }}</div>
+                <template #employeeCode-cell="{ row }">
+                  <div class="workspace-code-value mt-0">
+                    {{ row.original.employee?.code || "-" }}
                   </div>
                 </template>
 
-                <template #device-cell="{ row }">
-                  <div class="space-y-1">
-                    <div class="font-medium text-highlighted">
-                      {{ row.original.device?.name || "-" }}
-                    </div>
-                    <div class="text-xs text-toned">
-                      {{ row.original.device?.deviceCode || "-" }}
-                    </div>
+                <template #employeeName-cell="{ row }">
+                  <div class="font-medium text-highlighted">
+                    {{ row.original.employee?.name || "-" }}
+                  </div>
+                </template>
+
+                <template #deviceName-cell="{ row }">
+                  <div class="font-medium text-highlighted">
+                    {{ row.original.device?.name || "-" }}
+                  </div>
+                </template>
+
+                <template #deviceCode-cell="{ row }">
+                  <div class="workspace-code-value mt-0">
+                    {{ row.original.device?.deviceCode || "-" }}
                   </div>
                 </template>
 
                 <template #status-cell="{ row }">
-                    <UBadge
-                      :label="labelFaceStatus(row.original.status)"
-                      :color="colorFaceStatus(row.original.status)"
-                      variant="outline"
-                      class="workspace-status-chip"
-                    />
-                  </template>
+                  <UBadge
+                    :label="labelFaceStatus(row.original.status)"
+                    :color="colorFaceStatus(row.original.status)"
+                    variant="soft"
+                  />
+                </template>
+
+                <template #createdAt-cell="{ row }">
+                  <div class="text-sm text-toned">{{ formatDateTime(row.original.createdAt) }}</div>
+                </template>
 
                 <template #updatedAt-cell="{ row }">
                   <div class="text-sm text-toned">{{ formatDateTime(row.original.updatedAt) }}</div>
@@ -212,8 +412,7 @@ function resetFilters() {
                     <UBadge
                       :label="labelFaceStatus(item.status)"
                       :color="colorFaceStatus(item.status)"
-                      variant="outline"
-                      class="workspace-status-chip"
+                      variant="soft"
                     />
                     <RowActions :items="getRowActions(item)" trigger-size="sm" />
                   </div>
@@ -224,6 +423,11 @@ function resetFilters() {
                     <div class="workspace-section-label">设备</div>
                     <div class="workspace-data-value">{{ item.device?.name || "-" }}</div>
                     <div class="text-xs text-toned">{{ item.device?.deviceCode || "-" }}</div>
+                  </div>
+
+                  <div>
+                    <div class="workspace-section-label">创建时间</div>
+                    <div class="workspace-data-value">{{ formatDateTime(item.createdAt) }}</div>
                   </div>
 
                   <div>
@@ -245,6 +449,67 @@ function resetFilters() {
           </template>
         </DataSurface>
       </div>
+
+      <UModal
+        :open="taskModalOpen"
+        title="新建录脸任务"
+        description="选择员工和启用中的设备，设备端同步后会进入待录入状态。"
+        @update:open="taskModalOpen = $event"
+      >
+        <template #body>
+          <div class="flex flex-col gap-4">
+            <UFormField label="员工" required>
+              <USelect
+                v-model="taskEmployeeId"
+                :items="employeeOptions"
+                :loading="employeesQuery.isPending.value"
+                placeholder="请选择员工"
+                class="w-full"
+              />
+            </UFormField>
+
+            <UFormField label="设备" required>
+              <USelect
+                v-model="taskDeviceId"
+                :items="activeDeviceOptions"
+                :loading="activeDevicesQuery.isPending.value"
+                placeholder="请选择设备"
+                class="w-full"
+              />
+            </UFormField>
+
+            <UAlert
+              v-if="!activeDevicesQuery.isPending.value && activeDeviceOptions.length === 0"
+              color="warning"
+              icon="i-lucide-triangle-alert"
+              title="暂无启用设备"
+              description="请先在设备管理页启用至少一台设备。"
+            />
+
+            <UAlert
+              v-if="taskError"
+              color="error"
+              icon="i-lucide-alert-circle"
+              title="操作失败"
+              :description="taskError"
+            />
+          </div>
+        </template>
+
+        <template #footer>
+          <div class="flex w-full flex-col gap-2 sm:flex-row sm:justify-end">
+            <UButton variant="outline" color="neutral" @click="taskModalOpen = false">取消</UButton>
+            <UButton
+              icon="i-lucide-scan-face"
+              :loading="enqueueTask.isPending.value"
+              :disabled="activeDeviceOptions.length === 0"
+              @click="handleCreateTask()"
+            >
+              创建任务
+            </UButton>
+          </div>
+        </template>
+      </UModal>
     </template>
   </UDashboardPanel>
 </template>

@@ -97,20 +97,11 @@ async function handleSubmit() {
     :open="open"
     :title="device ? '编辑设备' : '创建设备'"
     side="right"
-    :ui="{
-      content: 'workspace-dialog-content',
-      header: 'workspace-dialog-header',
-      body: 'workspace-dialog-body',
-      footer: 'workspace-dialog-footer',
-      title: 'workspace-dialog-title',
-      description: 'workspace-dialog-description',
-      close: 'workspace-dialog-close',
-    }"
     @update:open="emit('update:open', $event)"
   >
     <template #body>
-      <form class="workspace-dialog-stack" @submit.prevent="handleSubmit">
-        <div class="workspace-dialog-panel">
+      <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
+        <div class="rounded-lg border border-default bg-default p-4">
           <div class="workspace-section-label">设备配置</div>
           <div class="workspace-data-value">{{ device ? "在线终端维护" : "注册新终端" }}</div>
           <div class="mt-1 text-sm text-toned">
@@ -150,7 +141,7 @@ async function handleSubmit() {
             type="submit"
             data-testid="device-submit-button"
             :loading="isSaving"
-            class="workspace-primary-action w-full"
+            class="w-full"
             icon="i-lucide-save"
           >
             {{ device ? "保存修改" : "创建设备" }}
@@ -160,7 +151,7 @@ async function handleSubmit() {
             type="button"
             variant="outline"
             color="neutral"
-            class="workspace-secondary-action w-full"
+            class="w-full"
             @click="emit('update:open', false)"
             >取消</UButton
           >
@@ -176,7 +167,7 @@ async function handleSubmit() {
             type="button"
             color="error"
             variant="outline"
-            class="workspace-secondary-action w-full"
+            class="w-full"
             icon="i-lucide-trash-2"
             @click="emit('request-delete')"
           >

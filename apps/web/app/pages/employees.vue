@@ -52,6 +52,7 @@ const activeDevicesQuery = useQuery({
 });
 
 const rows = computed(() => employeesQuery.data.value?.items ?? []);
+const hasActiveFilters = computed(() => Boolean(keyword.value || faceProfileState.value));
 const { total, resetPage } = usePagedListState({
   page,
   pageSize,
@@ -178,7 +179,8 @@ async function handleDeleteEmployee(confirmText: string) {
 const employeeColumns = [
   { accessorKey: "code", header: "员工编号" },
   { accessorKey: "name", header: "员工姓名" },
-  { accessorKey: "faceTask", header: "录脸任务" },
+  { accessorKey: "faceStatus", header: "录脸状态" },
+  { accessorKey: "faceDevice", header: "录脸设备" },
   { accessorKey: "updatedAt", header: "更新时间" },
   { accessorKey: "actions", header: "" },
 ];
@@ -272,9 +274,7 @@ watch(
           <UButton variant="outline" icon="i-lucide-refresh-cw" @click="employeesQuery.refetch()"
             >刷新</UButton
           >
-          <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()">
-            新增员工
-          </UButton>
+          <UButton icon="i-lucide-plus" @click="openCreate()"> 新增员工 </UButton>
         </template>
       </PageHeader>
     </template>
@@ -306,8 +306,8 @@ watch(
             <UButton
               variant="outline"
               color="neutral"
-              class="workspace-secondary-action"
               icon="i-lucide-rotate-ccw"
+              :disabled="!hasActiveFilters"
               @click="resetFilters()"
               >清空筛选</UButton
             >
@@ -323,9 +323,7 @@ watch(
             empty-description="当前筛选条件下没有可显示的员工记录。"
           >
             <template #empty-actions>
-              <UButton icon="i-lucide-plus" class="workspace-primary-action" @click="openCreate()"
-                >新增员工</UButton
-              >
+              <UButton icon="i-lucide-plus" @click="openCreate()">新增员工</UButton>
             </template>
 
             <div class="workspace-surface-table workspace-table-shell hidden md:block">
@@ -333,20 +331,19 @@ watch(
                 :data="rows"
                 :columns="employeeColumns"
                 empty="暂无员工数据"
-                :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[720px]' }"
+                :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[800px]' }"
               >
-                <template #faceTask-cell="{ row }">
-                  <div class="space-y-2">
-                    <UBadge
-                      :label="labelFaceStatus(row.original.faceProfile?.status)"
-                      :color="colorFaceStatus(row.original.faceProfile?.status)"
-                      variant="outline"
-                      class="workspace-status-chip"
-                    />
+                <template #faceStatus-cell="{ row }">
+                  <UBadge
+                    :label="labelFaceStatus(row.original.faceProfile?.status)"
+                    :color="colorFaceStatus(row.original.faceProfile?.status)"
+                    variant="soft"
+                  />
+                </template>
 
-                    <div class="text-sm text-toned">
-                      {{ row.original.faceProfile?.deviceName || "未分配设备" }}
-                    </div>
+                <template #faceDevice-cell="{ row }">
+                  <div class="text-sm text-toned">
+                    {{ row.original.faceProfile?.deviceName || "未分配设备" }}
                   </div>
                 </template>
 
@@ -374,8 +371,7 @@ watch(
                     <UBadge
                       :label="labelFaceStatus(item.faceProfile?.status)"
                       :color="colorFaceStatus(item.faceProfile?.status)"
-                      variant="outline"
-                      class="workspace-status-chip"
+                      variant="soft"
                     />
                     <RowActions :items="getRowActions(item)" trigger-size="sm" />
                   </div>

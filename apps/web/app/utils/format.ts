@@ -12,9 +12,20 @@ const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
 type UiColor = "error" | "success" | "info" | "primary" | "secondary" | "warning" | "neutral";
 
 export function formatDateTime(value: number | null | undefined) {
-  if (!value) return "-";
+  if (value === null || value === undefined) return "-";
 
-  return dateTimeFormatter.format(new Date(value));
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "-";
+
+  const parts = Object.fromEntries(
+    dateTimeFormatter
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 export function minutesToTimeInput(value: number | null | undefined) {
@@ -44,6 +55,10 @@ export function timeInputToMinutes(value: string) {
     return null;
   }
 
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return null;
+  }
+
   return hour * 60 + minute;
 }
 
@@ -55,7 +70,7 @@ export function labelDeviceStatus(value: string) {
 }
 
 export function colorDeviceStatus(value: string | null | undefined): UiColor {
-  if (value === "active") return "neutral";
+  if (value === "active") return "success";
   if (value === "disabled") return "neutral";
 
   return "neutral";
@@ -73,8 +88,8 @@ export function labelFaceStatus(value: string | null | undefined) {
 
 export function colorFaceStatus(value: string | null | undefined): UiColor {
   if (!value) return "neutral";
-  if (value === "pending") return "primary";
-  if (value === "success") return "neutral";
+  if (value === "pending") return "warning";
+  if (value === "success") return "success";
   if (value === "failed") return "error";
   if (value === "cancelled") return "neutral";
 
@@ -90,7 +105,7 @@ export function labelAttendanceType(value: string) {
 
 export function colorAttendanceType(value: string | null | undefined): UiColor {
   if (value === "clock_in") return "primary";
-  if (value === "clock_out") return "neutral";
+  if (value === "clock_out") return "secondary";
 
   return "neutral";
 }

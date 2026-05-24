@@ -68,6 +68,9 @@ const recordsQuery = useQuery(
 );
 
 const rows = computed(() => recordsQuery.data.value?.items ?? []);
+const hasActiveFilters = computed(() =>
+  Boolean(localDate.value || employeeId.value || deviceId.value || type.value),
+);
 const { total, resetPage } = usePagedListState({
   page,
   pageSize,
@@ -115,8 +118,9 @@ const recordColumns = [
   { accessorKey: "localDate", header: "日期" },
   { accessorKey: "recognizedAt", header: "打卡时间" },
   { accessorKey: "type", header: "类型" },
-  { accessorKey: "employee", header: "员工" },
-  { accessorKey: "device", header: "设备" },
+  { accessorKey: "employeeCode", header: "员工编号" },
+  { accessorKey: "employeeName", header: "员工姓名" },
+  { accessorKey: "deviceName", header: "设备名称" },
 ];
 
 const employeeOptions = computed(() =>
@@ -241,8 +245,8 @@ function resetFilters() {
             <UButton
               variant="outline"
               color="neutral"
-              class="workspace-secondary-action"
               icon="i-lucide-rotate-ccw"
+              :disabled="!hasActiveFilters"
               @click="resetFilters()"
               >清空筛选</UButton
             >
@@ -262,7 +266,7 @@ function resetFilters() {
                 :data="rows"
                 :columns="recordColumns"
                 empty="暂无考勤记录"
-                :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[760px]' }"
+                :ui="{ root: 'w-full overflow-x-auto', base: 'w-full min-w-[820px]' }"
               >
                 <template #recognizedAt-cell="{ row }">
                   <div class="text-sm text-toned">
@@ -271,31 +275,28 @@ function resetFilters() {
                 </template>
 
                 <template #type-cell="{ row }">
-                    <UBadge
-                      :label="labelAttendanceType(row.original.type)"
-                      :color="colorAttendanceType(row.original.type)"
-                      variant="outline"
-                      class="workspace-status-chip"
-                    />
-                  </template>
+                  <UBadge
+                    :label="labelAttendanceType(row.original.type)"
+                    :color="colorAttendanceType(row.original.type)"
+                    variant="soft"
+                  />
+                </template>
 
-                <template #employee-cell="{ row }">
-                  <div class="space-y-1">
-                    <div class="font-medium text-highlighted">
-                      {{ row.original.employee?.name || "-" }}
-                    </div>
-                    <div class="text-xs text-toned">{{ row.original.employee?.code || "-" }}</div>
+                <template #employeeCode-cell="{ row }">
+                  <div class="workspace-code-value mt-0">
+                    {{ row.original.employee?.code || "-" }}
                   </div>
                 </template>
 
-                <template #device-cell="{ row }">
-                  <div class="space-y-1">
-                    <div class="font-medium text-highlighted">
-                      {{ row.original.device?.name || "-" }}
-                    </div>
-                    <div class="text-xs text-toned">
-                      {{ row.original.device?.deviceCode || "-" }}
-                    </div>
+                <template #employeeName-cell="{ row }">
+                  <div class="font-medium text-highlighted">
+                    {{ row.original.employee?.name || "-" }}
+                  </div>
+                </template>
+
+                <template #deviceName-cell="{ row }">
+                  <div class="font-medium text-highlighted">
+                    {{ row.original.device?.name || "-" }}
                   </div>
                 </template>
               </UTable>
@@ -315,8 +316,7 @@ function resetFilters() {
                   <UBadge
                     :label="labelAttendanceType(item.type)"
                     :color="colorAttendanceType(item.type)"
-                    variant="outline"
-                    class="workspace-status-chip"
+                    variant="soft"
                   />
                 </div>
 

@@ -35,8 +35,7 @@ const props = withDefaults(
             :key="item.label"
             :label="item.label"
             :color="item.color || 'neutral'"
-            variant="outline"
-            class="workspace-tag px-2.5 py-1 text-[10px] font-semibold tracking-[0.18em] uppercase"
+            variant="soft"
           />
         </div>
       </template>

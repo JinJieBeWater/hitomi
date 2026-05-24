@@ -32,7 +32,7 @@ useSeoMeta({
 </script>
 
 <template>
-  <UApp class="workspace-industrial">
+  <UApp>
     <NuxtAnnouncer />
     <NuxtRouteAnnouncer />
     <NuxtLoadingIndicator />
