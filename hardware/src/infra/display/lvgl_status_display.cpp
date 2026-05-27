@@ -76,22 +76,23 @@ constexpr lv_coord_t kSystemRowsY = 64;
 constexpr lv_coord_t kSystemRowHeight = 20;
 constexpr lv_coord_t kSystemRowGap = 2;
 
-constexpr uint32_t kSidebarBackgroundHex = 0x0D3B2A;
-constexpr uint32_t kPaneBackgroundHex = 0x1F8A3B;
-constexpr uint32_t kPanelHex = 0x2A9D50;
-constexpr uint32_t kPanelMutedHex = 0x247E47;
-constexpr uint32_t kPanelBorderHex = 0x8ED1A0;
-constexpr uint32_t kPanelBorderMutedHex = 0x1C5B34;
-constexpr uint32_t kCameraPlaceholderHex = 0x113F2C;
-constexpr uint32_t kTextColorHex = 0xFFFFFF;
-constexpr uint32_t kMutedTextHex = 0xDCE8DD;
-constexpr uint32_t kNavButtonHex = 0x145A32;
-constexpr uint32_t kNavButtonActiveHex = 0xF0F3BD;
-constexpr uint32_t kNavButtonActiveTextHex = 0x0D3B2A;
-constexpr uint32_t kAccentHex = 0xF4A261;
-constexpr uint32_t kGoodHex = 0x5FD38D;
-constexpr uint32_t kWarnHex = 0xF4C35C;
-constexpr uint32_t kErrorHex = 0xE76F51;
+constexpr uint32_t kSidebarBackgroundHex = 0xFFFFFF;
+constexpr uint32_t kPaneBackgroundHex = 0xF8FAFC;
+constexpr uint32_t kPanelHex = 0xFFFFFF;
+constexpr uint32_t kPanelMutedHex = 0xF1F5F9;
+constexpr uint32_t kPanelBorderHex = 0xCBD5E1;
+constexpr uint32_t kPanelBorderMutedHex = 0xE2E8F0;
+constexpr uint32_t kCameraPlaceholderHex = 0xE2E8F0;
+constexpr uint32_t kTextColorHex = 0x0F172A;
+constexpr uint32_t kMutedTextHex = 0x64748B;
+constexpr uint32_t kNavButtonHex = 0xFFFFFF;
+constexpr uint32_t kNavButtonActiveHex = 0x00DC82;
+constexpr uint32_t kNavButtonActiveTextHex = 0x052E16;
+constexpr uint32_t kAccentHex = 0x00DC82;
+constexpr uint32_t kAccentTextHex = 0x052E16;
+constexpr uint32_t kGoodHex = 0x16A34A;
+constexpr uint32_t kWarnHex = 0xD97706;
+constexpr uint32_t kErrorHex = 0xDC2626;
 constexpr std::size_t kDisplayCommandQueueCapacity = 4;
 constexpr std::size_t kDisplayNotificationQueueCapacity = 4;
 constexpr lv_coord_t kNotificationWidth = 72;
@@ -495,11 +496,11 @@ uint32_t toneLedHex(StatusTone tone) {
 uint32_t tonePanelHex(StatusTone tone) {
   switch (tone) {
     case StatusTone::Good:
-      return 0x256F42;
+      return 0xDCFCE7;
     case StatusTone::Warn:
-      return 0x77561D;
+      return 0xFEF3C7;
     case StatusTone::Error:
-      return 0x6A3027;
+      return 0xFEE2E2;
     case StatusTone::Neutral:
     default:
       return kPanelMutedHex;
@@ -509,11 +510,11 @@ uint32_t tonePanelHex(StatusTone tone) {
 uint32_t toneBorderHex(StatusTone tone) {
   switch (tone) {
     case StatusTone::Good:
-      return 0x74D795;
+      return 0x86EFAC;
     case StatusTone::Warn:
-      return 0xF4C35C;
+      return 0xFCD34D;
     case StatusTone::Error:
-      return 0xF08D73;
+      return 0xFCA5A5;
     case StatusTone::Neutral:
     default:
       return kPanelBorderHex;
@@ -554,26 +555,26 @@ std::string compactSyncValue(const std::string& line) {
 uint32_t notificationColorHex(DisplayNotificationLevel level) {
   switch (level) {
     case DisplayNotificationLevel::Success:
-      return 0x2A9D50;
+      return kAccentHex;
     case DisplayNotificationLevel::Warning:
-      return 0xE9C46A;
+      return 0xF59E0B;
     case DisplayNotificationLevel::Error:
-      return 0xC44536;
+      return kErrorHex;
     case DisplayNotificationLevel::Info:
     default:
-      return 0x145A32;
+      return 0x334155;
   }
 }
 
 uint32_t notificationTextHex(DisplayNotificationLevel level) {
   switch (level) {
-    case DisplayNotificationLevel::Warning:
-      return kSidebarBackgroundHex;
-    case DisplayNotificationLevel::Info:
     case DisplayNotificationLevel::Success:
+    case DisplayNotificationLevel::Warning:
+      return kAccentTextHex;
+    case DisplayNotificationLevel::Info:
     case DisplayNotificationLevel::Error:
     default:
-      return kTextColorHex;
+      return 0xFFFFFF;
   }
 }
 
@@ -599,7 +600,7 @@ void applyActionButtonStyle(lv_obj_t* button, bool enabled) {
   lv_obj_set_style_border_width(button, 1, 0);
   lv_obj_set_style_border_color(button, lv_color_hex(enabled ? kPanelBorderHex : kPanelBorderMutedHex), 0);
   lv_obj_set_style_radius(button, 12, 0);
-  lv_obj_set_style_text_color(button, lv_color_hex(kSidebarBackgroundHex), 0);
+  lv_obj_set_style_text_color(button, lv_color_hex(kAccentTextHex), 0);
 }
 
 void applyTaskButtonStyle(lv_obj_t* button, bool selected, bool enabled) {
@@ -1308,7 +1309,7 @@ void createHomePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   data.homePeriodLabel = lv_label_create(periodChip);
   lv_obj_set_width(data.homePeriodLabel, kPageWidth - 16);
   lv_label_set_long_mode(data.homePeriodLabel, LV_LABEL_LONG_DOT);
-  applyLabelStyle(data.homePeriodLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  applyLabelStyle(data.homePeriodLabel, LV_TEXT_ALIGN_CENTER, kAccentTextHex);
   lv_obj_center(data.homePeriodLabel);
 
   lv_obj_t* cameraFrame = lv_obj_create(parent);
@@ -1395,7 +1396,7 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_add_event_cb(data.enrollRefreshButton, enrollRefreshButtonEventCallback, LV_EVENT_CLICKED, &data);
   lv_obj_set_style_radius(data.enrollRefreshButton, 14, 0);
   lv_obj_t* refreshLabel = lv_label_create(data.enrollRefreshButton);
-  applyCompactValueStyle(refreshLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  applyCompactValueStyle(refreshLabel, LV_TEXT_ALIGN_CENTER, kAccentTextHex);
   lv_label_set_text(refreshLabel, "刷新");
   lv_obj_center(refreshLabel);
 
@@ -1405,7 +1406,7 @@ void createEnrollPage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_add_event_cb(data.enrollStartButton, enrollStartButtonEventCallback, LV_EVENT_CLICKED, &data);
   lv_obj_set_style_radius(data.enrollStartButton, 14, 0);
   lv_obj_t* startLabel = lv_label_create(data.enrollStartButton);
-  applyCompactValueStyle(startLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  applyCompactValueStyle(startLabel, LV_TEXT_ALIGN_CENTER, kAccentTextHex);
   lv_label_set_text(startLabel, "开始");
   lv_obj_center(startLabel);
 }
@@ -1495,7 +1496,7 @@ void createCapturePage(LvglStatusDisplayData& data, lv_obj_t* parent) {
   lv_obj_add_event_cb(data.captureCancelButton, captureCancelButtonEventCallback, LV_EVENT_CLICKED, &data);
   lv_obj_set_style_radius(data.captureCancelButton, 14, 0);
   lv_obj_t* cancelLabel = lv_label_create(data.captureCancelButton);
-  applyCompactValueStyle(cancelLabel, LV_TEXT_ALIGN_CENTER, kSidebarBackgroundHex);
+  applyCompactValueStyle(cancelLabel, LV_TEXT_ALIGN_CENTER, kAccentTextHex);
   lv_label_set_text(cancelLabel, "取消");
   lv_obj_center(cancelLabel);
 }
