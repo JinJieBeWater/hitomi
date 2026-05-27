@@ -967,7 +967,8 @@ type AdminBusinessError = {
   "localDate": "2026-03-28",
   "employeeId": "emp_001",
   "deviceId": "dev_001",
-  "type": "clock_in"
+  "type": "clock_in",
+  "slotStatus": "missing"
 }
 ```
 
@@ -980,7 +981,8 @@ type AdminBusinessError = {
 | `localDate`  | `string` | 否   | 按单日筛选，格式 `YYYY-MM-DD` |
 | `employeeId` | `string` | 否   | 按员工筛选                    |
 | `deviceId`   | `string` | 否   | 按设备筛选                    |
-| `type`       | `string` | 否   | `clock_in` 或 `clock_out`     |
+| `type`       | `string` | 否   | 关注的时段，`clock_in` 或 `clock_out` |
+| `slotStatus` | `string` | 否   | `recorded` 或 `missing` |
 
 ### 输出
 
@@ -988,24 +990,39 @@ type AdminBusinessError = {
 {
   "items": [
     {
-      "id": "ar_001",
+      "id": "emp_001:2026-03-28",
       "employeeId": "emp_001",
-      "deviceId": "dev_001",
-      "recognizedAt": 1743158400000,
       "localDate": "2026-03-28",
-      "type": "clock_in",
-      "createdAt": 1743158400000,
-      "updatedAt": 1743158400000,
+      "latestRecognizedAt": 1743190800000,
       "employee": {
         "id": "emp_001",
         "code": "20230001",
         "name": "张三"
       },
-      "device": {
-        "id": "dev_001",
-        "name": "一号设备",
-        "deviceCode": "DEV-001"
-      }
+      "clockIn": {
+        "id": "ar_001",
+        "deviceId": "dev_001",
+        "recognizedAt": 1743158400000,
+        "type": "clock_in",
+        "device": {
+          "id": "dev_001",
+          "name": "一号设备",
+          "deviceCode": "DEV-001"
+        }
+      },
+      "clockInStatus": "recorded",
+      "clockOut": {
+        "id": "ar_002",
+        "deviceId": "dev_001",
+        "recognizedAt": 1743190800000,
+        "type": "clock_out",
+        "device": {
+          "id": "dev_001",
+          "name": "一号设备",
+          "deviceCode": "DEV-001"
+        }
+      },
+      "clockOutStatus": "recorded"
     }
   ],
   "pageInfo": {
@@ -1019,8 +1036,16 @@ type AdminBusinessError = {
 
 ### 处理规则
 
-- 固定按 `recognizedAt desc` 排序
+- 返回按 `employeeId + localDate` 聚合后的日考勤行，一行同时包含 `clockIn` 与 `clockOut`
+- `clockIn` 或 `clockOut` 不存在时返回 `null`
+- `clockInStatus` 和 `clockOutStatus` 取值为 `recorded`、`missing` 或 `null`
+- 当对应记录为空时，若已过时间段或历史日期则为 `missing`
+- 当对应记录为空且不应判定缺卡时返回 `null`
+- 固定按 `localDate desc`、当天最新 `recognizedAt desc` 排序
 - `localDate` 为单日筛选，不提供区间筛选
+- `slotStatus` 筛选表示只返回包含该状态的日考勤行
+- 同时传入 `type` 与 `slotStatus` 时，只匹配指定时段的状态，例如筛选“下班缺卡”
+- 只传入 `slotStatus` 时，只要上班或下班任一时段命中该状态即返回该日考勤行
 
 ---
 

@@ -388,6 +388,7 @@ const employeeUpdatedName = `${employeeName} Updated`;
 const deviceCode = `DEV-UI-${Date.now().toString().slice(-8)}`;
 const deviceName = `UI Smoke Device ${suffix}`;
 const attendanceRecordId = createId("smoke_ui_ar");
+const attendanceClockOutRecordId = createId("smoke_ui_ar_out");
 const initialConfig =
   (await db.query.attendanceConfig.findFirst({
     where: eq(attendanceConfig.id, defaultAttendanceConfigId),
@@ -518,14 +519,24 @@ try {
     type: "clock_in",
   });
 
+  await db.insert(attendanceRecord).values({
+    id: attendanceClockOutRecordId,
+    employeeId: createdEmployee.id,
+    deviceId: createdDevice.id,
+    recognizedAt: dateAtMinute(1085),
+    localDate,
+    type: "clock_out",
+  });
+
   await clickNav(page, "/attendance-records", "考勤记录");
   await page.getByTestId("attendance-record-employee-select").waitFor();
   await page.getByTestId("attendance-record-device-select").waitFor();
   await page.getByTestId("attendance-record-type-select").waitFor();
+  await page.getByTestId("attendance-record-status-select").waitFor();
   await clickRefresh(page);
-  await page.locator("tr").filter({ hasText: employeeCode }).waitFor();
-  await page.locator("tr").filter({ hasText: deviceName }).waitFor();
-  await page.locator("tr").filter({ hasText: "上班" }).waitFor();
+  const attendanceRow = page.locator("tr").filter({ hasText: employeeCode });
+  await attendanceRow.waitFor();
+  await attendanceRow.getByText(deviceName).first().waitFor();
 
   await clickNav(page, "/employees", "员工管理");
   await clickRefresh(page);

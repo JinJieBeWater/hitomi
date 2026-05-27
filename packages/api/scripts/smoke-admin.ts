@@ -102,6 +102,8 @@ const client = createRouterClient(appRouter, {
 });
 
 const attendanceRecordId = createId("smoke_ar");
+const attendanceClockOutRecordId = createId("smoke_ar_out");
+const attendanceMissingRecordId = createId("smoke_ar_missing");
 const attendanceRecordId2 = createId("smoke_ar_2");
 
 let employeeId1: string | null = null;
@@ -337,6 +339,28 @@ try {
     type: "clock_in",
   });
 
+  await db.insert(attendanceRecord).values({
+    id: attendanceClockOutRecordId,
+    employeeId: employeeId1Value,
+    deviceId: deviceId2Value,
+    recognizedAt: dateAtMinute(1085),
+    localDate,
+    type: "clock_out",
+  });
+
+  const missingClockOutDate = dateAtMinute(545);
+  missingClockOutDate.setDate(missingClockOutDate.getDate() - 1);
+  const missingClockOutLocalDate = localDateString(missingClockOutDate);
+
+  await db.insert(attendanceRecord).values({
+    id: attendanceMissingRecordId,
+    employeeId: employeeId1Value,
+    deviceId: deviceId2Value,
+    recognizedAt: missingClockOutDate,
+    localDate: missingClockOutLocalDate,
+    type: "clock_in",
+  });
+
   const attendanceRecords = await client.attendanceRecord.list({
     page: 1,
     pageSize: 100,
@@ -344,11 +368,38 @@ try {
     employeeId: employeeId1Value,
     deviceId: deviceId2Value,
     type: "clock_in",
+    slotStatus: "recorded",
   });
 
+  const attendanceDay = attendanceRecords.items.find(
+    (item) => item.employeeId === employeeId1Value,
+  );
+
   assert(
-    attendanceRecords.items.some((item) => item.id === attendanceRecordId),
-    "attendance record list should support combined filters",
+    attendanceDay?.clockIn?.id === attendanceRecordId,
+    "attendance list should include clock-in in daily row",
+  );
+  assert(
+    attendanceDay?.clockOut?.id === attendanceClockOutRecordId,
+    "attendance list should include clock-out in daily row",
+  );
+
+  const missingClockOutRecords = await client.attendanceRecord.list({
+    page: 1,
+    pageSize: 100,
+    localDate: missingClockOutLocalDate,
+    employeeId: employeeId1Value,
+    deviceId: deviceId2Value,
+    type: "clock_out",
+    slotStatus: "missing",
+  });
+  const missingClockOutDay = missingClockOutRecords.items.find(
+    (item) => item.employeeId === employeeId1Value,
+  );
+
+  assert(
+    missingClockOutDay?.clockOut === null && missingClockOutDay.clockOutStatus === "missing",
+    "attendance list should mark past empty clock-out as missing",
   );
 
   const finalSummary = await client.dashboard.summary();
@@ -365,6 +416,10 @@ try {
     finalSummary.todayClockInCount === initialSummary.todayClockInCount + 1,
     "dashboard clock-in count should increase",
   );
+  assert(
+    finalSummary.todayClockOutCount === initialSummary.todayClockOutCount + 1,
+    "dashboard clock-out count should increase",
+  );
 
   const employeeDeleteImpact = await client.employee.getDeleteImpact({
     id: employeeId1Value,
@@ -379,7 +434,7 @@ try {
     "employee delete impact should count linked face profile",
   );
   assert(
-    employeeDeleteImpact.attendanceRecordCount === 1,
+    employeeDeleteImpact.attendanceRecordCount === 3,
     "employee delete impact should count linked attendance record",
   );
 
@@ -402,7 +457,7 @@ try {
     "employee remove should delete linked face profile",
   );
   assert(
-    removedEmployee.deletedAttendanceRecordCount === 1,
+    removedEmployee.deletedAttendanceRecordCount === 3,
     "employee remove should delete linked attendance record",
   );
 
@@ -547,6 +602,8 @@ try {
   console.log("admin smoke test passed");
 } finally {
   await db.delete(attendanceRecord).where(eq(attendanceRecord.id, attendanceRecordId));
+  await db.delete(attendanceRecord).where(eq(attendanceRecord.id, attendanceClockOutRecordId));
+  await db.delete(attendanceRecord).where(eq(attendanceRecord.id, attendanceMissingRecordId));
   await db.delete(attendanceRecord).where(eq(attendanceRecord.id, attendanceRecordId2));
   if (deviceId1) {
     await db.delete(attendanceRecord).where(eq(attendanceRecord.deviceId, deviceId1));
