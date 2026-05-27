@@ -116,13 +116,13 @@ void processUsbProvisioning(const RuntimeContext& context, RuntimeState& state, 
 
       auto command = parseUsbProvisioningCommand(line);
       if (!command.has_value()) {
-        Serial.println(R"({"ok":false,"message":"invalid provisioning command"})");
+        Serial.println(buildUsbProvisioningResponseFrame(R"({"ok":false,"message":"invalid provisioning command"})").c_str());
         continue;
       }
 
       const bool ok = applyUsbProvisioningCommand(context, state, command.value(), nowMs);
       const std::string response = buildUsbProvisioningResponse(ok, ok ? "applied" : "rejected", state.deviceConfig, state.lastErrorCode);
-      Serial.println(response.c_str());
+      Serial.println(buildUsbProvisioningResponseFrame(response).c_str());
       state.renderDirty = true;
       continue;
     }

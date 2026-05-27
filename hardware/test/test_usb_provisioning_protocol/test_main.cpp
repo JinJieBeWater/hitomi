@@ -63,6 +63,13 @@ void testBuildProvisioningResponseOmitsSecrets() {
   expect(response.find("bootstrap-secret") == std::string::npos, "response should not include bootstrap secret");
 }
 
+void testBuildProvisioningResponseFrameAddsMachinePrefix() {
+  const std::string frame = app::buildUsbProvisioningResponseFrame(R"({"ok":true,"message":"applied"})");
+
+  expect(frame.find(app::kUsbProvisioningResponsePrefix) == 0, "response frame should start with prefix");
+  expect(frame.find(R"({"ok":true,"message":"applied"})") != std::string::npos, "response frame should include JSON payload");
+}
+
 }  // namespace
 
 int main() {
@@ -71,6 +78,7 @@ int main() {
     testParseBootstrapIdentityCommand();
     testParseResetDeviceConfigCommand();
     testBuildProvisioningResponseOmitsSecrets();
+    testBuildProvisioningResponseFrameAddsMachinePrefix();
     std::cout << "[PASS] usb provisioning protocol" << '\n';
     return EXIT_SUCCESS;
   } catch (const std::exception& error) {

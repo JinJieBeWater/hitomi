@@ -50,6 +50,8 @@ type DeviceSerialResponse = {
   summary?: DeviceSerialSummary;
 };
 
+const DEVICE_SERIAL_RESPONSE_PREFIX = "HITOMI_USB_RESPONSE ";
+
 type BrowserSerialPort = {
   connected?: boolean;
   readable: ReadableStream<Uint8Array> | null;
@@ -235,6 +237,74 @@ function timeoutPromise(timeoutMs: number) {
   return new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error("串口响应超时")), timeoutMs);
   });
+}
+
+function extractJsonObjectFromBuffer(buffer: string) {
+  const start = buffer.indexOf("{");
+  if (start < 0) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < buffer.length; index += 1) {
+    const ch = buffer[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{") {
+      depth += 1;
+      continue;
+    }
+
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return {
+          json: buffer.slice(start, index + 1),
+          before: buffer.slice(0, start),
+          after: buffer.slice(index + 1),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+function extractFramedResponseFromBuffer(buffer: string) {
+  const prefixStart = buffer.indexOf(DEVICE_SERIAL_RESPONSE_PREFIX);
+  if (prefixStart < 0) {
+    return null;
+  }
+
+  const jsonStart = prefixStart + DEVICE_SERIAL_RESPONSE_PREFIX.length;
+  const extracted = extractJsonObjectFromBuffer(buffer.slice(jsonStart));
+  if (!extracted) {
+    return null;
+  }
+
+  return {
+    json: extracted.json,
+    before: buffer.slice(0, prefixStart),
+    after: extracted.after,
+  };
 }
 
 const MAX_LOG_LINES = 500;
@@ -489,6 +559,30 @@ export function useDeviceSerial() {
 
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
+        const extracted =
+          extractFramedResponseFromBuffer(sharedLineBuffer.value) ??
+          extractJsonObjectFromBuffer(sharedLineBuffer.value);
+        if (extracted) {
+          if (extracted.before.trim()) {
+            appendLog(extracted.before.replace(/\r?\n$/, ""));
+          }
+          sharedLineBuffer.value = extracted.after;
+          sharedLastRawLine.value = sanitizeLogLine(extracted.json);
+          appendLog(extracted.json);
+
+          try {
+            const parsed = JSON.parse(extracted.json);
+            if (isProvisioningResponse(parsed)) {
+              return {
+                ...parsed,
+                summary: normalizeSummary(parsed.summary),
+              };
+            }
+          } catch {
+            continue;
+          }
+        }
+
         const line = await readLine(Math.max(1, deadline - Date.now()));
         if (!line.trim().startsWith("{")) {
           continue;

@@ -8,6 +8,8 @@
 
 namespace app {
 
+inline constexpr char kUsbProvisioningResponsePrefix[] = "HITOMI_USB_RESPONSE ";
+
 enum class UsbProvisioningCommandType {
   Invalid,
   GetConfig,
@@ -31,5 +33,6 @@ std::optional<UsbProvisioningCommand> parseUsbProvisioningCommand(const std::str
 std::string buildUsbProvisioningResponse(
     bool ok, const std::string& message, const core::DeviceConfig& config,
     const std::optional<std::string>& lastErrorCode = std::nullopt);
+std::string buildUsbProvisioningResponseFrame(const std::string& responseJson);
 
 }  // namespace app

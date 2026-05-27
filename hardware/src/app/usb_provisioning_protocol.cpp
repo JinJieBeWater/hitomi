@@ -118,4 +118,8 @@ std::string buildUsbProvisioningResponse(
   return output;
 }
 
+std::string buildUsbProvisioningResponseFrame(const std::string& responseJson) {
+  return std::string(kUsbProvisioningResponsePrefix) + responseJson;
+}
+
 }  // namespace app

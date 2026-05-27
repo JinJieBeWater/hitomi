@@ -338,6 +338,18 @@ function buildWifiProfilesPayload() {
     });
 }
 
+async function sendRequiredCommand(
+  command: Parameters<typeof serial.sendCommand>[0],
+  failureMessage: string,
+) {
+  const response = await serial.sendCommand(command);
+  if (!response.ok) {
+    throw new Error(response.message || failureMessage);
+  }
+
+  return response;
+}
+
 let backendCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function checkBackendOrigin() {
@@ -503,15 +515,24 @@ async function writeConfig(options: {
   statusMessage.value = options.pendingMessage;
 
   try {
-    await serial.sendCommand({ type: "set_wifi_profiles", profiles });
-    await serial.sendCommand({ type: "set_backend_origin", origin });
+    await sendRequiredCommand(
+      { type: "set_backend_origin", origin },
+      "后台地址写入失败。",
+    );
+    await sendRequiredCommand(
+      { type: "set_wifi_profiles", profiles },
+      "Wi-Fi 配置写入失败。",
+    );
 
     if (options.writeBootstrap && createdDevice.value) {
-      await serial.sendCommand({
-        type: "set_bootstrap_identity",
-        deviceSerial: createdDevice.value.bootstrapSerial,
-        bootstrapSecret: createdDevice.value.bootstrapSecret,
-      });
+      await sendRequiredCommand(
+        {
+          type: "set_bootstrap_identity",
+          deviceSerial: createdDevice.value.bootstrapSerial,
+          bootstrapSecret: createdDevice.value.bootstrapSecret,
+        },
+        "Bootstrap 身份写入失败。",
+      );
     }
 
     await refreshSummary({ syncEditor: true, ensureWifiInput: options.requireWifi });
