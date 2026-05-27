@@ -584,12 +584,15 @@ export function useDeviceSerial() {
         }
 
         const line = await readLine(Math.max(1, deadline - Date.now()));
-        if (!line.trim().startsWith("{")) {
+        const lineResponse =
+          extractFramedResponseFromBuffer(line) ??
+          (line.trim().startsWith("{") ? extractJsonObjectFromBuffer(line) : null);
+        if (!lineResponse) {
           continue;
         }
 
         try {
-          const parsed = JSON.parse(line);
+          const parsed = JSON.parse(lineResponse.json);
           if (isProvisioningResponse(parsed)) {
             return {
               ...parsed,
