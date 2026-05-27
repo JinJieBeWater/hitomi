@@ -118,12 +118,16 @@ void pollCamera(RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
   }
   maybeLogCameraPerf(nowMs);
   const bool shouldPreview = previewRenderDue(state, nowMs);
+  const bool enrollmentFlowAwaitingFrame =
+      context.enrollmentService.active() ||
+      state.enrollmentState == EnrollmentRunState::Preparing ||
+      state.enrollmentState == EnrollmentRunState::Capturing;
   const bool shouldEnrollmentProcess =
-      context.enrollmentService.active() &&
+      enrollmentFlowAwaitingFrame &&
       (state.lastEnrollmentFrameSampleMs == 0 ||
        nowMs - state.lastEnrollmentFrameSampleMs >= board::kEnrollmentFrameIntervalMs);
   const bool shouldFaceProcess =
-      !context.enrollmentService.active() &&
+      !enrollmentFlowAwaitingFrame &&
       (state.lastFaceDetectionMs == 0 ||
        nowMs - state.lastFaceDetectionMs >= board::kFaceDetectIntervalMs);
 
@@ -149,7 +153,7 @@ void pollCamera(RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
 
     if (shouldPreview) {
       const uint32_t previewStartedUs = micros();
-      const infra::DisplayRgb565Frame preview = context.enrollmentService.active()
+      const infra::DisplayRgb565Frame preview = enrollmentFlowAwaitingFrame
           ? infra::DisplayRgb565Frame{
                 .data = frame->data(),
                 .width = frame->info().width,
@@ -162,7 +166,7 @@ void pollCamera(RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
       context.display.updateCameraPreview(preview);
       perf.previewUpdates += 1;
       perf.previewSubmitUs += static_cast<uint64_t>(micros() - previewStartedUs);
-      if (context.enrollmentService.active()) {
+      if (enrollmentFlowAwaitingFrame) {
         perf.enrollmentPreviewUpdates += 1;
       } else {
         perf.detectionPreviewUpdates += 1;
