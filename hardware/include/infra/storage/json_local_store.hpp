@@ -26,6 +26,8 @@ class JsonLocalStore final : public LocalStore {
       const std::vector<core::PendingEnrollmentReport>& reports) override;
   bool savePendingAttendanceRecords(
       const std::vector<core::PendingAttendanceRecord>& records) override;
+  bool saveLocalAttendanceMarks(
+      const std::vector<core::LocalAttendanceMark>& marks) override;
   bool saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) override;
   bool saveStorageAux(const StorageAuxState& storageAux) override;
 

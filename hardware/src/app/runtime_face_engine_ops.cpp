@@ -683,9 +683,42 @@ void handleAttendanceRecognition(
       .lastAttemptAt = std::nullopt,
       .lastResultCode = std::nullopt,
   };
-  const core::QueueMutationResult mutation = core::enqueueAttendanceRecord(state.pendingAttendanceRecords, record);
   const std::string attendanceEventKey =
       matched.employeeId + ":" + record.localDate + ":" + core::attendanceTypeToApiValue(record.type);
+  const std::size_t marksBeforePrune = state.localAttendanceMarks.size();
+  core::pruneLocalAttendanceMarks(state.localAttendanceMarks, record.localDate);
+  if (state.localAttendanceMarks.size() != marksBeforePrune) {
+    persistLocalAttendanceMarks(context, state);
+  }
+
+  if (core::hasLocalAttendanceMark(
+          state.localAttendanceMarks, record.employeeId, record.localDate, record.type)) {
+    std::ostringstream oss;
+    oss << employeeName << " 今日" << attendanceTypeLabel(record.type) << "已打卡 @" << std::fixed
+        << std::setprecision(2) << similarity;
+    publishAttendanceFeedback(
+        context,
+        state,
+        attendanceEventKey,
+        infra::DisplayNotificationLevel::Warning,
+        oss.str(),
+        nowMs);
+    state.lastErrorCode = "ATTENDANCE_DUPLICATE_LATER_OR_EQUAL";
+    return;
+  }
+
+  core::upsertLocalAttendanceMark(
+      state.localAttendanceMarks,
+      core::LocalAttendanceMark{
+          .employeeId = record.employeeId,
+          .localDate = record.localDate,
+          .type = record.type,
+          .recognizedAt = record.recognizedAt,
+          .uploaded = false,
+      });
+  persistLocalAttendanceMarks(context, state);
+
+  const core::QueueMutationResult mutation = core::enqueueAttendanceRecord(state.pendingAttendanceRecords, record);
 
   std::string feedback;
   infra::DisplayNotificationLevel level = infra::DisplayNotificationLevel::Success;

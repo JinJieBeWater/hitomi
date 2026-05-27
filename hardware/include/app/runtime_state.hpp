@@ -42,6 +42,7 @@ struct RuntimeState {
   RuntimeWallClockState wallClock;
   std::vector<core::PendingEnrollmentReport> pendingEnrollmentReports;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
+  std::vector<core::LocalAttendanceMark> localAttendanceMarks;
   std::vector<core::FailureLogEntry> failureLogs;
   infra::StorageAuxState storageAux;
   ConnectivityState connectivity = ConnectivityState::Unknown;

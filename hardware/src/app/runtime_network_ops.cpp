@@ -382,12 +382,14 @@ void applyUploadResult(const RuntimeContext& context, RuntimeState& state, const
 
   auto uploadState =
       core::applyUploadResults(state.pendingAttendanceRecords, state.failureLogs, result.data->results, completed.requestedAtMs);
+  core::markLocalAttendanceUploads(state.localAttendanceMarks, completed.uploadBatch, result.data->results);
   state.pendingAttendanceRecords = std::move(uploadState.queue);
   state.failureLogs = std::move(uploadState.logs);
   core::pruneFailureLogs(state.failureLogs, board::kFailureLogLimit);
   state.apiProbeSucceeded = true;
   state.apiProbeStatusCode = std::nullopt;
   persistPendingAttendanceRecords(context, state);
+  persistLocalAttendanceMarks(context, state);
   persistFailureLogs(context, state);
 
   std::optional<core::ApiError> latestRejectedError;

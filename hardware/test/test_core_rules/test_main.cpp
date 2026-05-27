@@ -28,6 +28,7 @@ using core::DeviceCredentials;
 using core::EmployeeSnapshot;
 using core::EnrollmentTaskSnapshot;
 using core::FailureLogEntry;
+using core::LocalAttendanceMark;
 using core::PendingAttendanceRecord;
 using core::SnapshotBundle;
 using core::SyncPayload;
@@ -227,6 +228,81 @@ void testEnqueueAttendanceRecordKeepsEarlierDuplicate() {
          "later duplicate should be ignored");
   expect(queue.size() == 1, "queue should still contain one record");
   expect(queue.front().clientRecordId == "local-002", "queue should keep earlier record");
+}
+
+void testLocalAttendanceMarksDetectSameDayDuplicate() {
+  std::vector<LocalAttendanceMark> marks;
+  core::upsertLocalAttendanceMark(
+      marks,
+      LocalAttendanceMark{
+          .employeeId = "emp_001",
+          .localDate = "2026-03-28",
+          .type = AttendanceRecordType::ClockIn,
+          .recognizedAt = 1'774'660'200'000ULL,
+          .uploaded = false,
+      });
+
+  expect(
+      core::hasLocalAttendanceMark(marks, "emp_001", "2026-03-28", AttendanceRecordType::ClockIn),
+      "mark should detect duplicate by employee/date/type");
+  expect(
+      !core::hasLocalAttendanceMark(marks, "emp_001", "2026-03-28", AttendanceRecordType::ClockOut),
+      "different attendance type should not be duplicate");
+}
+
+void testMarkLocalAttendanceUploadsSetsUploadedFlag() {
+  std::vector<LocalAttendanceMark> marks = {
+      LocalAttendanceMark{
+          .employeeId = "emp_001",
+          .localDate = "2026-03-28",
+          .type = AttendanceRecordType::ClockIn,
+          .recognizedAt = 1,
+          .uploaded = false,
+      },
+  };
+  const std::vector<PendingAttendanceRecord> submitted = {
+      PendingAttendanceRecord{
+          .clientRecordId = "local-001",
+          .employeeId = "emp_001",
+          .recognizedAt = 1,
+          .type = AttendanceRecordType::ClockIn,
+          .localDate = "2026-03-28",
+          .createdAt = 1,
+          .lastAttemptAt = std::nullopt,
+          .lastResultCode = std::nullopt,
+      },
+  };
+  const std::vector<AttendanceUploadItemResult> results = {
+      AttendanceUploadItemResult{
+          .clientRecordId = "local-001",
+          .status = AttendanceUploadStatus::IgnoredDuplicate,
+          .attendanceRecordId = std::nullopt,
+          .error = std::nullopt,
+      },
+  };
+
+  core::markLocalAttendanceUploads(marks, submitted, results);
+
+  expect(marks.front().uploaded, "processed upload result should mark local attendance uploaded");
+}
+
+void testPruneLocalAttendanceMarksKeepsRecentThreeDates() {
+  std::vector<LocalAttendanceMark> marks = {
+      LocalAttendanceMark{.employeeId = "emp_001", .localDate = "2026-03-25", .type = AttendanceRecordType::ClockIn},
+      LocalAttendanceMark{.employeeId = "emp_001", .localDate = "2026-03-26", .type = AttendanceRecordType::ClockIn},
+      LocalAttendanceMark{.employeeId = "emp_001", .localDate = "2026-03-27", .type = AttendanceRecordType::ClockIn},
+      LocalAttendanceMark{.employeeId = "emp_001", .localDate = "2026-03-28", .type = AttendanceRecordType::ClockIn},
+  };
+
+  core::pruneLocalAttendanceMarks(marks, "2026-03-28");
+
+  expect(marks.size() == 3, "attendance marks should keep only three recent local dates");
+  expect(
+      !core::hasLocalAttendanceMark(marks, "emp_001", "2026-03-25", AttendanceRecordType::ClockIn),
+      "oldest mark should be pruned");
+  expect(
+      core::hasLocalAttendanceMark(marks, "emp_001", "2026-03-28", AttendanceRecordType::ClockIn),
+      "current date mark should be kept");
 }
 
 void testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected() {
@@ -690,6 +766,9 @@ int main() {
     testProjectUnixEpochMsRejectsBackwardsUptime();
     testCollectStaleTemplateEmployeeIdsFindsRemovedEmployees();
     testEnqueueAttendanceRecordKeepsEarlierDuplicate();
+    testLocalAttendanceMarksDetectSameDayDuplicate();
+    testMarkLocalAttendanceUploadsSetsUploadedFlag();
+    testPruneLocalAttendanceMarksKeepsRecentThreeDates();
     testApplyUploadResultsRemovesProcessedRecordsAndLogsRejected();
     testPendingEnrollmentReportUpsertReplacesByTaskId();
     testRemoveEnrollmentTaskErasesMatchingTask();

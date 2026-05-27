@@ -25,6 +25,20 @@ std::optional<uint64_t> projectUnixEpochMs(
 QueueMutationResult enqueueAttendanceRecord(
     std::vector<PendingAttendanceRecord>& queue, const PendingAttendanceRecord& candidate);
 
+bool hasLocalAttendanceMark(
+    const std::vector<LocalAttendanceMark>& marks,
+    const std::string& employeeId,
+    const std::string& localDate,
+    AttendanceRecordType type);
+void upsertLocalAttendanceMark(
+    std::vector<LocalAttendanceMark>& marks, const LocalAttendanceMark& candidate);
+void markLocalAttendanceUploads(
+    std::vector<LocalAttendanceMark>& marks,
+    const std::vector<PendingAttendanceRecord>& submittedRecords,
+    const std::vector<AttendanceUploadItemResult>& results);
+void pruneLocalAttendanceMarks(
+    std::vector<LocalAttendanceMark>& marks, const std::string& currentLocalDate, std::size_t retainDays = 3);
+
 void upsertPendingEnrollmentReport(
     std::vector<PendingEnrollmentReport>& queue, const PendingEnrollmentReport& candidate);
 

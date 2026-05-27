@@ -23,6 +23,7 @@ struct StoredRuntimeState {
   core::SnapshotBundle snapshots;
   std::vector<core::PendingEnrollmentReport> pendingEnrollmentReports;
   std::vector<core::PendingAttendanceRecord> pendingAttendanceRecords;
+  std::vector<core::LocalAttendanceMark> localAttendanceMarks;
   std::vector<core::FailureLogEntry> failureLogs;
   StorageAuxState storageAux;
 };
@@ -41,6 +42,8 @@ class LocalStore {
       const std::vector<core::PendingEnrollmentReport>& reports) = 0;
   virtual bool savePendingAttendanceRecords(
       const std::vector<core::PendingAttendanceRecord>& records) = 0;
+  virtual bool saveLocalAttendanceMarks(
+      const std::vector<core::LocalAttendanceMark>& marks) = 0;
   virtual bool saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) = 0;
   virtual bool saveStorageAux(const StorageAuxState& storageAux) = 0;
 };

@@ -53,6 +53,7 @@ void loadPersistedState(const RuntimeContext& context, RuntimeState& state) {
   state.snapshots = std::move(stored.snapshots);
   state.pendingEnrollmentReports = std::move(stored.pendingEnrollmentReports);
   state.pendingAttendanceRecords = std::move(stored.pendingAttendanceRecords);
+  state.localAttendanceMarks = std::move(stored.localAttendanceMarks);
   state.failureLogs = std::move(stored.failureLogs);
   state.storageAux = std::move(stored.storageAux);
 }
@@ -83,6 +84,13 @@ void persistPendingAttendanceRecords(const RuntimeContext& context, const Runtim
     return;
   }
   context.localStore.savePendingAttendanceRecords(state.pendingAttendanceRecords);
+}
+
+void persistLocalAttendanceMarks(const RuntimeContext& context, const RuntimeState& state) {
+  if (!state.filesystemReady) {
+    return;
+  }
+  context.localStore.saveLocalAttendanceMarks(state.localAttendanceMarks);
 }
 
 void persistFailureLogs(const RuntimeContext& context, const RuntimeState& state) {

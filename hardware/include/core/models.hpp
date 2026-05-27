@@ -151,6 +151,14 @@ struct PendingAttendanceRecord {
   std::optional<std::string> lastResultCode;
 };
 
+struct LocalAttendanceMark {
+  std::string employeeId;
+  std::string localDate;
+  AttendanceRecordType type = AttendanceRecordType::ClockIn;
+  uint64_t recognizedAt = 0;
+  bool uploaded = false;
+};
+
 struct FailureLogEntry {
   std::string id;
   std::string api;

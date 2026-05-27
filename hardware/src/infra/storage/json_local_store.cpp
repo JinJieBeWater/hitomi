@@ -21,6 +21,7 @@ constexpr char kLittleFsMountPath[] = "/littlefs";
 constexpr char kSnapshotsPath[] = "/snapshots.json";
 constexpr char kEnrollmentReportsPath[] = "/enrollment_reports.json";
 constexpr char kAttendanceQueuePath[] = "/attendance_queue.json";
+constexpr char kLocalAttendanceMarksPath[] = "/attendance_marks.json";
 constexpr char kFailureLogsPath[] = "/failure_logs.json";
 constexpr char kStorageAuxPath[] = "/storage_aux.json";
 constexpr char kDeviceConfigKey[] = "deviceConfig";
@@ -379,6 +380,50 @@ class AttendanceQueueStore {
   }
 };
 
+class LocalAttendanceMarkStore {
+ public:
+  std::vector<core::LocalAttendanceMark> load() {
+    std::vector<core::LocalAttendanceMark> marks;
+    JsonDocument doc;
+    if (!readJsonFile(kLocalAttendanceMarksPath, doc)) {
+      return marks;
+    }
+
+    JsonArrayConst items = doc["items"].as<JsonArrayConst>();
+    for (JsonVariantConst item : items) {
+      auto type = core::attendanceTypeFromApiValue(item["type"] | "");
+      if (!type.has_value()) {
+        continue;
+      }
+
+      marks.push_back(core::LocalAttendanceMark{
+          .employeeId = item["employeeId"] | "",
+          .localDate = item["localDate"] | "",
+          .type = type.value(),
+          .recognizedAt = item["recognizedAt"] | 0ULL,
+          .uploaded = item["uploaded"] | false,
+      });
+    }
+
+    return marks;
+  }
+
+  bool save(const std::vector<core::LocalAttendanceMark>& marks) {
+    JsonDocument doc;
+    JsonArray items = doc["items"].to<JsonArray>();
+    for (const auto& mark : marks) {
+      JsonObject item = items.add<JsonObject>();
+      item["employeeId"] = mark.employeeId;
+      item["localDate"] = mark.localDate;
+      item["type"] = core::attendanceTypeToApiValue(mark.type);
+      item["recognizedAt"] = mark.recognizedAt;
+      item["uploaded"] = mark.uploaded;
+    }
+
+    return writeJsonFile(kLocalAttendanceMarksPath, doc);
+  }
+};
+
 class EnrollmentReportStore {
  public:
   std::vector<core::PendingEnrollmentReport> load() {
@@ -511,6 +556,7 @@ struct JsonLocalStore::Impl {
   SnapshotStore snapshotStore;
   EnrollmentReportStore enrollmentReportStore;
   AttendanceQueueStore attendanceQueueStore;
+  LocalAttendanceMarkStore localAttendanceMarkStore;
   FailureLogStore failureLogStore;
   StorageAuxStore storageAuxStore;
   LocalStoreInitStatus initStatus = {};
@@ -546,6 +592,7 @@ StoredRuntimeState JsonLocalStore::load() {
     state.snapshots = impl_->snapshotStore.load();
     state.pendingEnrollmentReports = impl_->enrollmentReportStore.load();
     state.pendingAttendanceRecords = impl_->attendanceQueueStore.load();
+    state.localAttendanceMarks = impl_->localAttendanceMarkStore.load();
     state.failureLogs = impl_->failureLogStore.load();
     state.storageAux = impl_->storageAuxStore.load();
   }
@@ -596,6 +643,14 @@ bool JsonLocalStore::savePendingEnrollmentReports(
     return false;
   }
   return impl_->enrollmentReportStore.save(reports);
+}
+
+bool JsonLocalStore::saveLocalAttendanceMarks(
+    const std::vector<core::LocalAttendanceMark>& marks) {
+  if (!impl_->initStatus.filesystemReady) {
+    return false;
+  }
+  return impl_->localAttendanceMarkStore.save(marks);
 }
 
 bool JsonLocalStore::saveFailureLogs(const std::vector<core::FailureLogEntry>& logs) {

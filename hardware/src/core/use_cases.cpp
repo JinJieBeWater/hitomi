@@ -33,6 +33,20 @@ bool sameQueueKey(const PendingAttendanceRecord& left, const PendingAttendanceRe
          left.type == right.type;
 }
 
+bool sameMarkKey(
+    const LocalAttendanceMark& mark,
+    const std::string& employeeId,
+    const std::string& localDate,
+    AttendanceRecordType type) {
+  return mark.employeeId == employeeId && mark.localDate == localDate && mark.type == type;
+}
+
+bool uploadStatusKeepsMark(const AttendanceUploadItemResult& result) {
+  return result.status == AttendanceUploadStatus::Saved ||
+      result.status == AttendanceUploadStatus::UpdatedEarlier ||
+      result.status == AttendanceUploadStatus::IgnoredDuplicate;
+}
+
 bool compareWifiProfiles(const WifiProfile& left, const WifiProfile& right) {
   if (left.priority != right.priority) {
     return left.priority > right.priority;
@@ -147,6 +161,88 @@ QueueMutationResult enqueueAttendanceRecord(
       .action = QueueMutationAction::IgnoredLaterOrEqual,
       .index = index,
   };
+}
+
+bool hasLocalAttendanceMark(
+    const std::vector<LocalAttendanceMark>& marks,
+    const std::string& employeeId,
+    const std::string& localDate,
+    AttendanceRecordType type) {
+  return std::any_of(marks.begin(), marks.end(), [&](const LocalAttendanceMark& mark) {
+    return sameMarkKey(mark, employeeId, localDate, type);
+  });
+}
+
+void upsertLocalAttendanceMark(
+    std::vector<LocalAttendanceMark>& marks, const LocalAttendanceMark& candidate) {
+  auto it = std::find_if(marks.begin(), marks.end(), [&](const LocalAttendanceMark& mark) {
+    return sameMarkKey(mark, candidate.employeeId, candidate.localDate, candidate.type);
+  });
+  if (it == marks.end()) {
+    marks.push_back(candidate);
+    return;
+  }
+
+  if (candidate.recognizedAt < it->recognizedAt || it->recognizedAt == 0) {
+    it->recognizedAt = candidate.recognizedAt;
+  }
+  it->uploaded = it->uploaded || candidate.uploaded;
+}
+
+void markLocalAttendanceUploads(
+    std::vector<LocalAttendanceMark>& marks,
+    const std::vector<PendingAttendanceRecord>& submittedRecords,
+    const std::vector<AttendanceUploadItemResult>& results) {
+  for (const auto& result : results) {
+    if (!uploadStatusKeepsMark(result)) {
+      continue;
+    }
+
+    auto recordIt = std::find_if(
+        submittedRecords.begin(), submittedRecords.end(), [&](const PendingAttendanceRecord& record) {
+          return record.clientRecordId == result.clientRecordId;
+        });
+    if (recordIt == submittedRecords.end()) {
+      continue;
+    }
+
+    auto markIt = std::find_if(marks.begin(), marks.end(), [&](const LocalAttendanceMark& mark) {
+      return sameMarkKey(mark, recordIt->employeeId, recordIt->localDate, recordIt->type);
+    });
+    if (markIt != marks.end()) {
+      markIt->uploaded = true;
+    }
+  }
+}
+
+void pruneLocalAttendanceMarks(
+    std::vector<LocalAttendanceMark>& marks, const std::string& currentLocalDate, std::size_t retainDays) {
+  if (retainDays == 0 || currentLocalDate.empty()) {
+    marks.clear();
+    return;
+  }
+
+  std::vector<std::string> retainedDates;
+  retainedDates.push_back(currentLocalDate);
+  for (const auto& mark : marks) {
+    if (mark.localDate.empty() || mark.localDate > currentLocalDate ||
+        std::find(retainedDates.begin(), retainedDates.end(), mark.localDate) != retainedDates.end()) {
+      continue;
+    }
+    retainedDates.push_back(mark.localDate);
+  }
+  std::sort(retainedDates.begin(), retainedDates.end(), [](const std::string& left, const std::string& right) {
+    return left > right;
+  });
+  if (retainedDates.size() > retainDays) {
+    retainedDates.resize(retainDays);
+  }
+
+  marks.erase(
+      std::remove_if(marks.begin(), marks.end(), [&](const LocalAttendanceMark& mark) {
+        return std::find(retainedDates.begin(), retainedDates.end(), mark.localDate) == retainedDates.end();
+      }),
+      marks.end());
 }
 
 void upsertPendingEnrollmentReport(
