@@ -402,6 +402,25 @@ try {
     "attendance list should mark past empty clock-out as missing",
   );
 
+  const monthlySummary = await client.attendanceRecord.monthlySummary({
+    month: localDate.slice(0, 7),
+    employeeId: employeeId1Value,
+  });
+  const monthlyEmployee = monthlySummary.items.find(
+    (item) => item.employee.id === employeeId1Value,
+  );
+
+  assert(
+    monthlySummary.totals.employeeCount === 1,
+    "monthly summary should support employee filter",
+  );
+  assert(monthlyEmployee?.clockInCount === 2, "monthly summary should count clock-in records");
+  assert(monthlyEmployee?.clockOutCount === 1, "monthly summary should count clock-out records");
+  assert(
+    monthlyEmployee?.missingClockOutCount === 1,
+    "monthly summary should count missing clock-out slots",
+  );
+
   const finalSummary = await client.dashboard.summary();
 
   assert(

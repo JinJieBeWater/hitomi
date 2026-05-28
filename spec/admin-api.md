@@ -34,6 +34,7 @@
 - `faceProfile.enqueue`
 - `faceProfile.cancel`
 - `attendanceRecord.list`
+- `attendanceRecord.monthlySummary`
 
 当前文档遵循以下 MVP 前提：
 
@@ -1042,10 +1043,85 @@ type AdminBusinessError = {
 - 当对应记录为空时，若已过时间段或历史日期则为 `missing`
 - 当对应记录为空且不应判定缺卡时返回 `null`
 - 固定按 `localDate desc`、当天最新 `recognizedAt desc` 排序
-- `localDate` 为单日筛选，不提供区间筛选
+- `localDate` 为单日筛选，不提供区间筛选；月度汇总使用 `attendanceRecord.monthlySummary`
 - `slotStatus` 筛选表示只返回包含该状态的日考勤行
 - 同时传入 `type` 与 `slotStatus` 时，只匹配指定时段的状态，例如筛选“下班缺卡”
 - 只传入 `slotStatus` 时，只要上班或下班任一时段命中该状态即返回该日考勤行
+
+---
+
+## 19. `attendanceRecord.monthlySummary`
+
+### 作用
+
+按月份汇总员工考勤，用于考勤记录页的月度统计区域。
+
+### 输入
+
+```json
+{
+  "month": "2026-03",
+  "employeeId": "emp_001"
+}
+```
+
+### 字段说明
+
+| 字段         | 类型     | 必填 | 说明                          |
+| ------------ | -------- | ---- | ----------------------------- |
+| `month`      | `string` | 是   | 统计月份，格式 `YYYY-MM`      |
+| `employeeId` | `string` | 否   | 按员工筛选                    |
+
+### 输出
+
+```json
+{
+  "month": "2026-03",
+  "range": {
+    "start": "2026-03-01",
+    "end": "2026-04-01"
+  },
+  "items": [
+    {
+      "employee": {
+        "id": "emp_001",
+        "code": "20230001",
+        "name": "张三"
+      },
+      "activeDays": 2,
+      "clockInCount": 2,
+      "clockOutCount": 1,
+      "missingClockInCount": 0,
+      "missingClockOutCount": 1,
+      "days": [
+        {
+          "localDate": "2026-03-28",
+          "clockInStatus": "recorded",
+          "clockOutStatus": "missing"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "employeeCount": 1,
+    "activeDays": 2,
+    "clockInCount": 2,
+    "clockOutCount": 1,
+    "missingClockInCount": 0,
+    "missingClockOutCount": 1
+  }
+}
+```
+
+### 处理规则
+
+- 按 `month` 查询 `localDate >= YYYY-MM-01` 且 `< nextMonth-01` 的考勤记录
+- 返回每名员工的月度统计，员工按编号升序排列
+- `activeDays` 只统计本月已有至少一条考勤记录的员工日期
+- 不生成完整自然月日历，不推断无任何记录日期的缺卡
+- 缺卡仅在某员工某日已有上班或下班任一记录时，对另一时段按全局考勤配置判断
+- 当天未结束的时段不计缺卡
+- 当前 MVP 不处理工作日/休息日规则，因此月度统计是“基于已有记录的月度汇总”，不是完整排班考勤报表
 
 ---
 
@@ -1058,7 +1134,7 @@ type AdminBusinessError = {
 | 设备管理页 | `device.list`、`device.create`、`device.update`、`device.getDeleteImpact`、`device.findByBootstrapSerial`、`device.remove` |
 | 考勤配置页 | `attendanceConfig.get`、`attendanceConfig.save`                                                           |
 | 录脸记录页 | `faceProfile.list`、`faceProfile.enqueue`、`faceProfile.cancel`                                           |
-| 考勤记录页 | `attendanceRecord.list`                                                                                   |
+| 考勤记录页 | `attendanceRecord.list`、`attendanceRecord.monthlySummary`（同一套筛选与结果区域，通过查询方式切换）       |
 
 ---
 
