@@ -38,6 +38,7 @@
   },
   "dependencies": {
     "@hitomi/env": "workspace:*",
+    "beautiful-mermaid": "^1.1.3",
     "dotenv": "catalog:",
     "zod": "catalog:"
   },

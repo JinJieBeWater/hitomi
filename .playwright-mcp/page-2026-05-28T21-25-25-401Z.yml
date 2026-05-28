@@ -1,0 +1,203 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]: ← → 翻页 · B 静态 · ESC 索引
+  - generic [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: HITOMI · GRADUATION DEFENSE
+        - generic [ref=e8]: ESP32-S3 · FACE ATTENDANCE · 01 / 06
+      - generic [ref=e9]:
+        - generic [ref=e10]: SYSTEM ENGINEERING / IOT TERMINAL
+        - heading "基于 ESP32-S3 的 人脸识别考勤系统" [level=1] [ref=e11]:
+          - text: 基于 ESP32-S3 的
+          - text: 人脸识别考勤系统
+        - generic [ref=e12]:
+          - generic [ref=e13]: 设计与实现 · 管理后台、后端服务、嵌入式终端三层联动
+          - generic [ref=e14]:
+            - generic [ref=e15]: 陈锦杰 · 本科毕业设计 · 指导老师
+            - generic [ref=e16]: PPT 2 MIN · DEMO 6 MIN
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - generic [ref=e20]: SYSTEM OVERVIEW
+        - generic [ref=e21]: 02 / 06
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]:
+            - generic [ref=e25]: THREE LAYERS · THREE LINKS
+            - heading "系统概览" [level=2] [ref=e26]
+          - paragraph [ref=e27]: 面向组织内部部署，覆盖管理后台、后端服务与真实 ESP32-S3 终端。
+        - generic [ref=e28]:
+          - generic [ref=e29]:
+            - generic [ref=e30]: 01 · WEB
+            - img [ref=e31]
+            - generic [ref=e42]: 管理后台
+            - generic [ref=e43]: 员工 · 设备 · 录脸任务 · 考勤记录 · Dashboard 统计
+            - generic [ref=e44]: Nuxt · oRPC
+          - generic [ref=e46]: oRPC
+          - generic [ref=e47]:
+            - generic [ref=e48]: 02 · SERVER
+            - img [ref=e49]
+            - generic [ref=e54]: 后端服务 + 数据库
+            - generic [ref=e55]: 身份认证、设备同步、考勤规则校验与记录持久化
+            - generic [ref=e56]: Drizzle · SQLite
+          - generic [ref=e58]: HTTP API
+          - generic [ref=e59]:
+            - generic [ref=e60]: 03 · DEVICE
+            - img [ref=e61]
+            - generic [ref=e67]: ESP32-S3 终端
+            - generic [ref=e68]: 摄像头、触摸屏、Wi‑Fi、SD 卡、本地识别与离线缓存
+            - generic [ref=e69]: ESP-WHO · LVGL
+        - generic [ref=e70]:
+          - generic [ref=e71]: WEB SERIAL 首配：浏览器写入 Wi‑Fi / 后台地址 / 设备凭据
+          - generic [ref=e72]: END-TO-END CLOSED LOOP
+    - generic [ref=e74]:
+      - generic [ref=e75]:
+        - generic [ref=e76]: CORE WORKFLOW
+        - generic [ref=e77]: 03 / 06
+      - generic [ref=e78]:
+        - generic [ref=e79]:
+          - generic [ref=e80]: LOCAL RECOGNITION · OFFLINE CACHE · SERVER CHECK
+          - heading "核心功能：人脸识别考勤" [level=2] [ref=e81]
+        - generic [ref=e83]:
+          - generic [ref=e86]:
+            - generic [ref=e87]: "01"
+            - generic [ref=e88]: 本地识别
+            - generic [ref=e89]: 终端获取员工身份
+          - generic [ref=e92]:
+            - generic [ref=e93]: "02"
+            - generic [ref=e94]: 规则判定
+            - generic [ref=e95]: 按考勤窗口判断上/下班
+          - generic [ref=e98]:
+            - generic [ref=e99]: "03"
+            - generic [ref=e100]: 离线缓存
+            - generic [ref=e101]: 网络中断写入 SD 卡
+          - generic [ref=e104]:
+            - generic [ref=e105]: "04"
+            - generic [ref=e106]: 自动补传
+            - generic [ref=e107]: 恢复网络后同步服务端
+          - generic [ref=e110]:
+            - generic [ref=e111]: "05"
+            - generic [ref=e112]: 二次校验
+            - generic [ref=e113]: 后端校验后入库
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - strong [ref=e116]: 终端侧
+            - text: ：ESP-WHO 集成人脸识别方案
+          - generic [ref=e117]:
+            - strong [ref=e118]: 存储侧
+            - text: ：SD 卡缓存保证弱网可演示
+          - generic [ref=e119]:
+            - strong [ref=e120]: 服务侧
+            - text: ：统一规则避免设备端单点判定
+    - generic [ref=e122]:
+      - generic [ref=e123]:
+        - generic [ref=e124]: FIRST SETUP
+        - generic [ref=e125]: 04 / 06
+      - generic [ref=e126]:
+        - generic [ref=e127]:
+          - generic [ref=e128]: CONFIGURATION BEFORE RUNNING
+          - heading "首次配置：系统运行前提" [level=2] [ref=e129]
+        - paragraph [ref=e130]: 管理员先建立组织人员、终端身份和统一考勤规则，再把录脸任务下发到设备端完成采集。
+        - generic [ref=e131]:
+          - generic [ref=e132]:
+            - img "员工列表截图" [ref=e134]
+            - generic [ref=e135]:
+              - strong [ref=e136]: 员工建档
+              - generic [ref=e137]: EMPLOYEES
+            - paragraph [ref=e138]: 录入组织内部人员信息，关联人脸录入状态。
+          - generic [ref=e139]:
+            - img "考勤配置截图" [ref=e141]
+            - generic [ref=e142]:
+              - strong [ref=e143]: 规则配置
+              - generic [ref=e144]: WINDOWS
+            - paragraph [ref=e145]: 设定统一上下班打卡时间窗口，服务端与终端按同一规则校验。
+          - generic [ref=e146]:
+            - img "设备列表截图" [ref=e148]
+            - generic [ref=e149]:
+              - strong [ref=e150]: 设备激活
+              - generic [ref=e151]: DEVICES
+            - paragraph [ref=e152]: 注册终端并分配身份凭据，Web Serial 写入网络配置。
+    - generic [ref=e154]:
+      - generic [ref=e155]:
+        - generic [ref=e156]: DAILY OPERATION
+        - generic [ref=e157]: 05 / 06
+      - generic [ref=e158]:
+        - generic [ref=e159]:
+          - generic [ref=e160]: ATTENDANCE RECORDS · DASHBOARD STATS
+          - heading "日常使用：考勤管理与统计" [level=2] [ref=e161]
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - img "考勤记录截图" [ref=e165]
+            - generic [ref=e166]:
+              - strong [ref=e167]: 单日汇总
+              - generic [ref=e168]: DATE / PERSON / DEVICE FILTER
+          - generic [ref=e169]:
+            - generic [ref=e170]:
+              - img "Dashboard 统计截图" [ref=e172]
+              - generic [ref=e173]:
+                - strong [ref=e174]: 首页统计
+                - generic [ref=e175]: DASHBOARD
+            - generic [ref=e176]:
+              - generic [ref=e177]:
+                - generic [ref=e178]: FILTER
+                - generic [ref=e179]: 3维
+                - generic [ref=e180]: 日期 / 人员 / 终端
+              - generic [ref=e181]:
+                - generic [ref=e182]: SUMMARY
+                - generic [ref=e183]: 1行/人日
+                - generic [ref=e184]: 上班、下班、缺卡状态
+            - paragraph [ref=e185]: 后台用于答辩现场验证结果：录脸成功后，设备识别生成考勤，记录页与 Dashboard 统计同步变化。
+        - generic [ref=e186]:
+          - generic [ref=e187]: ABSENCE MARK · DEVICE TRACE · DAILY ROLLUP
+          - generic [ref=e188]: ADMIN EVIDENCE SURFACE
+    - generic [ref=e191]:
+      - generic [ref=e192]:
+        - generic [ref=e193]:
+          - generic [ref=e194]: 06 / 06
+          - generic [ref=e195]: LIVE DEMO
+        - generic [ref=e196]:
+          - generic [ref=e197]: TECH STACK
+          - heading "跨域集成 端到端闭环" [level=2] [ref=e198]:
+            - text: 跨域集成
+            - text: 端到端闭环
+          - generic [ref=e199]: Web 管理端、后端服务、真实嵌入式终端协同完成考勤主链路。
+        - generic [ref=e200]:
+          - generic [ref=e201]: NUXT · DRIZZLE · BETTER AUTH
+          - generic [ref=e202]: ESP32-S3 · LVGL · ESP-WHO
+      - generic [ref=e203]:
+        - generic [ref=e204]:
+          - generic [ref=e205]: DEMO ROUTE
+          - generic [ref=e206]: 5 STEPS
+        - generic [ref=e207]:
+          - generic [ref=e208]:
+            - generic [ref=e209]: "01"
+            - generic [ref=e210]:
+              - heading "后台就绪" [level=3] [ref=e211]
+              - paragraph [ref=e212]: Dashboard、员工、设备状态确认。
+          - generic [ref=e213]:
+            - generic [ref=e214]: "02"
+            - generic [ref=e215]:
+              - heading "下发录脸任务" [level=3] [ref=e216]
+              - paragraph [ref=e217]: 为演示员工绑定当前终端。
+          - generic [ref=e218]:
+            - generic [ref=e219]: "03"
+            - generic [ref=e220]:
+              - heading "终端录脸" [level=3] [ref=e221]
+              - paragraph [ref=e222]: 设备采集并保存模板，上报任务结果。
+          - generic [ref=e223]:
+            - generic [ref=e224]: "04"
+            - generic [ref=e225]:
+              - heading "识别打卡" [level=3] [ref=e226]
+              - paragraph [ref=e227]: 终端识别人脸并上传考勤记录。
+          - generic [ref=e228]:
+            - generic [ref=e229]: "05"
+            - generic [ref=e230]:
+              - heading "后台验证" [level=3] [ref=e231]
+              - paragraph [ref=e232]: 记录页与 Dashboard 统计同步出现结果。
+        - generic [ref=e233]: 下面进入现场演示 →
+  - generic [ref=e234]:
+    - button "Page 1" [ref=e235] [cursor=pointer]
+    - button "Page 2" [ref=e236] [cursor=pointer]
+    - button "Page 3" [ref=e237] [cursor=pointer]
+    - button "Page 4" [ref=e238] [cursor=pointer]
+    - button "Page 5" [ref=e239] [cursor=pointer]
+    - button "Page 6" [ref=e240] [cursor=pointer]

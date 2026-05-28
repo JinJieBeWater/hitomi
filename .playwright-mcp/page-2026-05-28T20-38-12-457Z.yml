@@ -1,0 +1,150 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - status [ref=e3]
+    - status [ref=e4]: Hitomi 考勤管理后台
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "Hitomi 考勤后台" [ref=e9] [cursor=pointer]:
+          - /url: /dashboard
+          - generic [ref=e12]:
+            - generic [ref=e13]: Hitomi
+            - generic [ref=e14]: 考勤后台
+        - generic [ref=e16]:
+          - button "Search… ⌘ k" [ref=e17]:
+            - generic [ref=e19]: Search…
+            - generic [ref=e20]:
+              - generic [ref=e21]: ⌘
+              - generic [ref=e22]: k
+          - navigation [ref=e23]:
+            - list [ref=e24]:
+              - listitem [ref=e25]:
+                - link "概览" [ref=e26] [cursor=pointer]:
+                  - /url: /dashboard
+                  - generic [ref=e28]: 概览
+              - listitem [ref=e29]:
+                - link "员工管理" [ref=e30] [cursor=pointer]:
+                  - /url: /employees
+                  - generic [ref=e32]: 员工管理
+              - listitem [ref=e33]:
+                - link "设备管理" [ref=e34] [cursor=pointer]:
+                  - /url: /devices
+                  - generic [ref=e36]: 设备管理
+              - listitem [ref=e37]:
+                - link "录脸记录" [ref=e38] [cursor=pointer]:
+                  - /url: /face-profiles
+                  - generic [ref=e40]: 录脸记录
+              - listitem [ref=e41]:
+                - link "考勤记录" [ref=e42] [cursor=pointer]:
+                  - /url: /attendance-records
+                  - generic [ref=e44]: 考勤记录
+        - generic [ref=e46]:
+          - button "切换到深色" [ref=e48]:
+            - generic [ref=e50]: 切换到深色
+          - button "退出登录" [ref=e53]:
+            - generic [ref=e55]: 退出登录
+      - separator
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - button "Collapse sidebar" [ref=e60]
+              - heading "概览" [level=1] [ref=e62]
+            - button "刷新" [ref=e64]: 刷新
+          - generic [ref=e70]: 2026-05-29
+        - generic [ref=e72]:
+          - generic [ref=e73]:
+            - generic [ref=e77]:
+              - generic [ref=e78]: 员工总数
+              - generic [ref=e79]: "3"
+            - generic [ref=e85]:
+              - generic [ref=e86]: 设备总数
+              - generic [ref=e87]: "1"
+            - generic [ref=e93]:
+              - generic [ref=e94]: 今日上班打卡
+              - generic [ref=e95]: "0"
+            - generic [ref=e101]:
+              - generic [ref=e102]: 今日下班打卡
+              - generic [ref=e103]: "0"
+          - generic [ref=e106]:
+            - generic [ref=e107]:
+              - generic [ref=e109]:
+                - generic [ref=e113]:
+                  - heading "考勤配置" [level=2] [ref=e114]
+                  - paragraph [ref=e115]: 系统仅维护一套全局考勤时间窗口，保存后新的上报会立即按新窗口归类。
+                - generic [ref=e116]:
+                  - generic [ref=e118]: 编辑配置
+                  - button "刷新" [ref=e119]: 刷新
+              - generic [ref=e122]:
+                - generic [ref=e123]:
+                  - generic [ref=e124]:
+                    - generic [ref=e125]: 上班窗口
+                    - generic [ref=e127]: 01:00 - 09:00
+                  - generic [ref=e128]:
+                    - generic [ref=e129]: 下班窗口
+                    - generic [ref=e131]: 17:00 - 23:59
+                - generic [ref=e132]:
+                  - generic [ref=e133]:
+                    - generic [ref=e134]:
+                      - generic [ref=e135]: 上班窗口
+                      - generic [ref=e136]:
+                        - generic [ref=e137]:
+                          - generic [ref=e140]: 开始*
+                          - textbox "开始*" [ref=e143]: 01:00
+                        - generic [ref=e144]:
+                          - generic [ref=e147]: 结束*
+                          - textbox "结束*" [ref=e150]: 09:00
+                    - generic [ref=e151]:
+                      - generic [ref=e152]: 下班窗口
+                      - generic [ref=e153]:
+                        - generic [ref=e154]:
+                          - generic [ref=e157]: 开始*
+                          - textbox "开始*" [ref=e160]: 17:00
+                        - generic [ref=e161]:
+                          - generic [ref=e164]: 结束*
+                          - textbox "结束*" [ref=e167]: 23:59
+                  - generic [ref=e168]:
+                    - button "保存配置" [ref=e169]: 保存配置
+                    - button "恢复当前值" [ref=e171]: 恢复当前值
+            - generic [ref=e173]:
+              - heading "配置说明" [level=2] [ref=e180]
+              - generic [ref=e182]:
+                - generic [ref=e183]:
+                  - generic [ref=e184]: 唯一配置
+                  - generic [ref=e185]: 系统只维护一套全局考勤时间段
+                - generic [ref=e186]:
+                  - generic [ref=e187]: 统一时区
+                  - generic [ref=e188]: 管理端与设备端统一按上海时区处理
+                - generic [ref=e189]:
+                  - generic [ref=e190]: 生效方式
+                  - generic [ref=e191]: 保存后新的上报会立即按最新窗口归类
+          - generic [ref=e192]:
+            - heading "快捷操作" [level=2] [ref=e197]
+            - generic [ref=e199]:
+              - link "员工管理" [ref=e200] [cursor=pointer]:
+                - /url: /employees
+                - text: 员工管理
+              - link "设备管理" [ref=e202] [cursor=pointer]:
+                - /url: /devices
+                - text: 设备管理
+              - link "录脸记录" [ref=e204] [cursor=pointer]:
+                - /url: /face-profiles
+                - text: 录脸记录
+              - link "考勤记录" [ref=e206] [cursor=pointer]:
+                - /url: /attendance-records
+                - text: 考勤记录
+    - generic [ref=e208]:
+      - img [ref=e210]
+      - button "Open Tanstack query devtools" [ref=e258] [cursor=pointer]:
+        - img [ref=e259]
+  - generic:
+    - img
+  - generic [ref=e307]:
+    - button "Toggle Nuxt DevTools" [ref=e308] [cursor=pointer]:
+      - img [ref=e309]
+    - generic "Page load time" [ref=e312]:
+      - generic [ref=e313]: "62"
+      - generic [ref=e314]: ms
+    - button "Toggle Component Inspector" [ref=e316] [cursor=pointer]:
+      - img [ref=e317]
+  - region "Notifications (F8)":
+    - list
