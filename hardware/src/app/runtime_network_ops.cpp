@@ -447,6 +447,12 @@ void handleDisplayCommand(
     RuntimeState& state,
     const infra::DisplayCommand& command,
     uint32_t nowMs) {
+  Serial.printf(
+      "[APP] display command type=%u target=%s state=%u serviceActive=%d\n",
+      static_cast<unsigned>(command.type),
+      command.targetId.c_str(),
+      static_cast<unsigned>(state.enrollmentState),
+      context.enrollmentService.active() ? 1 : 0);
   switch (command.type) {
     case infra::DisplayCommandType::RefreshData:
       requestManualRefresh(context, state, nowMs);

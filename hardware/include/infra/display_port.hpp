@@ -29,6 +29,7 @@ struct DisplayRgb565Frame {
   uint16_t height = 0;
   static constexpr std::size_t kMaxFaceBoxes = 4;
   std::array<face::FaceBox, kMaxFaceBoxes> faceBoxes = {};
+  std::array<face::FaceBoxTone, kMaxFaceBoxes> faceBoxTones = {};
   std::size_t faceBoxCount = 0;
   std::optional<std::size_t> primaryFaceBoxIndex;
 };

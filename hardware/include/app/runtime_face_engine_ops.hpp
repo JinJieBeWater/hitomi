@@ -11,6 +11,7 @@ namespace app {
 void initializeFaceEngine(RuntimeState& state);
 void prepareFaceRecognition(const RuntimeContext& context, RuntimeState& state);
 void discardPendingRecognition();
+void releaseRecognitionResourcesForEnrollment();
 void runFaceDetection(
     const RuntimeContext& context,
     RuntimeState& state,

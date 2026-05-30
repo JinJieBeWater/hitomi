@@ -6,6 +6,7 @@
 #include <freertos/semphr.h>
 #include <freertos/task.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <optional>
@@ -39,6 +40,34 @@ EnrollmentFrameRuntime& enrollmentFrameRuntime() {
   return runtime;
 }
 
+void logEnrollmentFrameSkip(const char* reason, uint32_t nowMs) {
+  static uint32_t lastLogMs = 0;
+  static std::string lastReason;
+  if (lastReason == reason && lastLogMs != 0 && nowMs - lastLogMs < 1000U) {
+    return;
+  }
+  lastReason = reason;
+  lastLogMs = nowMs;
+  Serial.printf("[ENROLL] frame skipped reason=%s\n", reason);
+}
+
+void logEnrollmentFrameDispatch(const char* stage, const face::CameraFrameInfo& frameInfo, uint32_t nowMs) {
+  static uint32_t lastLogMs = 0;
+  static std::string lastStage;
+  if (lastStage == stage && lastLogMs != 0 && nowMs - lastLogMs < 1000U) {
+    return;
+  }
+  lastStage = stage;
+  lastLogMs = nowMs;
+  Serial.printf(
+      "[ENROLL] frame %s width=%u height=%u bytes=%u format=%s\n",
+      stage,
+      static_cast<unsigned>(frameInfo.width),
+      static_cast<unsigned>(frameInfo.height),
+      static_cast<unsigned>(frameInfo.bytes),
+      face::cameraPixelFormatName(frameInfo.pixelFormat));
+}
+
 const core::EnrollmentTaskSnapshot* findEnrollmentTask(
     const std::vector<core::EnrollmentTaskSnapshot>& tasks,
     const std::string& taskId) {
@@ -63,6 +92,15 @@ void updateProgressSnapshot(RuntimeState& state, const face::EnrollmentProgress&
   state.enrollmentCapturedSamples = progress.capturedSamples;
   state.enrollmentRequiredSamples = progress.requiredSamples;
   state.detectedFaceCount = progress.detectedFaceCount;
+  for (std::size_t index = 0; index < state.faceBoxes.size() && index < progress.faceBoxes.size(); index += 1) {
+    state.faceBoxes[index] = progress.faceBoxes[index];
+    state.faceBoxTones[index] = face::FaceBoxTone::Detected;
+  }
+  state.faceBoxCount = std::min(progress.faceBoxCount, state.faceBoxes.size());
+  state.primaryFaceBoxIndex =
+      progress.primaryFaceBoxIndex.has_value() && progress.primaryFaceBoxIndex.value() < state.faceBoxCount
+      ? progress.primaryFaceBoxIndex
+      : std::nullopt;
   state.enrollmentStatusDetail = progress.detail.empty() ? std::nullopt
                                                          : std::optional<std::string>(progress.detail);
   if (progress.active) {
@@ -184,10 +222,13 @@ void enrollmentFrameTaskMain(void*) {
     }
 
     const uint32_t startedUs = micros();
+    logEnrollmentFrameDispatch("worker-start", request->frameInfo, request->nowMs);
     if (runtime.mutex != nullptr && xSemaphoreTake(runtime.mutex, portMAX_DELAY) == pdTRUE) {
       service->processFrame(request->frameInfo, runtime.frameBuffer, request->nowMs);
       runtime.busy = false;
       xSemaphoreGive(runtime.mutex);
+    } else {
+      Serial.println("[ENROLL] frame worker lock failed");
     }
     Serial.printf(
         "[ENROLL] frame async elapsed_us=%lu\n",
@@ -201,16 +242,24 @@ bool ensureEnrollmentFrameTask() {
     return true;
   }
   if (!ensureEnrollmentMutex()) {
+    Serial.println("[ENROLL] worker unavailable: mutex create failed");
     return false;
   }
-  return xTaskCreatePinnedToCore(
-             enrollmentFrameTaskMain,
-             "face_enrollment",
-             8 * 1024,
-             nullptr,
-             1,
-             &runtime.task,
-             0) == pdPASS;
+  const BaseType_t created = xTaskCreatePinnedToCore(
+      enrollmentFrameTaskMain,
+      "face_enrollment",
+      8 * 1024,
+      nullptr,
+      1,
+      &runtime.task,
+      0);
+  if (created != pdPASS) {
+    Serial.println("[ENROLL] worker create failed");
+    runtime.task = nullptr;
+    return false;
+  }
+  Serial.println("[ENROLL] worker created core=0 stack=8192 priority=1");
+  return true;
 }
 
 void discardPendingEnrollmentFrame() {
@@ -233,20 +282,32 @@ bool enqueueEnrollmentFrame(
     const face::CameraFrameInfo& frameInfo,
     const uint8_t* frameData,
     uint32_t nowMs) {
-  if (frameData == nullptr || frameInfo.bytes == 0 || !ensureEnrollmentFrameTask()) {
+  if (frameData == nullptr) {
+    logEnrollmentFrameSkip("null-frame", nowMs);
+    return false;
+  }
+  if (frameInfo.bytes == 0) {
+    logEnrollmentFrameSkip("empty-frame", nowMs);
+    return false;
+  }
+  if (!ensureEnrollmentFrameTask()) {
+    logEnrollmentFrameSkip("worker-unavailable", nowMs);
     return false;
   }
 
   auto& runtime = enrollmentFrameRuntime();
   if (xSemaphoreTake(runtime.mutex, pdMS_TO_TICKS(2)) != pdTRUE) {
+    logEnrollmentFrameSkip("mutex-busy", nowMs);
     return false;
   }
   if (runtime.busy || runtime.request.has_value()) {
     xSemaphoreGive(runtime.mutex);
+    logEnrollmentFrameSkip("worker-busy", nowMs);
     return false;
   }
   if (!ensureEnrollmentFrameBuffer(runtime, frameInfo.bytes)) {
     xSemaphoreGive(runtime.mutex);
+    logEnrollmentFrameSkip("frame-buffer-unavailable", nowMs);
     return false;
   }
 
@@ -258,6 +319,7 @@ bool enqueueEnrollmentFrame(
   };
   runtime.busy = true;
   xSemaphoreGive(runtime.mutex);
+  logEnrollmentFrameDispatch("queued", frameInfo, nowMs);
   return true;
 }
 
@@ -364,6 +426,18 @@ void startEnrollmentTask(
     uint32_t nowMs) {
   static_cast<void>(nowMs);
 
+  Serial.printf(
+      "[APP] enrollment start requested task=%s state=%u camera=%d/%d service=%d template=%d fs=%d pendingReports=%u tasks=%u\n",
+      taskId.c_str(),
+      static_cast<unsigned>(state.enrollmentState),
+      context.camera.available() ? 1 : 0,
+      context.camera.ready() ? 1 : 0,
+      context.enrollmentService.available() ? 1 : 0,
+      state.templateStoreReady ? 1 : 0,
+      state.filesystemReady ? 1 : 0,
+      static_cast<unsigned>(state.pendingEnrollmentReports.size()),
+      static_cast<unsigned>(state.snapshots.enrollmentTasks.size()));
+
   if (hasBlockingPendingEnrollmentReport(state, taskId)) {
     Serial.printf(
         "[APP] enrollment blocked: pending report for different task current=%s pendingCount=%u\n",
@@ -433,7 +507,7 @@ void startEnrollmentTask(
     return;
   }
 
-  discardPendingRecognition();
+  releaseRecognitionResourcesForEnrollment();
   discardPendingEnrollmentFrame();
   if (!ensureEnrollmentMutex()) {
     state.enrollmentState = EnrollmentRunState::Failed;
@@ -472,6 +546,8 @@ void startEnrollmentTask(
   state.enrollmentCapturedSamples = 0;
   state.enrollmentRequiredSamples = board::kEnrollmentRequiredSamples;
   state.detectedFaceCount = 0;
+  state.faceBoxCount = 0;
+  state.primaryFaceBoxIndex.reset();
   state.enrollmentFailureReason = std::nullopt;
   state.enrollmentStatusDetail = "请看向摄像头";
   state.enrollmentState = EnrollmentRunState::Preparing;
@@ -554,6 +630,8 @@ void dismissCaptureSummary(RuntimeState& state) {
   state.enrollmentCapturedSamples = 0;
   state.enrollmentRequiredSamples = 0;
   state.detectedFaceCount = 0;
+  state.faceBoxCount = 0;
+  state.primaryFaceBoxIndex.reset();
   state.enrollmentFailureReason.reset();
   state.enrollmentStatusDetail.reset();
   state.renderDirty = true;
@@ -567,10 +645,14 @@ void processEnrollmentFrame(
     uint32_t nowMs) {
   consumeEnrollmentServiceState(context, state, nowMs);
   if (!context.enrollmentService.active()) {
+    logEnrollmentFrameSkip("service-inactive", nowMs);
     return;
   }
 
-  enqueueEnrollmentFrame(context, frameInfo, frameData, nowMs);
+  logEnrollmentFrameDispatch("dispatch", frameInfo, nowMs);
+  if (!enqueueEnrollmentFrame(context, frameInfo, frameData, nowMs)) {
+    state.enrollmentStatusDetail = "录脸帧等待中";
+  }
   state.renderDirty = true;
 }
 

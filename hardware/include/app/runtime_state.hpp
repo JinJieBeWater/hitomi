@@ -113,8 +113,10 @@ struct RuntimeState {
   std::optional<std::string> activeWifiSsid;
   std::string serialCommandBuffer;
   std::array<face::FaceBox, board::kMaxFaceBoxes> faceBoxes = {};
+  std::array<face::FaceBoxTone, board::kMaxFaceBoxes> faceBoxTones = {};
   std::size_t faceBoxCount = 0;
   std::optional<std::size_t> primaryFaceBoxIndex;
+  uint32_t faceBoxFeedbackUntilMs = 0;
   std::vector<WifiScanCandidate> wifiCandidates;
   std::vector<WifiProfileRuntimeState> wifiProfileRuntime;
   EnrollmentRunState enrollmentState = EnrollmentRunState::Idle;

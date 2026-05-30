@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -59,6 +60,14 @@ struct FaceBox {
   uint16_t bottom = 0;
 };
 
+enum class FaceBoxTone : uint8_t {
+  Detected = 0,
+  Recognizing,
+  Success,
+  Warning,
+  Error,
+};
+
 struct EnrollmentRequest {
   std::string taskId;
   std::string employeeId;
@@ -66,10 +75,15 @@ struct EnrollmentRequest {
 };
 
 struct EnrollmentProgress {
+  static constexpr std::size_t kMaxFaceBoxes = 4;
+
   bool active = false;
   std::size_t capturedSamples = 0;
   std::size_t requiredSamples = 0;
   std::size_t detectedFaceCount = 0;
+  std::array<FaceBox, kMaxFaceBoxes> faceBoxes = {};
+  std::size_t faceBoxCount = 0;
+  std::optional<std::size_t> primaryFaceBoxIndex;
   std::string detail;
 };
 

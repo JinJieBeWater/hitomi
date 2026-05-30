@@ -68,7 +68,8 @@ struct PendingRecognitionRequest {
 };
 
 struct PendingRecognitionResult {
-  StoredFaceTemplate matched;
+  std::optional<StoredFaceTemplate> matched;
+  std::optional<StoredFaceTemplate> closest;
   float similarity = 0.0F;
   uint64_t capturedAtMs = 0;
   uint64_t recognizedAt = 0;
@@ -91,6 +92,8 @@ struct FaceDetectionRuntime {
   uint64_t templateManifestUpdatedAt = 0;
   uint64_t employeesSyncedAt = 0;
   std::size_t templateCount = 0;
+  face::FaceBox lastPrimaryFaceBox = {};
+  bool hasLastPrimaryFaceBox = false;
 };
 
 FaceDetectionRuntime& faceDetectionRuntime() {
@@ -124,6 +127,17 @@ bool employeeExists(const RuntimeState& state, const std::string& employeeId) {
       state.snapshots.employees.begin(),
       state.snapshots.employees.end(),
       [&](const core::EmployeeSnapshot& employee) { return employee.id == employeeId; });
+}
+
+void logRecognitionSkip(const char* reason, uint32_t nowMs) {
+  static uint32_t lastLogMs = 0;
+  static std::string lastReason;
+  if (lastReason == reason && lastLogMs != 0 && nowMs - lastLogMs < 2000U) {
+    return;
+  }
+  lastReason = reason;
+  lastLogMs = nowMs;
+  Serial.printf("[FACE] recognition skipped reason=%s\n", reason);
 }
 
 void maybeLogFacePerf(uint32_t nowMs) {
@@ -167,8 +181,32 @@ void clearFaceBoxes(RuntimeState& state) {
   state.primaryFaceBoxIndex.reset();
 }
 
-void storeFaceBoxes(RuntimeState& state, const std::list<dl::detect::result_t>& results) {
+void setFaceBoxTones(RuntimeState& state, face::FaceBoxTone tone) {
+  for (std::size_t index = 0; index < state.faceBoxTones.size(); index += 1) {
+    state.faceBoxTones[index] = tone;
+  }
+}
+
+void holdFaceBoxFeedback(RuntimeState& state, uint32_t nowMs) {
+  state.faceBoxFeedbackUntilMs = nowMs + board::kFaceBoxFeedbackHoldMs;
+}
+
+void setPrimaryFaceBoxTone(RuntimeState& state, face::FaceBoxTone tone, uint32_t nowMs) {
+  if (!state.primaryFaceBoxIndex.has_value() || state.primaryFaceBoxIndex.value() >= state.faceBoxTones.size()) {
+    return;
+  }
+  state.faceBoxTones[state.primaryFaceBoxIndex.value()] = tone;
+  if (tone != face::FaceBoxTone::Detected) {
+    holdFaceBoxFeedback(state, nowMs);
+  }
+}
+
+void storeFaceBoxes(RuntimeState& state, const std::list<dl::detect::result_t>& results, uint32_t nowMs) {
   clearFaceBoxes(state);
+
+  if (state.faceBoxFeedbackUntilMs > 0 && nowMs >= state.faceBoxFeedbackUntilMs) {
+    state.faceBoxFeedbackUntilMs = 0;
+  }
 
   std::size_t index = 0;
   int bestArea = -1;
@@ -194,6 +232,9 @@ void storeFaceBoxes(RuntimeState& state, const std::list<dl::detect::result_t>& 
 
   state.faceBoxCount = index;
   state.primaryFaceBoxIndex = bestIndex;
+  if (state.faceBoxFeedbackUntilMs == 0) {
+    setFaceBoxTones(state, face::FaceBoxTone::Detected);
+  }
 }
 
 void applyFaceDetectionResult(
@@ -315,6 +356,13 @@ void reloadRecognitionTemplates(const RuntimeContext& context, RuntimeState& sta
   runtime.employeesSyncedAt = employeesSyncedAt;
   runtime.templateCount = templateCount;
   if (!state.templateStoreReady || templateCount == 0 || state.snapshots.employees.empty()) {
+    Serial.printf(
+        "[FACE] recognition template reload skipped storeReady=%d manifestTemplates=%u employees=%u manifestUpdatedAt=%llu employeesSyncedAt=%llu\n",
+        state.templateStoreReady ? 1 : 0,
+        static_cast<unsigned>(templateCount),
+        static_cast<unsigned>(state.snapshots.employees.size()),
+        static_cast<unsigned long long>(manifestUpdatedAt),
+        static_cast<unsigned long long>(employeesSyncedAt));
     return;
   }
 
@@ -322,6 +370,7 @@ void reloadRecognitionTemplates(const RuntimeContext& context, RuntimeState& sta
   for (const auto& employee : state.snapshots.employees) {
     const auto blob = context.templateStore.readTemplate(employee.id);
     if (!blob.has_value()) {
+      Serial.printf("[FACE] template missing employee=%s\n", employee.id.c_str());
       continue;
     }
 
@@ -359,6 +408,12 @@ float compareFeatureSimilarity(const dl::TensorBase* feature, const std::vector<
   return similarity;
 }
 
+struct RecognitionOutcome {
+  std::optional<StoredFaceTemplate> matched;
+  std::optional<StoredFaceTemplate> closest;
+  float similarity = 0.0F;
+};
+
 const dl::detect::result_t* primaryFaceResult(const std::list<dl::detect::result_t>& results) {
   if (results.empty()) {
     return nullptr;
@@ -372,33 +427,39 @@ const dl::detect::result_t* primaryFaceResult(const std::list<dl::detect::result
       }));
 }
 
-std::optional<std::pair<StoredFaceTemplate, float>> recognizeEmployeeFromLoadedTemplates(
+RecognitionOutcome recognizeEmployeeFromLoadedTemplates(
     const dl::image::img_t& image,
     const std::list<dl::detect::result_t>& results,
     const std::vector<StoredFaceTemplate>& templates) {
   if (templates.empty() || !ensureFeatureModel()) {
-    return std::nullopt;
+    return RecognitionOutcome{};
   }
 
   const auto* primaryFace = primaryFaceResult(results);
   if (primaryFace == nullptr) {
-    return std::nullopt;
+    return RecognitionOutcome{};
   }
 
   auto& runtime = faceDetectionRuntime();
   if (!face::tryLockModel(20)) {
-    return std::nullopt;
+    return RecognitionOutcome{};
   }
   dl::TensorBase* feature = runtime.featureModel->run(image, primaryFace->keypoint);
   if (feature == nullptr) {
     face::unlockModel();
-    return std::nullopt;
+    return RecognitionOutcome{};
   }
 
   const StoredFaceTemplate* bestTemplate = nullptr;
+  const StoredFaceTemplate* closestTemplate = nullptr;
   float bestSimilarity = board::kFaceRecognitionThreshold;
+  float closestSimilarity = 0.0F;
   for (const auto& templateItem : templates) {
     const float similarity = compareFeatureSimilarity(feature, templateItem.feature);
+    if (similarity > closestSimilarity) {
+      closestSimilarity = similarity;
+      closestTemplate = &templateItem;
+    }
     if (similarity > bestSimilarity) {
       bestSimilarity = similarity;
       bestTemplate = &templateItem;
@@ -407,9 +468,26 @@ std::optional<std::pair<StoredFaceTemplate, float>> recognizeEmployeeFromLoadedT
   face::unlockModel();
 
   if (bestTemplate == nullptr) {
-    return std::nullopt;
+    Serial.printf(
+        "[FACE] recognition no match best=%.3f threshold=%.3f employee=%s\n",
+        static_cast<double>(closestSimilarity),
+        static_cast<double>(board::kFaceRecognitionThreshold),
+        closestTemplate == nullptr ? "-" : closestTemplate->employeeId.c_str());
+    RecognitionOutcome outcome = {
+        .matched = std::nullopt,
+        .closest = std::nullopt,
+        .similarity = closestSimilarity,
+    };
+    if (closestTemplate != nullptr) {
+      outcome.closest = *closestTemplate;
+    }
+    return outcome;
   }
-  return std::make_pair(*bestTemplate, bestSimilarity);
+  return RecognitionOutcome{
+      .matched = *bestTemplate,
+      .closest = *bestTemplate,
+      .similarity = bestSimilarity,
+  };
 }
 
 void handleAttendanceRecognition(
@@ -444,26 +522,25 @@ void recognitionTaskMain(void*) {
         .height = request->frameInfo.height,
         .pix_type = dl::image::DL_IMAGE_PIX_TYPE_RGB565,
     };
-    const auto match = recognizeEmployeeFromLoadedTemplates(image, request->results, request->templates);
+    const auto outcome = recognizeEmployeeFromLoadedTemplates(image, request->results, request->templates);
 
     if (runtime.recognitionMutex != nullptr && xSemaphoreTake(runtime.recognitionMutex, portMAX_DELAY) == pdTRUE) {
-      if (match.has_value()) {
-        runtime.recognitionResult = PendingRecognitionResult{
-            .matched = match->first,
-            .similarity = match->second,
-            .capturedAtMs = request->frameInfo.capturedAtMs,
-            .recognizedAt = request->capturedWallClockMs.value_or(0),
-            .snapshotKey = request->snapshotKey,
-            .generation = request->generation,
-        };
-      }
+      runtime.recognitionResult = PendingRecognitionResult{
+          .matched = outcome.matched,
+          .closest = outcome.closest,
+          .similarity = outcome.similarity,
+          .capturedAtMs = request->frameInfo.capturedAtMs,
+          .recognizedAt = request->capturedWallClockMs.value_or(0),
+          .snapshotKey = request->snapshotKey,
+          .generation = request->generation,
+      };
       runtime.recognitionBusy = false;
       xSemaphoreGive(runtime.recognitionMutex);
     }
 
     Serial.printf(
         "[FACE] recognition async matched=%s elapsed_us=%lu\n",
-        match.has_value() ? "yes" : "no",
+        outcome.matched.has_value() ? "yes" : "no",
         static_cast<unsigned long>(micros() - startedUs));
   }
 }
@@ -517,25 +594,35 @@ bool enqueueRecognitionRequest(
     const face::CameraFrameInfo& frameInfo,
     const uint8_t* frameData,
     const std::list<dl::detect::result_t>& results) {
+  const uint32_t nowMs = static_cast<uint32_t>(millis());
   if (frameData == nullptr || frameInfo.bytes == 0 || results.empty()) {
+    logRecognitionSkip("invalid-frame", nowMs);
     return false;
   }
   auto& runtime = faceDetectionRuntime();
 
   reloadRecognitionTemplates(context, state);
-  if (runtime.templates.empty() || !ensureRecognitionTask()) {
+  if (runtime.templates.empty()) {
+    logRecognitionSkip("no-templates", nowMs);
+    return false;
+  }
+  if (!ensureRecognitionTask()) {
+    logRecognitionSkip("worker-unavailable", nowMs);
     return false;
   }
 
   if (xSemaphoreTake(runtime.recognitionMutex, pdMS_TO_TICKS(2)) != pdTRUE) {
+    logRecognitionSkip("mutex-busy", nowMs);
     return false;
   }
   if (runtime.recognitionBusy || runtime.recognitionRequest.has_value()) {
     xSemaphoreGive(runtime.recognitionMutex);
+    logRecognitionSkip("worker-busy", nowMs);
     return false;
   }
   if (!ensureRecognitionFrameBuffer(runtime, frameInfo.bytes)) {
     xSemaphoreGive(runtime.recognitionMutex);
+    logRecognitionSkip("frame-buffer-unavailable", nowMs);
     return false;
   }
   std::memcpy(runtime.recognitionFrameBuffer, frameData, frameInfo.bytes);
@@ -550,13 +637,25 @@ bool enqueueRecognitionRequest(
   };
   if (!request.capturedWallClockMs.has_value()) {
     xSemaphoreGive(runtime.recognitionMutex);
+    logRecognitionSkip("clock-not-synced", nowMs);
     return false;
   }
   runtime.recognitionRequest = std::move(request);
   runtime.recognitionBusy = true;
   xSemaphoreGive(runtime.recognitionMutex);
+  setPrimaryFaceBoxTone(state, face::FaceBoxTone::Recognizing, nowMs);
+  state.faceDetectStatusDetail = "Recognizing";
+  state.renderDirty = true;
   return true;
 }
+
+void publishAttendanceFeedback(
+    const RuntimeContext& context,
+    RuntimeState& state,
+    const std::string& eventKey,
+    infra::DisplayNotificationLevel level,
+    const std::string& feedback,
+    uint32_t nowMs);
 
 void consumeRecognitionResult(const RuntimeContext& context, RuntimeState& state, uint32_t nowMs) {
   auto& runtime = faceDetectionRuntime();
@@ -574,15 +673,36 @@ void consumeRecognitionResult(const RuntimeContext& context, RuntimeState& state
   }
   if (context.enrollmentService.active() || result->recognizedAt == 0 ||
       result->generation != runtime.recognitionGeneration ||
-      !sameSnapshotKey(result->snapshotKey, recognitionSnapshotKey(state)) ||
-      !employeeExists(state, result->matched.employeeId)) {
+      !sameSnapshotKey(result->snapshotKey, recognitionSnapshotKey(state))) {
+    return;
+  }
+
+  if (!result->matched.has_value()) {
+    setPrimaryFaceBoxTone(state, face::FaceBoxTone::Error, nowMs);
+    state.faceDetectStatusDetail = "No matching employee";
+    state.lastErrorCode = "FACE_NOT_RECOGNIZED";
+    std::ostringstream oss;
+    oss << "未匹配到员工";
+    if (result->similarity > 0.0F) {
+      oss << " @" << std::fixed << std::setprecision(2) << result->similarity;
+    }
+    publishAttendanceFeedback(
+        context,
+        state,
+        "face-not-recognized",
+        infra::DisplayNotificationLevel::Warning,
+        oss.str(),
+        nowMs);
+    return;
+  }
+  if (!employeeExists(state, result->matched->employeeId)) {
     return;
   }
 
   handleAttendanceRecognition(
       context,
       state,
-      result->matched,
+      result->matched.value(),
       result->similarity,
       result->recognizedAt,
       nowMs);
@@ -649,6 +769,8 @@ void handleAttendanceRecognition(
     uint32_t nowMs) {
   const std::string employeeName = employeeDisplayLabel(matched);
   if (!state.snapshots.attendanceConfig.has_value()) {
+    setPrimaryFaceBoxTone(state, face::FaceBoxTone::Error, nowMs);
+    state.faceDetectStatusDetail = "Attendance config missing";
     publishAttendanceFeedback(
         context,
         state,
@@ -662,6 +784,8 @@ void handleAttendanceRecognition(
 
   const auto attendanceType = core::classifyAttendanceType(state.snapshots.attendanceConfig.value(), recognizedAt);
   if (!attendanceType.has_value()) {
+    setPrimaryFaceBoxTone(state, face::FaceBoxTone::Warning, nowMs);
+    state.faceDetectStatusDetail = "Not in attendance window";
     publishAttendanceFeedback(
         context,
         state,
@@ -693,6 +817,8 @@ void handleAttendanceRecognition(
 
   if (core::hasLocalAttendanceMark(
           state.localAttendanceMarks, record.employeeId, record.localDate, record.type)) {
+    setPrimaryFaceBoxTone(state, face::FaceBoxTone::Warning, nowMs);
+    state.faceDetectStatusDetail = "Duplicate attendance";
     std::ostringstream oss;
     oss << employeeName << " 今日" << attendanceTypeLabel(record.type) << "已打卡 @" << std::fixed
         << std::setprecision(2) << similarity;
@@ -744,6 +870,13 @@ void handleAttendanceRecognition(
   std::ostringstream oss;
   oss << feedback << " @" << std::fixed << std::setprecision(2) << similarity;
 
+  setPrimaryFaceBoxTone(
+      state,
+      level == infra::DisplayNotificationLevel::Success ? face::FaceBoxTone::Success : face::FaceBoxTone::Warning,
+      nowMs);
+  state.faceDetectStatusDetail =
+      level == infra::DisplayNotificationLevel::Success ? std::optional<std::string>("Attendance recorded")
+                                                        : std::optional<std::string>("Duplicate attendance");
   publishAttendanceFeedback(
       context,
       state,
@@ -778,12 +911,12 @@ void prepareFaceRecognition(const RuntimeContext& context, RuntimeState& state) 
   }
 
   const uint32_t startedUs = micros();
-  const bool featureReady = ensureFeatureModel();
   reloadRecognitionTemplates(context, state);
   const auto& runtime = faceDetectionRuntime();
+  const bool featureReady = runtime.templates.empty() ? false : ensureFeatureModel();
   Serial.printf(
       "[FACE] recognition prepared feature=%s templates=%u elapsed_us=%lu\n",
-      featureReady ? "ready" : "unavailable",
+      runtime.templates.empty() ? "deferred-no-templates" : (featureReady ? "ready" : "unavailable"),
       static_cast<unsigned>(runtime.templates.size()),
       static_cast<unsigned long>(micros() - startedUs));
 }
@@ -805,6 +938,46 @@ void discardPendingRecognition() {
     runtime.recognitionBusy = false;
   }
   xSemaphoreGive(runtime.recognitionMutex);
+}
+
+void releaseRecognitionResourcesForEnrollment() {
+  auto& runtime = faceDetectionRuntime();
+  runtime.recognitionGeneration += 1;
+
+  if (runtime.recognitionMutex != nullptr) {
+    if (xSemaphoreTake(runtime.recognitionMutex, pdMS_TO_TICKS(50)) != pdTRUE) {
+      Serial.println("[FACE] enrollment resource release skipped: recognition mutex busy");
+      return;
+    }
+    if (runtime.recognitionBusy) {
+      xSemaphoreGive(runtime.recognitionMutex);
+      Serial.println("[FACE] enrollment resource release skipped: recognition worker busy");
+      return;
+    }
+    runtime.recognitionRequest.reset();
+    runtime.recognitionResult.reset();
+    xSemaphoreGive(runtime.recognitionMutex);
+  } else {
+    runtime.recognitionRequest.reset();
+    runtime.recognitionResult.reset();
+  }
+
+  runtime.detector.reset();
+  runtime.featureModel.reset();
+  runtime.templates.clear();
+  runtime.templateManifestUpdatedAt = 0;
+  runtime.employeesSyncedAt = 0;
+  runtime.templateCount = 0;
+  runtime.hasLastPrimaryFaceBox = false;
+  if (runtime.recognitionFrameBuffer != nullptr) {
+    heap_caps_free(runtime.recognitionFrameBuffer);
+    runtime.recognitionFrameBuffer = nullptr;
+    runtime.recognitionFrameBufferSize = 0;
+  }
+  Serial.printf(
+      "[FACE] released recognition resources for enrollment freeHeap=%u freePsram=%u\n",
+      static_cast<unsigned>(ESP.getFreeHeap()),
+      static_cast<unsigned>(ESP.getFreePsram()));
 }
 
 void runFaceDetection(
@@ -849,12 +1022,40 @@ void runFaceDetection(
   const bool detected = !results.empty();
   const std::size_t count = results.size();
   const std::optional<float> score = detected ? std::optional<float>(topScore(results)) : std::nullopt;
-  storeFaceBoxes(state, results);
+  storeFaceBoxes(state, results, nowMs);
   applyFaceDetectionResult(state, detected, count, score);
   consumeRecognitionResult(context, state, nowMs);
 
+  if (detected && state.primaryFaceBoxIndex.has_value()) {
+    const auto& box = state.faceBoxes[state.primaryFaceBoxIndex.value()];
+    if (runtime.hasLastPrimaryFaceBox) {
+      const int32_t prevCx = (static_cast<int32_t>(runtime.lastPrimaryFaceBox.left) + runtime.lastPrimaryFaceBox.right) / 2;
+      const int32_t prevCy = (static_cast<int32_t>(runtime.lastPrimaryFaceBox.top) + runtime.lastPrimaryFaceBox.bottom) / 2;
+      const int32_t prevW = runtime.lastPrimaryFaceBox.right - runtime.lastPrimaryFaceBox.left;
+      const int32_t curCx = (static_cast<int32_t>(box.left) + box.right) / 2;
+      const int32_t curCy = (static_cast<int32_t>(box.top) + box.bottom) / 2;
+      const int32_t curW = box.right - box.left;
+      const int32_t centerShift = std::max(std::abs(curCx - prevCx), std::abs(curCy - prevCy));
+      const int32_t prevArea = static_cast<int32_t>(prevW) * (runtime.lastPrimaryFaceBox.bottom - runtime.lastPrimaryFaceBox.top);
+      const int32_t curArea = static_cast<int32_t>(curW) * (box.bottom - box.top);
+      const bool faceChanged = prevW > 0 && curW > 0 &&
+          (centerShift > prevW * 3 / 10 || (prevArea > 0 && std::abs(curArea - prevArea) > prevArea * 4 / 10));
+      if (faceChanged) {
+        state.lastRecognitionComputeMs = 0;
+        Serial.printf("[FACE] new face detected; cooldown reset\n");
+      }
+    }
+    runtime.lastPrimaryFaceBox = box;
+    runtime.hasLastPrimaryFaceBox = true;
+  }
+
   if (detected) {
     perf.detectHits += 1;
+    if (runtime.recognitionBusy || runtime.recognitionRequest.has_value()) {
+      setPrimaryFaceBoxTone(state, face::FaceBoxTone::Recognizing, nowMs);
+      state.faceDetectStatusDetail = "Recognizing";
+      state.renderDirty = true;
+    }
     if (recognitionComputationDue(state, nowMs)) {
       if (enqueueRecognitionRequest(context, state, frameInfo, frameData, results)) {
         state.lastRecognitionComputeMs = nowMs;

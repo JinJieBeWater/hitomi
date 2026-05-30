@@ -221,6 +221,9 @@ std::string translateDisplayErrorCode(const std::string& code) {
   if (code == "EMPLOYEE_NOT_FOUND") {
     return "员工不存在";
   }
+  if (code == "FACE_NOT_RECOGNIZED") {
+    return "未匹配到员工";
+  }
   if (code == "TASK_CANCELLED") {
     return "任务已取消";
   }

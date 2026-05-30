@@ -1068,6 +1068,22 @@ PreviewCropRect computePreviewCrop(
     uint16_t sourceHeight,
     lv_coord_t targetWidth,
     lv_coord_t targetHeight);
+uint32_t faceBoxToneHex(face::FaceBoxTone tone, bool primary) {
+  switch (tone) {
+    case face::FaceBoxTone::Recognizing:
+      return 0x2D9CFF;
+    case face::FaceBoxTone::Success:
+      return 0x22C55E;
+    case face::FaceBoxTone::Warning:
+      return 0xF59E0B;
+    case face::FaceBoxTone::Error:
+      return 0xEF4444;
+    case face::FaceBoxTone::Detected:
+    default:
+      return primary ? 0xFD20 : 0x07E0;
+  }
+}
+
 void updateFaceBoxOverlays(
     const DisplayRgb565Frame& frame,
     const PreviewCropRect& crop,
@@ -1210,15 +1226,18 @@ void enrollStartButtonEventCallback(lv_event_t* event) {
   }
 
   auto* data = static_cast<LvglStatusDisplayData*>(lv_event_get_user_data(event));
-  if (data == nullptr || !data->hasViewModel || selectedEnrollmentTask(*data) == nullptr) {
+  if (data == nullptr || !data->hasViewModel) {
+    Serial.println("[DISPLAY] start enrollment ignored: view model unavailable");
     return;
   }
 
   const auto* task = selectedEnrollmentTask(*data);
   if (task == nullptr) {
+    Serial.println("[DISPLAY] start enrollment ignored: no selected task");
     return;
   }
 
+  Serial.printf("[DISPLAY] start enrollment queued task=%s\n", task->taskId.c_str());
   if (!enqueueCommand(*data, DisplayCommand{
                                .type = DisplayCommandType::StartEnrollmentTask,
                                .targetId = task->taskId,
@@ -1782,12 +1801,11 @@ void updateFaceBoxOverlays(
       continue;
     }
 
+    const bool primary = frame.primaryFaceBoxIndex.has_value() && frame.primaryFaceBoxIndex.value() == index;
     lv_obj_set_pos(overlay, left, top);
     lv_obj_set_size(overlay, right - left, bottom - top);
-    lv_obj_set_style_border_color(
-        overlay,
-        lv_color_hex(frame.primaryFaceBoxIndex.has_value() && frame.primaryFaceBoxIndex.value() == index ? 0xFD20 : 0x07E0),
-        0);
+    lv_obj_set_style_border_color(overlay, lv_color_hex(faceBoxToneHex(frame.faceBoxTones[index], primary)), 0);
+    lv_obj_set_style_border_width(overlay, primary ? 3 : 2, 0);
     lv_obj_clear_flag(overlay, LV_OBJ_FLAG_HIDDEN);
   }
 }

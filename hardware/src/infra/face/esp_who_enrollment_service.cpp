@@ -1,6 +1,7 @@
 #include "infra/face/esp_who_enrollment_service.hpp"
 
 #include <Arduino.h>
+#include <algorithm>
 #include <cstdio>
 #include <list>
 #include <memory>
@@ -53,6 +54,17 @@ void removeTempFile(const std::string& path) {
   }
 }
 
+void logEnrollmentServiceSkip(const char* reason, uint32_t nowMs) {
+  static uint32_t lastLogMs = 0;
+  static std::string lastReason;
+  if (lastReason == reason && lastLogMs != 0 && nowMs - lastLogMs < 1000U) {
+    return;
+  }
+  lastReason = reason;
+  lastLogMs = nowMs;
+  Serial.printf("[ENROLL] service skipped reason=%s\n", reason);
+}
+
 }  // namespace
 
 struct EspWhoEnrollmentService::Impl {
@@ -100,6 +112,35 @@ struct EspWhoEnrollmentService::Impl {
     lastLoggedDetail.clear();
     lastLoggedSamples = 0;
     lastLoggedFaceCount = 0;
+  }
+
+  void storeDetectionBoxes(const std::list<dl::detect::result_t>& detections) {
+    progress.faceBoxes = {};
+    progress.faceBoxCount = 0;
+    progress.primaryFaceBoxIndex.reset();
+
+    std::size_t index = 0;
+    int bestArea = -1;
+    for (const auto& detection : detections) {
+      if (index >= progress.faceBoxes.size() || detection.box.size() < 4) {
+        break;
+      }
+
+      progress.faceBoxes[index] = face::FaceBox{
+          .left = static_cast<uint16_t>(std::max(detection.box[0], 0)),
+          .top = static_cast<uint16_t>(std::max(detection.box[1], 0)),
+          .right = static_cast<uint16_t>(std::max(detection.box[2], 0)),
+          .bottom = static_cast<uint16_t>(std::max(detection.box[3], 0)),
+      };
+      const int area = detection.box_area();
+      if (area > bestArea) {
+        bestArea = area;
+        progress.primaryFaceBoxIndex = index;
+      }
+      index += 1;
+    }
+
+    progress.faceBoxCount = index;
   }
 
   void logProgressIfChanged(uint32_t nowMs) {
@@ -180,6 +221,9 @@ bool EspWhoEnrollmentService::start(const face::EnrollmentRequest& request) {
       .capturedSamples = 0,
       .requiredSamples = board::kEnrollmentRequiredSamples,
       .detectedFaceCount = 0,
+      .faceBoxes = {},
+      .faceBoxCount = 0,
+      .primaryFaceBoxIndex = std::nullopt,
       .detail = "请看向摄像头",
   };
   impl_->completedResult.reset();
@@ -230,7 +274,12 @@ void EspWhoEnrollmentService::processFrame(
     const face::CameraFrameInfo& frameInfo,
     const uint8_t* frameData,
     uint32_t nowMs) {
-  if (!impl_->sessionActive || frameData == nullptr) {
+  if (!impl_->sessionActive) {
+    logEnrollmentServiceSkip("session-inactive", nowMs);
+    return;
+  }
+  if (frameData == nullptr) {
+    logEnrollmentServiceSkip("null-frame", nowMs);
     return;
   }
   if (frameInfo.pixelFormat != face::CameraPixelFormat::RGB565) {
@@ -238,6 +287,7 @@ void EspWhoEnrollmentService::processFrame(
     return;
   }
   if (impl_->lastSampleAtMs != 0 && nowMs - impl_->lastSampleAtMs < board::kEnrollmentFrameIntervalMs) {
+    logEnrollmentServiceSkip("sample-interval", nowMs);
     return;
   }
   if (impl_->startedAtMs != 0 && nowMs < impl_->startedAtMs) {
@@ -277,11 +327,13 @@ void EspWhoEnrollmentService::processFrame(
   if (!face::tryLockModel(20)) {
     impl_->progress.detail = "模型忙碌中";
     impl_->logProgressIfChanged(nowMs);
+    logEnrollmentServiceSkip("model-busy", nowMs);
     return;
   }
   const std::list<dl::detect::result_t> detections = impl_->detector->run(image);
   face::unlockModel();
   impl_->progress.detectedFaceCount = detections.size();
+  impl_->storeDetectionBoxes(detections);
 
   if (detections.empty()) {
     impl_->progress.capturedSamples = 0;
