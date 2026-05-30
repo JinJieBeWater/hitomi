@@ -103,6 +103,13 @@ bool writeTextFile(const char* path, const std::string& content) {
   return written == content.size();
 }
 
+bool removeLittleFsFile(const char* path) {
+  if (!littleFsFileExists(path)) {
+    return true;
+  }
+  return LittleFS.remove(path);
+}
+
 constexpr char kFixedOriginMode[] = "fixed_origin";
 
 std::string encodeDeviceConfig(const core::DeviceConfig& config) {
@@ -611,6 +618,19 @@ bool JsonLocalStore::clearDeviceConfig() {
     return false;
   }
   return impl_->deviceConfigStore.clear();
+}
+
+bool JsonLocalStore::clearRuntimeData() {
+  if (!impl_->initStatus.filesystemReady) {
+    return false;
+  }
+
+  return removeLittleFsFile(kSnapshotsPath) &&
+      removeLittleFsFile(kEnrollmentReportsPath) &&
+      removeLittleFsFile(kAttendanceQueuePath) &&
+      removeLittleFsFile(kLocalAttendanceMarksPath) &&
+      removeLittleFsFile(kFailureLogsPath) &&
+      removeLittleFsFile(kStorageAuxPath);
 }
 
 bool JsonLocalStore::saveCredentials(const core::DeviceCredentials& credentials) {

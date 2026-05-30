@@ -36,6 +36,7 @@ class LocalStore {
   virtual StoredRuntimeState load() = 0;
   virtual bool saveDeviceConfig(const core::DeviceConfig& config) = 0;
   virtual bool clearDeviceConfig() = 0;
+  virtual bool clearRuntimeData() = 0;
   virtual bool saveCredentials(const core::DeviceCredentials& credentials) = 0;
   virtual bool saveSnapshots(const core::SnapshotBundle& snapshots) = 0;
   virtual bool savePendingEnrollmentReports(

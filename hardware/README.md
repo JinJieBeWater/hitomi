@@ -164,7 +164,7 @@ Supported commands:
 {"type":"reset_device_config"}
 ```
 
-`reset_device_config` is the factory-reset path. It clears the device config and the project's SD-backed face template library under `/templates`; it does not format the whole SD card or delete unrelated files.
+`reset_device_config` is the factory-reset path. It clears NVS device config / credentials, LittleFS runtime JSON data (snapshots, enrollment reports, attendance queues, attendance marks, failure logs, storage summaries), and the project's SD-backed face template library under `/templates`; it does not format the whole SD card or delete unrelated files.
 
 Responses are emitted as framed lines prefixed with `HITOMI_USB_RESPONSE `, followed by a JSON response body. The frame keeps Web Serial tooling from confusing runtime logs with machine-readable provisioning responses. The response body includes the current editable config snapshot for Web Serial forms, while still omitting activation secrets such as the runtime `apiKey`.
 
