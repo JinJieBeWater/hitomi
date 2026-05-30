@@ -13,7 +13,7 @@
 #endif
 
 #ifndef HITOMI_API_BASE_URL
-#define HITOMI_API_BASE_URL ""
+#define HITOMI_API_BASE_URL "http://192.168.74.172:3001"
 #endif
 
 namespace board {
